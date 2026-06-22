@@ -98,8 +98,8 @@ The package separates a Click-free core from a thin CLI shell:
   the shared `context` and `output` helpers.
 
 Keep modules small and single-purpose. Tests mirror this layout under `tests/unit/`
-and `tests/integration/`. See [AGENTS.md](./AGENTS.md) for the full contributor and
-AI-agent guide.
+and `tests/integration/`. See [CONTRIBUTING.md](./CONTRIBUTING.md) for setup and the
+pre-PR checks, and [AGENTS.md](./AGENTS.md) for the architecture and conventions.
 
 ## License
 

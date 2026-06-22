@@ -1,0 +1,13 @@
+# CODEOWNERS — GitHub auto-requests these reviewers by path. Last match wins.
+
+# Default owner for everything.
+*                          @JacobPEvans-personal
+
+# License.
+/LICENSE                   @InverseTachyon
+
+# CLI surface: commands exposed by the CLI and the REST endpoints they call.
+# New objects or command changes land here and need both owners.
+/src/vct_splunk/cli.py     @JacobPEvans-personal @InverseTachyon
+/src/vct_splunk/commands/  @JacobPEvans-personal @InverseTachyon
+/src/vct_splunk/core/      @JacobPEvans-personal @InverseTachyon
