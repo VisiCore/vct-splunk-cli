@@ -1,0 +1,99 @@
+# splunk
+
+A small, scriptable CLI to read, search, health-check, and safely administer
+**Splunk Enterprise** over its documented REST API — built for AI CLI agents and humans alike.
+
+[![License](https://img.shields.io/badge/license-see%20LICENSE-blue.svg)](./LICENSE)
+
+## Installation
+
+```bash
+uv venv
+uv pip install -e ".[dev]"      # editable install with test deps
+splunk --help
+```
+
+Requires Python 3.10+.
+
+## Usage
+
+Authenticate with environment variables (the token is never passed as a flag):
+
+```bash
+export SPLUNK_URL="https://your-search-head:8089"
+export SPLUNK_TOKEN="<a Splunk authentication token>"
+# optional:
+export SPLUNK_CA_BUNDLE="/path/to/ca.pem"   # custom CA for on-prem
+export SPLUNK_VERIFY="true"                  # TLS verification (default true)
+```
+
+Commands (singular-noun → verb):
+
+```bash
+splunk server info                              # connectivity, identity, version
+splunk api get /services/data/indexes           # GET-only raw escape hatch (any read endpoint)
+splunk index list                               # list indexes
+splunk index get main                           # one index
+splunk search run --query 'index=_internal | stats count by sourcetype' --earliest -1h
+splunk health check                             # native health; exits non-zero if warn/fail
+splunk index create payments --max-gb 50 --frozen-secs 7776000   # gated write
+```
+
+Output is **TTY-adaptive**: a human-readable table on a terminal, JSON when piped or with
+`--output json`. stdout is pure data; diagnostics and prompts go to stderr, so this is safe:
+
+```bash
+splunk index list --output json | jq '.data[] | select(.disabled) | .name'
+```
+
+### Writes are gated
+
+`index create` is the only write in this MVP. It is safe by default:
+
+```bash
+splunk index create payments --dry-run         # preview the request; sends nothing
+splunk index create payments                    # prompts for confirmation on a TTY
+splunk index create payments --yes              # --yes is required when non-interactive
+```
+
+A non-interactive write without `--yes` fails fast (exit 2) rather than hanging.
+Each applied write is appended to a local audit log (`$VCT_SPLUNK_AUDIT`, else
+`~/.local/state/vct-splunk/audit.log`).
+
+### Exit codes
+
+| Code | Meaning |
+| --- | --- |
+| 0 | success |
+| 1 | API / transport / operation error |
+| 2 | usage or config error (e.g. write refused without `--yes`) |
+| 3 | authentication error (401/403) |
+| 4 | not found (404) |
+| non-zero | `health check` when any finding is `warn`/`fail` |
+
+## Scope
+
+This MVP targets **Splunk Enterprise on-prem** only, using your own credentials against the
+documented REST API. It does not use, bundle, or proxy any Splunk-distributed app. Splunk Cloud
+(ACS) and an MCP wrapper are planned follow-ups.
+
+## Testing
+
+```bash
+.venv/bin/python -m pytest                 # unit tests (mocked HTTP)
+SPLUNK_INTEGRATION_TEST=true .venv/bin/python -m pytest -m integration   # against a live/Docker Splunk
+```
+
+## Contributing
+
+Core modules (`server.py`, `api.py`, `indexes.py`, `search.py`, `health.py`, `client.py`) are
+plain functions and never import Click; `cmd_*.py` are thin Click adapters. Keep files small and
+atomic (≤150 lines). Tests mirror the source layout.
+
+## License
+
+See [LICENSE](./LICENSE).
+
+---
+
+More at [docs.dryvist.com](https://docs.dryvist.com).
