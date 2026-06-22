@@ -1,43 +1,17 @@
-# CODEOWNERS — GitHub auto-requests reviewers by path. Last match wins, so the
-# most specific rule that matches a file decides its owners. Paths are split by
-# concern so each area can take a different owner (or combination) over time;
-# today most sit with the default maintainer.
+# CODEOWNERS — reviewers auto-requested by path; last match wins. Grouped by
+# concern so any area can move to a different owner with a one-line change.
 
-# --- Fallback: anything not matched by a section below --------------------
-*                                @JacobPEvans-personal
+# Default: everything not matched below.
+*                          @JacobPEvans-personal
 
-# --- Documentation --------------------------------------------------------
-*.md                             @JacobPEvans-personal
+# Docs, tests, and CI/automation (seams for future dedicated owners).
+*.md                       @JacobPEvans-personal
+/tests/                    @JacobPEvans-personal
+/.github/                  @JacobPEvans-personal
 
-# --- Build, packaging & versioning ----------------------------------------
-/pyproject.toml                  @JacobPEvans-personal
-/VERSION                         @JacobPEvans-personal
-/src/vct_splunk/__init__.py      @JacobPEvans-personal
-/src/vct_splunk/__main__.py      @JacobPEvans-personal
-/src/vct_splunk/py.typed         @JacobPEvans-personal
+# CLI surface — commands exposed by the CLI and the REST endpoints they call.
+/src/vct_splunk/commands/  @JacobPEvans-personal @InverseTachyon
+/src/vct_splunk/core/      @JacobPEvans-personal @InverseTachyon
 
-# --- CI, automation & repo config -----------------------------------------
-/.github/                        @JacobPEvans-personal
-/.editorconfig                   @JacobPEvans-personal
-/.gitignore                      @JacobPEvans-personal
-/.env.example                    @JacobPEvans-personal
-
-# --- Tests ----------------------------------------------------------------
-/tests/                          @JacobPEvans-personal
-
-# --- CLI surface: commands exposed by the CLI and the REST endpoints they
-#     call. Globbed so a new command or endpoint module is co-owned by
-#     default; new objects or command changes need both owners.
-/src/vct_splunk/cli.py           @JacobPEvans-personal @InverseTachyon
-/src/vct_splunk/commands/        @JacobPEvans-personal @InverseTachyon
-/src/vct_splunk/core/            @JacobPEvans-personal @InverseTachyon
-
-# --- Core infrastructure (transport, errors, audit) — not the exposed
-#     surface, so it stays with the maintainer. Listed after core/ so these
-#     more specific rules win.
-/src/vct_splunk/core/client.py   @JacobPEvans-personal
-/src/vct_splunk/core/errors.py   @JacobPEvans-personal
-/src/vct_splunk/core/audit.py    @JacobPEvans-personal
-
-# --- Legal ----------------------------------------------------------------
-/LICENSE                         @InverseTachyon
+# Legal.
+/LICENSE                   @InverseTachyon

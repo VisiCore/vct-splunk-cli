@@ -42,7 +42,9 @@ def _table(data: Any) -> str:
     rows = [r for r in (data if isinstance(data, list) else [data]) if isinstance(r, dict)]
     if not rows:
         return "(no results)" if isinstance(data, list) else json.dumps(data, indent=2, default=str)
-    cols = list(rows[0].keys())
+    # Union keys across every row (first-seen order) so columns that appear only
+    # in later rows are not silently dropped from heterogeneous result sets.
+    cols = list(dict.fromkeys(key for row in rows for key in row))
     width = {c: max(len(str(c)), max(len(str(r.get(c, ""))) for r in rows)) for c in cols}
     head = "  ".join(str(c).upper().ljust(width[c]) for c in cols)
     lines = ["  ".join(str(r.get(c, "")).ljust(width[c]) for c in cols) for r in rows]

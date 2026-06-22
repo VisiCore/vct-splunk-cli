@@ -101,7 +101,12 @@ class SplunkClient:
         for attempt in range(_MAX_RETRIES + 1):
             try:
                 resp = self._http.request(
-                    method, url, params=params, data=data, timeout=timeout or self.config.timeout
+                    method,
+                    url,
+                    params=params,
+                    data=data,
+                    # Only None means "unset" — an explicit timeout (even 0) is honored.
+                    timeout=self.config.timeout if timeout is None else timeout,
                 )
             except httpx.HTTPError as exc:
                 raise TransportError(

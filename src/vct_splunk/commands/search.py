@@ -32,7 +32,11 @@ def search() -> None:
     help="Max result rows (must be >= 1).",
 )
 @click.option(
-    "--timeout", type=int, default=60, show_default=True, help="Search timeout (seconds)."
+    "--timeout",
+    type=click.IntRange(min=1),
+    default=60,
+    show_default=True,
+    help="Search timeout in seconds (must be >= 1).",
 )
 @command
 def run(ctx, stdin_token, query, file_, earliest, latest, max_rows, timeout) -> None:

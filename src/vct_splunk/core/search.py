@@ -22,8 +22,8 @@ def normalize_spl(spl: str) -> str:
 
     Splunk's search language needs an explicit leading command. A bare expression
     such as ``index=_internal`` has to be prefixed with ``search``. A query that
-    already starts with ``search `` or with a generating command (``| ...``) is
-    returned unchanged.
+    already starts with the ``search`` command or with a generating command
+    (``| ...``) is returned unchanged.
 
     Args:
         spl: The raw search text from the user.
@@ -32,7 +32,11 @@ def normalize_spl(spl: str) -> str:
         The search string Splunk will actually run.
     """
     query = spl.strip()
-    if query.startswith("|") or query.lower().startswith("search "):
+    # Compare the first whitespace-delimited word rather than the literal prefix
+    # "search ", so a tab/newline after the command (e.g. "search\tindex=...")
+    # is recognized as already-normalized instead of being double-prefixed.
+    first_word = query.split(maxsplit=1)[0].lower() if query else ""
+    if query.startswith("|") or first_word == "search":
         return query
     return "search " + query
 
