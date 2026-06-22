@@ -1,7 +1,8 @@
 """End-to-end smoke test against a live Splunk Enterprise.
 
-Gated: set SPLUNK_INTEGRATION_TEST=true plus SPLUNK_URL / SPLUNK_TOKEN. Designed to
-run against an ephemeral Dockerized `splunk/splunk`.
+Gated: set SPLUNK_INTEGRATION_TEST=true plus SPLUNK_URL / SPLUNK_TOKEN. Runs
+against any reachable Splunk Enterprise instance — an ephemeral Dockerized
+`splunk/splunk`, or an existing instance whose REST management port is reachable.
 """
 
 from __future__ import annotations
@@ -32,8 +33,13 @@ def test_end_to_end():
     assert runner.invoke(cli, ["api", "get", "/services/server/info", "--output", "json"]).exit_code == 0
 
     name = f"vctmvp_{uuid.uuid4().hex[:8]}"
-    assert runner.invoke(cli, ["--dry-run", "index", "create", name, "--output", "json"]).exit_code == 0
-    assert runner.invoke(cli, ["-y", "index", "create", name, "--max-gb", "1", "--output", "json"]).exit_code == 0
+    # The common flags (--dry-run, -y, --output) are defined on the *leaf* command
+    # (here `index create`), not on the root group. Click parses each group's own
+    # options before descending into the subcommand, so a flag placed *before* the
+    # subcommand name (e.g. `--dry-run index create`) is rejected as an unknown
+    # group option and exits 2. Always place these flags after the final subcommand.
+    assert runner.invoke(cli, ["index", "create", name, "--dry-run", "--output", "json"]).exit_code == 0
+    assert runner.invoke(cli, ["index", "create", name, "-y", "--max-gb", "1", "--output", "json"]).exit_code == 0
     try:
         assert runner.invoke(cli, ["index", "get", name, "--output", "json"]).exit_code == 0
     finally:

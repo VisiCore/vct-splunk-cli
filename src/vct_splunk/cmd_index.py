@@ -7,6 +7,7 @@ import click
 from . import audit
 from . import indexes as core
 from . import output as out
+from .client import config_from_env
 from .context import command
 
 
@@ -38,8 +39,16 @@ def get(ctx, name) -> None:
 @click.option("--frozen-secs", type=int, default=None, help="Frozen time period in seconds.")
 @command
 def create(ctx, name, max_gb, frozen_secs) -> None:
-    """Create an index. Gated write: --dry-run previews; otherwise confirms or needs --yes."""
-    target = ctx.meta()["target"]
+    """Create an index. Gated write: --dry-run previews; otherwise confirms or needs --yes.
+
+    The connection is resolved (and validated) up front so that a missing
+    ``SPLUNK_URL`` or ``SPLUNK_TOKEN`` fails with a clear configuration error
+    *before* we prompt for or perform the write. Resolving here also gives us the
+    real target URL to show in the confirmation prompt and to record in the audit
+    log — instead of the ``None`` we'd get if neither flag nor env var were set.
+    """
+    config = config_from_env(ctx.base_url)
+    target = config.base_url
     out.confirm_write(ctx, f"create index '{name}'", target)
     with ctx.client() as c:
         result = core.create_index(c, name, max_gb=max_gb, frozen_secs=frozen_secs)

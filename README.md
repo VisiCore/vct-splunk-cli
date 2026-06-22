@@ -27,6 +27,11 @@ export SPLUNK_CA_BUNDLE="/path/to/ca.pem"   # custom CA for on-prem
 export SPLUNK_VERIFY="true"                  # TLS verification (default true)
 ```
 
+> **TLS precedence:** setting `SPLUNK_CA_BUNDLE` always enables verification
+> against that CA and takes precedence over `SPLUNK_VERIFY`. To turn verification
+> off entirely (e.g. a self-signed lab cert), leave `SPLUNK_CA_BUNDLE` unset and
+> set `SPLUNK_VERIFY=false`.
+
 Commands (singular-noun → verb):
 
 ```bash
