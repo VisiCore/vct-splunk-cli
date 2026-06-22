@@ -5,11 +5,11 @@ from __future__ import annotations
 import click
 
 from . import __version__
-from .cmd_api import api
-from .cmd_health import health
-from .cmd_index import index
-from .cmd_search import search
-from .cmd_server import server
+from .commands.api import api
+from .commands.health import health
+from .commands.index import index
+from .commands.search import search
+from .commands.server import server
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})

@@ -1,0 +1,84 @@
+# AGENTS.md
+
+Guidance for AI agents and human contributors working in this repository.
+
+## What this is
+
+`splunk` is a small, scriptable CLI over the **Splunk Enterprise REST API** —
+read, search, health-check, and safely administer an on-prem instance with your
+own credentials. It does not bundle or proxy any Splunk-distributed app.
+
+## Quick start
+
+```bash
+uv venv
+uv pip install -e ".[dev]"   # editable install with dev tools
+splunk --help                # or: python -m vct_splunk --help
+```
+
+Authentication is environment-only (never a CLI flag):
+
+```bash
+export SPLUNK_URL="https://your-search-head:8089"   # REST mgmt port, not :8000
+export SPLUNK_TOKEN="<a Splunk JWT auth token>"
+```
+
+See `.env.example` for every supported variable.
+
+## Architecture
+
+The package separates a Click-free core from a thin CLI shell (the "functional
+core, imperative shell" pattern):
+
+- `src/vct_splunk/core/` — plain functions and typed errors. **Never imports
+  Click.** This is the reusable, unit-testable library: `client` (transport,
+  auth, retries, pagination, dry-run), `errors`, `audit`, and one module per
+  operation (`server`, `api`, `indexes`, `search`, `health`).
+- `src/vct_splunk/commands/` — Click adapters, one module per command group
+  (`server`, `api`, `index`, `search`, `health`), plus shared `context` (the
+  `command` decorator and `Ctx`) and `output` (rendering, error envelope,
+  write-gating).
+- `src/vct_splunk/cli.py` assembles the root group and the `splunk` entry point;
+  `__main__.py` enables `python -m vct_splunk`.
+
+Dependencies flow one way: `commands` import `core`, never the reverse.
+
+## Conventions
+
+- Keep modules small and single-purpose. Core functions take an explicit
+  `SplunkClient` and return plain data.
+- Every public function has a docstring; comment intent, not syntax.
+- Output contract: stdout is pure data (table on a TTY, JSON when piped or with
+  `--output json`); diagnostics, prompts, and errors go to stderr.
+- Exit codes: 0 ok, 1 API/transport, 2 usage/config, 3 auth (401/403), 4 not
+  found. `health check` exits non-zero when any finding is warn or fail.
+
+## Safety
+
+- Writes are gated. `index create` is the only write: `--dry-run` previews and
+  sends nothing; otherwise it confirms on a TTY or requires `--yes` when
+  non-interactive (it never hangs on a hidden prompt).
+- Each applied write is appended to a local audit log (`$VCT_SPLUNK_AUDIT`, else
+  `$XDG_STATE_HOME/vct-splunk/audit.log`).
+- `search run` is bounded by default (time window, row cap, timeout) so an agent
+  cannot trigger an unbounded export by accident.
+
+## Testing
+
+```bash
+pytest                                                # unit tests (mocked HTTP)
+SPLUNK_INTEGRATION_TEST=true pytest -m integration    # against a live Splunk
+```
+
+Unit tests live in `tests/unit/` and mock the transport; the gated end-to-end
+test in `tests/integration/` needs `SPLUNK_URL` / `SPLUNK_TOKEN` and a reachable
+instance.
+
+## Checks before a PR
+
+```bash
+ruff check .     # lint (never silence a rule — fix it)
+ruff format .    # format
+pyright          # types
+pytest           # tests
+```

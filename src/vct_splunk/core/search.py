@@ -37,9 +37,7 @@ def normalize_spl(spl: str) -> str:
     return "search " + query
 
 
-def build_search_payload(
-    spl: str, *, earliest: str, latest: str, max_rows: int
-) -> dict[str, Any]:
+def build_search_payload(spl: str, *, earliest: str, latest: str, max_rows: int) -> dict[str, Any]:
     """Build the form body for a oneshot search job.
 
     Pulled out of :func:`run_search` so both the real request and the

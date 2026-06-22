@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import httpx
 
-from vct_splunk import indexes
+from vct_splunk.core import indexes
 
 
 def test_list_indexes_parses(client_for):

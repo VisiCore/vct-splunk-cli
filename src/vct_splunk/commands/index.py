@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import click
 
-from . import audit
-from . import indexes as core
+from ..core import audit
+from ..core import indexes as core
+from ..core.client import config_from_env
 from . import output as out
-from .client import config_from_env
 from .context import command
 
 

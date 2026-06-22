@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import httpx
 
-from vct_splunk import health
+from vct_splunk.core import health
 
 
 def test_health_maps_findings(client_for):
     def handler(req: httpx.Request) -> httpx.Response:
         if req.url.path.endswith("/server/info"):
-            return httpx.Response(200, json={"entry": [{"content": {"version": "9.4", "serverName": "sh1"}}]})
+            return httpx.Response(
+                200, json={"entry": [{"content": {"version": "9.4", "serverName": "sh1"}}]}
+            )
         return httpx.Response(
             200,
             json={
@@ -16,7 +18,10 @@ def test_health_maps_findings(client_for):
                     {
                         "content": {
                             "health": "green",
-                            "features": {"Indexing": {"health": "yellow"}, "Search": {"health": "green"}},
+                            "features": {
+                                "Indexing": {"health": "yellow"},
+                                "Search": {"health": "green"},
+                            },
                         }
                     }
                 ]

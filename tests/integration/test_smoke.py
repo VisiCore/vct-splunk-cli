@@ -23,14 +23,17 @@ def _gate():
 
 
 def test_end_to_end():
-    from vct_splunk import indexes
     from vct_splunk.cli import cli
-    from vct_splunk.client import SplunkClient, config_from_env
+    from vct_splunk.core import indexes
+    from vct_splunk.core.client import SplunkClient, config_from_env
 
     runner = CliRunner()
     assert runner.invoke(cli, ["server", "info", "--output", "json"]).exit_code == 0
     assert runner.invoke(cli, ["index", "list", "--output", "json"]).exit_code == 0
-    assert runner.invoke(cli, ["api", "get", "/services/server/info", "--output", "json"]).exit_code == 0
+    assert (
+        runner.invoke(cli, ["api", "get", "/services/server/info", "--output", "json"]).exit_code
+        == 0
+    )
 
     name = f"vctmvp_{uuid.uuid4().hex[:8]}"
     # The common flags (--dry-run, -y, --output) are defined on the *leaf* command
@@ -38,8 +41,16 @@ def test_end_to_end():
     # options before descending into the subcommand, so a flag placed *before* the
     # subcommand name (e.g. `--dry-run index create`) is rejected as an unknown
     # group option and exits 2. Always place these flags after the final subcommand.
-    assert runner.invoke(cli, ["index", "create", name, "--dry-run", "--output", "json"]).exit_code == 0
-    assert runner.invoke(cli, ["index", "create", name, "-y", "--max-gb", "1", "--output", "json"]).exit_code == 0
+    assert (
+        runner.invoke(cli, ["index", "create", name, "--dry-run", "--output", "json"]).exit_code
+        == 0
+    )
+    assert (
+        runner.invoke(
+            cli, ["index", "create", name, "-y", "--max-gb", "1", "--output", "json"]
+        ).exit_code
+        == 0
+    )
     try:
         assert runner.invoke(cli, ["index", "get", name, "--output", "json"]).exit_code == 0
     finally:

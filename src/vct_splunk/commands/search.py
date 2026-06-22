@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import click
 
+from ..core import search as core
 from . import output as out
-from . import search as core
 from .context import command
 
 
@@ -31,7 +31,9 @@ def search() -> None:
     show_default=True,
     help="Max result rows (must be >= 1).",
 )
-@click.option("--timeout", type=int, default=60, show_default=True, help="Search timeout (seconds).")
+@click.option(
+    "--timeout", type=int, default=60, show_default=True, help="Search timeout (seconds)."
+)
 @command
 def run(ctx, stdin_token, query, file_, earliest, latest, max_rows, timeout) -> None:
     """Run a bounded SPL search. Provide --query, --file, or '-' for stdin.
@@ -64,5 +66,7 @@ def run(ctx, stdin_token, query, file_, earliest, latest, max_rows, timeout) -> 
         return
 
     with ctx.client() as c:
-        data = core.run_search(c, spl, earliest=earliest, latest=latest, max_rows=max_rows, timeout=timeout)
+        data = core.run_search(
+            c, spl, earliest=earliest, latest=latest, max_rows=max_rows, timeout=timeout
+        )
     out.emit(data, ctx.output_mode, ctx.meta())

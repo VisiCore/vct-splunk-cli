@@ -20,14 +20,15 @@ from __future__ import annotations
 
 import functools
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 import click
 
+from ..core.client import SplunkClient, config_from_env
+from ..core.errors import SplunkError
 from . import output as out
-from .client import SplunkClient, config_from_env
-from .errors import SplunkError
 
 
 @dataclass
@@ -54,7 +55,7 @@ class Ctx:
         """Build a :class:`SplunkClient` from the environment plus this context.
 
         Credentials and TLS settings are read from the environment (see
-        :func:`vct_splunk.client.config_from_env`); the ``dry_run`` flag is
+        :func:`vct_splunk.core.client.config_from_env`); the ``dry_run`` flag is
         carried over from the command line so that writes can be previewed.
 
         Returns:
@@ -85,7 +86,7 @@ def command(fn: Callable) -> Callable:
     ``--dry-run``/``--yes``/``--base-url``), so the command body can focus on its
     own arguments. Any :class:`SplunkError` raised by the core is caught and
     rendered to stderr with the correct exit code via
-    :func:`vct_splunk.output.fail`.
+    :func:`vct_splunk.commands.output.fail`.
 
     Args:
         fn: The leaf command implementation, called as ``fn(ctx, **command_args)``.
@@ -110,12 +111,21 @@ def command(fn: Callable) -> Callable:
     # Click applies decorators bottom-up, so this list ends up reading in reverse
     # order in --help. The order is purely cosmetic.
     options = [
-        click.option("--base-url", default=None, help="Splunk management URL (overrides $SPLUNK_URL)."),
-        click.option("-y", "--yes", is_flag=True, help="Skip confirmation (required for writes when non-interactive)."),
+        click.option(
+            "--base-url", default=None, help="Splunk management URL (overrides $SPLUNK_URL)."
+        ),
+        click.option(
+            "-y",
+            "--yes",
+            is_flag=True,
+            help="Skip confirmation (required for writes when non-interactive).",
+        ),
         click.option("--dry-run", is_flag=True, help="Preview writes without sending them."),
         click.option("--table", is_flag=True, help="Shortcut for --output table."),
         click.option(
-            "--output", type=click.Choice(["json", "table"]), default=None,
+            "--output",
+            type=click.Choice(["json", "table"]),
+            default=None,
             help="Output format (default: table on a TTY, JSON when piped).",
         ),
     ]

@@ -91,9 +91,15 @@ SPLUNK_INTEGRATION_TEST=true .venv/bin/python -m pytest -m integration   # again
 
 ## Contributing
 
-Core modules (`server.py`, `api.py`, `indexes.py`, `search.py`, `health.py`, `client.py`) are
-plain functions and never import Click; `cmd_*.py` are thin Click adapters. Keep files small and
-atomic (≤150 lines). Tests mirror the source layout.
+The package separates a Click-free core from a thin CLI shell:
+
+- `src/vct_splunk/core/` — plain functions and typed errors; never imports Click.
+- `src/vct_splunk/commands/` — Click adapters (one module per command group) plus
+  the shared `context` and `output` helpers.
+
+Keep modules small and single-purpose. Tests mirror this layout under `tests/unit/`
+and `tests/integration/`. See [AGENTS.md](./AGENTS.md) for the full contributor and
+AI-agent guide.
 
 ## License
 

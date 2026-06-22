@@ -42,7 +42,9 @@ def config_from_env(base_url: str | None = None) -> ClientConfig:
 
 
 class SplunkClient:
-    def __init__(self, config: ClientConfig, *, transport: httpx.BaseTransport | None = None) -> None:
+    def __init__(
+        self, config: ClientConfig, *, transport: httpx.BaseTransport | None = None
+    ) -> None:
         self.config = config
         self._http = httpx.Client(
             base_url=config.base_url,
@@ -52,7 +54,7 @@ class SplunkClient:
             transport=transport,
         )
 
-    def __enter__(self) -> "SplunkClient":
+    def __enter__(self) -> SplunkClient:
         return self
 
     def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
@@ -61,7 +63,9 @@ class SplunkClient:
     def get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         return self._request("GET", path, params=params)
 
-    def post(self, path: str, data: dict[str, Any], *, timeout: float | None = None) -> dict[str, Any]:
+    def post(
+        self, path: str, data: dict[str, Any], *, timeout: float | None = None
+    ) -> dict[str, Any]:
         """Non-mutating POST (e.g. a search job). Never gated by dry-run."""
         return self._request("POST", path, data=data, timeout=timeout)
 
@@ -100,7 +104,9 @@ class SplunkClient:
                     method, url, params=params, data=data, timeout=timeout or self.config.timeout
                 )
             except httpx.HTTPError as exc:
-                raise TransportError(f"Could not reach Splunk at {self.config.base_url}: {exc}") from exc
+                raise TransportError(
+                    f"Could not reach Splunk at {self.config.base_url}: {exc}"
+                ) from exc
             if resp.status_code in _RETRY_STATUS and attempt < _MAX_RETRIES:
                 time.sleep(_retry_after(resp, attempt))
                 continue
@@ -123,7 +129,9 @@ def _handle(resp: httpx.Response, method: str, url: str) -> dict[str, Any]:
     if resp.status_code == 404:
         raise NotFoundError(f"Not found: {url}")
     if resp.status_code >= 400:
-        raise APIError(f"Splunk returned {resp.status_code} for {method} {url}", details=_safe_body(resp))
+        raise APIError(
+            f"Splunk returned {resp.status_code} for {method} {url}", details=_safe_body(resp)
+        )
     if not resp.content:
         return {}
     try:

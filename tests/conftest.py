@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 import httpx
 import pytest
 
-from vct_splunk.client import ClientConfig, SplunkClient
+from vct_splunk.core.client import ClientConfig, SplunkClient
 
 
 def make_client(handler: Callable, *, dry_run: bool = False) -> SplunkClient:
@@ -15,5 +15,6 @@ def make_client(handler: Callable, *, dry_run: bool = False) -> SplunkClient:
 
 @pytest.fixture
 def client_for() -> Callable:
-    """Return a factory: client_for(handler, dry_run=...) -> SplunkClient backed by a mock transport."""
+    """Return a factory ``client_for(handler, dry_run=...)`` that builds a
+    SplunkClient backed by a mocked HTTP transport."""
     return make_client

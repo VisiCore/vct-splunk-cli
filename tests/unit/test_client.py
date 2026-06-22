@@ -3,7 +3,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from vct_splunk.errors import AuthError, NotFoundError
+from vct_splunk.core.errors import AuthError, NotFoundError
 
 
 def test_auth_header_and_json_mode(client_for):
@@ -26,7 +26,9 @@ def test_dry_run_write_sends_nothing(client_for):
         calls["n"] += 1
         return httpx.Response(201, json={})
 
-    result = client_for(handler, dry_run=True).write("POST", "/services/data/indexes", {"name": "x"})
+    result = client_for(handler, dry_run=True).write(
+        "POST", "/services/data/indexes", {"name": "x"}
+    )
     assert result["dry_run"] is True
     assert calls["n"] == 0
 

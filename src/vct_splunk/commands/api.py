@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import click
 
-from . import api as core
+from ..core import api as core
+from ..core.errors import UsageError
 from . import output as out
 from .context import command
-from .errors import UsageError
 
 
 @click.group()

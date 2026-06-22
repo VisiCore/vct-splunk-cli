@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import click
 
+from ..core import server as core
 from . import output as out
-from . import server as core
 from .context import command
 
 

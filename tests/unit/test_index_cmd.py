@@ -30,7 +30,7 @@ class _FakeClient:
 
 def test_create_dry_run_previews(monkeypatch):
     _env(monkeypatch)
-    monkeypatch.setattr("vct_splunk.context.Ctx.client", lambda self: _FakeClient())
+    monkeypatch.setattr("vct_splunk.commands.context.Ctx.client", lambda self: _FakeClient())
     result = CliRunner().invoke(cli, ["index", "create", "myidx", "--dry-run", "--output", "json"])
     assert result.exit_code == 0
     assert '"dry_run": true' in result.output

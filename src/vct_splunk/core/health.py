@@ -38,7 +38,10 @@ def _reachable(client: SplunkClient) -> Verdict:
     except SplunkError as exc:
         return Verdict("server_reachable", "applicable", "error", "fail", exc.message)
     return Verdict(
-        "server_reachable", "applicable", "completed", "pass",
+        "server_reachable",
+        "applicable",
+        "completed",
+        "pass",
         f"version {content.get('version')} ({content.get('serverName')})",
     )
 
@@ -51,14 +54,23 @@ def _splunkd(client: SplunkClient) -> list[Verdict]:
     content = (body.get("entry") or [{}])[0].get("content", {})
     out = [
         Verdict(
-            "splunkd_overall", "applicable", "completed",
-            _FINDING.get(content.get("health"), "warn"), f"health={content.get('health')}",
+            "splunkd_overall",
+            "applicable",
+            "completed",
+            _FINDING.get(content.get("health"), "warn"),
+            f"health={content.get('health')}",
         )
     ]
     for name, feature in sorted((content.get("features") or {}).items()):
         health = (feature or {}).get("health")
         if health:
             out.append(
-                Verdict(f"feature:{name}", "applicable", "completed", _FINDING.get(health, "warn"), f"health={health}")
+                Verdict(
+                    f"feature:{name}",
+                    "applicable",
+                    "completed",
+                    _FINDING.get(health, "warn"),
+                    f"health={health}",
+                )
             )
     return out

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from vct_splunk import output as out
+from vct_splunk.commands import output as out
 
 
 def test_resolve_mode_explicit():

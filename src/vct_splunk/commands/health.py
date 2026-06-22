@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import click
 
-from . import health as core
+from ..core import health as core
 from . import output as out
 from .context import command
 

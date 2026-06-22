@@ -12,7 +12,7 @@ from typing import Any
 
 import click
 
-from .errors import SplunkError, UsageError
+from ..core.errors import SplunkError, UsageError
 
 
 def resolve_mode(output: str | None, table: bool) -> str:
