@@ -1,0 +1,17 @@
+# CODEOWNERS — reviewers auto-requested by path; last match wins. Grouped by
+# concern so any area can move to a different owner with a one-line change.
+
+# Default: everything not matched below.
+*                          @JacobPEvans-personal
+
+# Docs, tests, and CI/automation (seams for future dedicated owners).
+*.md                       @JacobPEvans-personal
+/tests/                    @JacobPEvans-personal
+/.github/                  @JacobPEvans-personal
+
+# CLI surface — commands exposed by the CLI and the REST endpoints they call.
+/src/vct_splunk/commands/  @JacobPEvans-personal @InverseTachyon
+/src/vct_splunk/core/      @JacobPEvans-personal @InverseTachyon
+
+# Legal.
+/LICENSE                   @InverseTachyon
