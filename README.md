@@ -103,6 +103,14 @@ Each applied write is appended to a local audit log (`$VCT_SPLUNK_AUDIT`, else
 | 4 | not found (404) |
 | non-zero | `health check` when any finding is `warn`/`fail` |
 
+### Contract stability
+
+The JSON output — `{"data": ..., "meta": ...}` on success, `{"error": {"code",
+"message"}}` on failure — and the exit codes above are a **stable, additive-only
+contract**: fields and codes may be added over time, never renamed or removed, so
+scripts, AI agents, and a backend service can depend on them. Remote Splunk result
+text is treated as data only and never drives a write.
+
 ## Scope
 
 This MVP targets **Splunk Enterprise on-prem** only, using your own credentials against the
