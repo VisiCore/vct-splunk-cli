@@ -1,0 +1,93 @@
+# Python pre-commit gate — dryvist org-wide standard (non-Nix / uv consumer).
+#
+# ┌─────────────────────────── KEEP IN SYNC ───────────────────────────┐
+# │ This file is the static (non-Nix) expression of the SAME hook set   │
+# │ defined for Nix consumers in:                                       │
+# │   nix-devenv/lib/pre-commit-hooks.nix        (base hygiene)         │
+# │   nix-devenv/flake-modules/profiles/python.nix (ruff/pyright/pytest)│
+# │ There is no generator yet (see dryvist/.github issue): any change   │
+# │ here MUST be mirrored there and vice-versa. The canonical copy of   │
+# │ THIS template lives at dryvist/.github/precommit/templates/python.  │
+# │ yaml — edit there, then re-sync consumers.                          │
+# └─────────────────────────────────────────────────────────────────────┘
+#
+# Version authority:
+#   * ruff `rev:` is pinned here and bumped by Renovate (the org model for
+#     mirror-distributed hooks).
+#   * pyright + pytest run from the project venv (.venv/bin) via repo:local
+#     so pyproject.toml dev-deps are the SINGLE version authority — no rev
+#     pin to drift against. CI runs the identical .venv/bin/<tool> commands.
+---
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: end-of-file-fixer
+      # Hook id is `trailing-whitespace`; the Nix git-hooks.nix ATTR name is
+      # `trim-trailing-whitespace` — do not confuse the two when syncing.
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: detect-private-key
+
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.22.1
+    hooks:
+      - id: markdownlint-cli2
+        exclude: ^CHANGELOG\.md$
+
+  - repo: https://github.com/woodruffw/zizmor-pre-commit
+    rev: v1.26.1
+    hooks:
+      - id: zizmor
+        files: ^\.github/workflows/.*\.ya?ml$
+        # --config points at the synced org policy (zizmor.yml) so trusted
+        # publishers (actions/*, astral-sh/*, dryvist/*) may pin by version tag
+        # instead of SHA. KEEP zizmor.yml in sync with dryvist/.github/zizmor.yml.
+        args: [--persona=regular, --min-severity=medium, --min-confidence=medium, --config, zizmor.yml]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.18
+    hooks:
+      # `ruff-check` is the current lint hook id; bare `ruff` is a legacy alias.
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  # pyright + pytest run from the project venv — single version authority is
+  # pyproject.toml [project.optional-dependencies].dev. KEEP IN SYNC with the
+  # `pyright` / `pytest` hooks in nix-devenv/flake-modules/profiles/python.nix
+  # (which invoke the same tools off the Nix devshell PATH, not .venv/bin).
+  - repo: local
+    hooks:
+      - id: pyright
+        name: pyright (type check, from .venv)
+        entry: .venv/bin/pyright
+        language: system
+        pass_filenames: false
+        types: [python]
+      # pytest is gated at PUSH, not commit: keeps the commit cycle fast across
+      # the org; CI runs the full suite regardless. Mandated standard, 2026-06.
+      - id: pytest
+        name: pytest (from .venv, pre-push only)
+        entry: .venv/bin/pytest
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+  # OPT-IN, NON-MANDATED: Astral `ty` as a non-blocking shadow type check.
+  # `ty` is beta (<1.0) as of 2026-06 and is NOT the mandated checker (pyright
+  # is). Uncomment to gather diffs; do not let it block. Promote to mandated
+  # only at ty 1.0 GA after a clean shadow trial. KEEP IN SYNC with the ty
+  # opt-in note in nix-devenv/flake-modules/profiles/python.nix.
+  # - repo: https://github.com/astral-sh/ty-pre-commit
+  #   rev: v0.0.52
+  #   hooks:
+  #     - id: ty
+  #       verbose: true   # informational only
