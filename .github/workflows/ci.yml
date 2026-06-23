@@ -11,26 +11,19 @@ permissions:
 jobs:
   # The lint/format/type/hygiene gate is defined ONCE in .pre-commit-config.yaml.
   # CI runs that exact hook set so local pre-commit and CI never drift apart.
+  # `uv run` installs the project + dev extra implicitly, so no separate
+  # venv/install script is needed (setup-uv only installs uv, not the project).
   gate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.0
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v8.2.0
+      - uses: astral-sh/setup-uv@v8.2.0
         with:
           python-version: "3.14"
+      - run: uv run --extra dev pre-commit run --all-files --show-diff-on-failure
 
-      - name: Install project
-        run: |
-          uv venv
-          uv pip install -e ".[dev]"
-
-      - name: Run pre-commit gate (ruff, ruff-format, pyright, hygiene, zizmor)
-        run: .venv/bin/pre-commit run --all-files --show-diff-on-failure
-
-  # pytest across the min and max supported Python. Kept separate from `gate`
-  # because tests — unlike the lint gate — must run on every supported version.
+  # pytest across the min and max supported Python. Separate from `gate` because
+  # tests — unlike the lint gate — must run on every supported version.
   test:
     runs-on: ubuntu-latest
     strategy:
@@ -39,16 +32,7 @@ jobs:
         python-version: ["3.10", "3.14"]
     steps:
       - uses: actions/checkout@v7.0.0
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v8.2.0
+      - uses: astral-sh/setup-uv@v8.2.0
         with:
           python-version: ${{ matrix.python-version }}
-
-      - name: Install project
-        run: |
-          uv venv
-          uv pip install -e ".[dev]"
-
-      - name: Test
-        run: .venv/bin/pytest
+      - run: uv run --extra dev pytest
