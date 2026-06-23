@@ -51,3 +51,52 @@ def test_search_run_dry_run_previews_without_executing():
     assert result.exit_code == 0
     assert '"dry_run": true' in result.output
     assert '"exec_mode": "oneshot"' in result.output
+
+
+def test_build_export_payload_is_bounded_without_exec_mode():
+    payload = search.build_export_payload(
+        "index=_internal", earliest="-1h", latest="now", max_rows=5
+    )
+    assert "exec_mode" not in payload  # export is a stream, not a job
+    assert payload["count"] == 5
+    assert payload["search"] == "search index=_internal"
+
+
+def test_run_export_parses_ndjson_and_bounds(client_for):
+    seen: dict[str, str] = {}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen["path"] = req.url.path
+        seen["body"] = req.content.decode()
+        ndjson = (
+            '{"preview":false,"offset":0,"result":{"x":"1"}}\n'
+            '{"preview":false,"offset":1,"result":{"x":"2"}}\n'
+        )
+        return httpx.Response(200, text=ndjson)
+
+    out = search.run_export(client_for(handler), "index=_internal", max_rows=2)
+    assert seen["path"].endswith("/services/search/jobs/export")
+    assert "count=2" in seen["body"]  # the row cap reaches the wire
+    assert out["count"] == 2
+    assert out["results"][0]["x"] == "1"
+    assert out["truncated"] is True
+
+
+def test_search_run_export_dry_run_targets_export_endpoint():
+    result = CliRunner().invoke(
+        cli,
+        [
+            "search",
+            "run",
+            "--query",
+            "index=_internal",
+            "--export",
+            "--dry-run",
+            "--output",
+            "json",
+        ],
+    )
+    assert result.exit_code == 0
+    assert '"dry_run": true' in result.output
+    assert "/services/search/jobs/export" in result.output
+    assert "exec_mode" not in result.output  # the export payload omits it

@@ -18,6 +18,9 @@ from vct_splunk.core.client import ClientConfig, SplunkClient
 def _env(monkeypatch):
     monkeypatch.setenv("SPLUNK_URL", "https://splunk.test:8089")
     monkeypatch.setenv("SPLUNK_TOKEN", "T")
+    # Keep namespace resolution deterministic regardless of the host environment.
+    monkeypatch.delenv("SPLUNK_APP", raising=False)
+    monkeypatch.delenv("SPLUNK_OWNER", raising=False)
 
 
 def _patch_client(monkeypatch, handler):
@@ -117,3 +120,71 @@ def test_command_maps_auth_error_to_exit_3(monkeypatch):
     result = CliRunner().invoke(cli, ["server", "info", "--output", "json"])
     assert result.exit_code == 3
     assert "auth_error" in result.output
+
+
+def test_search_list_renders(monkeypatch):
+    _env(monkeypatch)
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "entry": [{"name": "sid1", "content": {"dispatchState": "DONE"}, "acl": {}}],
+                "paging": {"total": 1},
+            },
+        )
+
+    _patch_client(monkeypatch, handler)
+    result = CliRunner().invoke(cli, ["search", "list", "--output", "json"])
+    assert result.exit_code == 0
+    assert '"sid": "sid1"' in result.output
+
+
+def test_search_cancel_refuses_without_yes_noninteractive(monkeypatch):
+    _env(monkeypatch)
+    # Must refuse before any network call, so no client patch is needed.
+    result = CliRunner().invoke(cli, ["search", "cancel", "sid1", "--output", "json"])
+    assert result.exit_code == 2
+    assert "usage_error" in result.output
+
+
+def test_saved_search_create_requires_app(monkeypatch):
+    _env(monkeypatch)
+    # No --app and no SPLUNK_APP -> the write must refuse (exit 2), not target 'search'.
+    result = CliRunner().invoke(
+        cli,
+        [
+            "saved-search",
+            "create",
+            "nightly",
+            "--search",
+            "index=main",
+            "--dry-run",
+            "--output",
+            "json",
+        ],
+    )
+    assert result.exit_code == 2
+    assert "usage_error" in result.output
+
+
+def test_saved_search_create_dry_run_previews_app_namespace(monkeypatch):
+    _env(monkeypatch)
+    result = CliRunner().invoke(
+        cli,
+        [
+            "saved-search",
+            "create",
+            "nightly",
+            "--search",
+            "index=main",
+            "--app",
+            "my_app",
+            "--dry-run",
+            "--output",
+            "json",
+        ],
+    )
+    assert result.exit_code == 0
+    assert '"dry_run": true' in result.output
+    assert "/servicesNS/nobody/my_app/saved/searches" in result.output

@@ -31,6 +31,23 @@ from ..core.errors import SplunkError
 from . import output as out
 
 
+class AliasedGroup(click.Group):
+    """A Click group that also resolves extra verb aliases.
+
+    Lets a group offer Splunk-CLI-style verbs (``add`` / ``edit`` / ``remove``)
+    alongside our ``create`` / ``update`` / ``delete`` for familiarity, while
+    keeping ``--help`` to the canonical names. Pass an ``aliases`` mapping of
+    ``{alias: real_name}`` to the group decorator.
+    """
+
+    def __init__(self, *args: Any, aliases: dict[str, str] | None = None, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._aliases = aliases or {}
+
+    def get_command(self, ctx: click.Context, cmd_name: str) -> click.Command | None:
+        return super().get_command(ctx, self._aliases.get(cmd_name, cmd_name))
+
+
 @dataclass
 class Ctx:
     """The options shared by every ``splunk`` subcommand, resolved once per call.
@@ -44,12 +61,18 @@ class Ctx:
             (required when running non-interactively, e.g. from a script).
         base_url: An explicit Splunk management URL from ``--base-url`` that
             overrides the ``SPLUNK_URL`` environment variable, or None.
+        app: The Splunk app namespace from ``--app`` / ``$SPLUNK_APP``, or None.
+            Used by namespaced resources (e.g. saved searches); ignored by
+            system-level ones (e.g. indexes).
+        owner: The owner namespace from ``--owner`` / ``$SPLUNK_OWNER``, or None.
     """
 
     output_mode: str
     dry_run: bool
     yes: bool
     base_url: str | None
+    app: str | None = None
+    owner: str | None = None
 
     def client(self) -> SplunkClient:
         """Build a :class:`SplunkClient` from the environment plus this context.
@@ -96,11 +119,20 @@ def command(fn: Callable) -> Callable:
     """
 
     @functools.wraps(fn)
-    def wrapper(output, table, dry_run, yes, base_url, **kwargs: Any) -> Any:
+    def wrapper(output, table, dry_run, yes, base_url, app, owner, **kwargs: Any) -> Any:
         # Click passes every option to the callback by name. The shared options
         # are named explicitly here; the command's own arguments arrive untouched
         # in **kwargs and are forwarded straight through to fn.
-        ctx = Ctx(out.resolve_mode(output, table), dry_run, yes, base_url)
+        ctx = Ctx(
+            out.resolve_mode(output, table),
+            dry_run,
+            yes,
+            base_url,
+            # Flag wins over env; either may stay None, in which case the
+            # namespace policy (core.namespace.resolve_ns) supplies a safe default.
+            app=app or os.environ.get("SPLUNK_APP"),
+            owner=owner or os.environ.get("SPLUNK_OWNER"),
+        )
         try:
             return fn(ctx, **kwargs)
         except SplunkError as exc:
@@ -111,6 +143,16 @@ def command(fn: Callable) -> Callable:
     # Click applies decorators bottom-up, so this list ends up reading in reverse
     # order in --help. The order is purely cosmetic.
     options = [
+        click.option(
+            "--owner",
+            default=None,
+            help="Owner namespace (default: '-' wildcard for reads, 'nobody' for writes).",
+        ),
+        click.option(
+            "--app",
+            default=None,
+            help="App namespace. Writes require it and never default to 'search'.",
+        ),
         click.option(
             "--base-url", default=None, help="Splunk management URL (overrides $SPLUNK_URL)."
         ),
