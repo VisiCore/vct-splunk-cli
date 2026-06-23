@@ -33,10 +33,10 @@ def test_generated_user_create_dry_run_previews(monkeypatch):
             "user",
             "create",
             "alice",
-            "--role",
-            "admin",
-            "--email",
-            "a@x.com",
+            "--set",
+            "roles=admin",
+            "--set",
+            "email=a@x.com",
             "--dry-run",
             "--output",
             "json",
@@ -51,7 +51,7 @@ def test_generated_user_create_dry_run_previews(monkeypatch):
 def test_generated_user_create_refuses_without_yes(monkeypatch):
     _env(monkeypatch)
     result = CliRunner().invoke(
-        cli, ["user", "create", "alice", "--role", "admin", "--output", "json"]
+        cli, ["user", "create", "alice", "--set", "roles=admin", "--output", "json"]
     )
     assert result.exit_code == 2
     assert "usage_error" in result.output
@@ -85,7 +85,7 @@ def test_password_read_from_env_not_flag(monkeypatch, tmp_path):
 
     _patch_client(monkeypatch, handler)
     result = CliRunner().invoke(
-        cli, ["user", "create", "alice", "--role", "admin", "--yes", "--output", "json"]
+        cli, ["user", "create", "alice", "--set", "roles=admin", "--yes", "--output", "json"]
     )
     assert result.exit_code == 0
     assert "password=hunter2" in seen["body"]  # secret pulled from env, sent on the wire
@@ -94,7 +94,57 @@ def test_password_read_from_env_not_flag(monkeypatch, tmp_path):
 def test_add_alias_on_generated_group(monkeypatch):
     _env(monkeypatch)
     result = CliRunner().invoke(
-        cli, ["user", "add", "alice", "--role", "admin", "--dry-run", "--output", "json"]
+        cli, ["user", "add", "alice", "--set", "roles=admin", "--dry-run", "--output", "json"]
     )
     assert result.exit_code == 0
     assert '"dry_run": true' in result.output
+
+
+def test_namespaced_generated_group_requires_app(monkeypatch):
+    _env(monkeypatch)
+    monkeypatch.delenv("SPLUNK_APP", raising=False)
+    # macro is namespaced -> a write without --app must refuse (never target 'search').
+    result = CliRunner().invoke(
+        cli, ["macro", "create", "m1", "--set", "definition=x", "--dry-run", "--output", "json"]
+    )
+    assert result.exit_code == 2
+    assert "usage_error" in result.output
+
+
+def test_namespaced_generated_group_previews_app_namespace(monkeypatch):
+    _env(monkeypatch)
+    result = CliRunner().invoke(
+        cli,
+        [
+            "macro",
+            "create",
+            "m1",
+            "--set",
+            "definition=x",
+            "--app",
+            "my_app",
+            "--dry-run",
+            "--output",
+            "json",
+        ],
+    )
+    assert result.exit_code == 0
+    assert "/servicesNS/nobody/my_app/configs/conf-macros" in result.output
+
+
+def test_global_input_group_lists(monkeypatch):
+    _env(monkeypatch)
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "entry": [{"name": "/var/log", "content": {"index": "main"}}],
+                "paging": {"total": 1},
+            },
+        )
+
+    _patch_client(monkeypatch, handler)
+    result = CliRunner().invoke(cli, ["monitor-input", "list", "--output", "json"])
+    assert result.exit_code == 0
+    assert "/var/log" in result.output
