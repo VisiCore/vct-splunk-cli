@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -11,6 +12,7 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -41,16 +43,20 @@ jobs:
         run: .venv/bin/pytest
 
   # Real create -> verify -> cleanup against a Dockerized Splunk Enterprise.
-  # Informational (not a required check): the unit `check` job above is the gate.
-  # KV Store and the bundled MongoDB run natively on this x86 runner, so the full
-  # suite works here (on Apple Silicon, boot the container with KV Store disabled).
+  # COST CONTROL: this is expensive (boots two Splunk containers, ~6 min each), so
+  # it runs ONLY on manual dispatch -- never on push or pull_request -- and is
+  # hard-capped by timeout-minutes. It is informational; the `check` job is the gate.
+  # Run it on demand from the Actions tab ("Run workflow") when you want a live check.
   integration:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        # Current plus an older supported release.
-        splunk-version: ["latest", "9.2"]
+        # Pinned (not `latest`): a floating tag silently jumps major versions and
+        # breaks boot. Current plus an older supported release.
+        splunk-version: ["9.4", "9.2"]
     env:
       # A throwaway admin password for the ephemeral container. Override with the
       # SPLUNK_TEST_PASSWORD secret if org policy requires it.
@@ -71,6 +77,7 @@ jobs:
       - name: Start Splunk
         run: |
           docker run -d --name splunk -p 8089:8089 \
+            -e SPLUNK_GENERAL_TERMS=--accept-sgt-current-at-splunk-com \
             -e SPLUNK_START_ARGS=--accept-license \
             -e SPLUNK_PASSWORD="$SPLUNK_PASSWORD" \
             splunk/splunk:${{ matrix.splunk-version }}
