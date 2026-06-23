@@ -85,15 +85,15 @@ jobs:
       - name: Wait for splunkd
         run: bash .github/scripts/wait-for-splunk.sh
 
-      - name: Mint a token
-        id: token
-        run: bash .github/scripts/mint-token.sh
+      - name: Get a session key
+        id: auth
+        run: bash .github/scripts/get-session-key.sh
 
       - name: Integration tests
         env:
           SPLUNK_INTEGRATION_TEST: "true"
           SPLUNK_URL: https://localhost:8089
-          SPLUNK_TOKEN: ${{ steps.token.outputs.token }}
+          SPLUNK_SESSION_KEY: ${{ steps.auth.outputs.session_key }}
           SPLUNK_VERIFY: "false"
         run: .venv/bin/pytest -m integration -v
 
