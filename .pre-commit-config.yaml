@@ -16,7 +16,12 @@
 #     mirror-distributed hooks).
 #   * pyright + pytest run from the project venv (.venv/bin) via repo:local
 #     so pyproject.toml dev-deps are the SINGLE version authority — no rev
-#     pin to drift against. CI runs the identical .venv/bin/<tool> commands.
+#     pin to drift against.
+#
+# CI runs this same hook set via the dryvist `_ci-gate.yml` reusable workflow
+# (python_ci) — `uv run --extra dev pre-commit run --all-files`. zizmor is NOT
+# here: it runs CENTRALLY in _python-ci.yml against dryvist/.github's canonical
+# zizmor.yml (zero-copy — this repo no longer carries a zizmor.yml).
 ---
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -41,16 +46,6 @@ repos:
       - id: markdownlint-cli2
         exclude: ^CHANGELOG\.md$
 
-  - repo: https://github.com/woodruffw/zizmor-pre-commit
-    rev: v1.26.1
-    hooks:
-      - id: zizmor
-        files: ^\.github/workflows/.*\.ya?ml$
-        # --config points at the synced org policy (zizmor.yml) so trusted
-        # publishers (actions/*, astral-sh/*, dryvist/*) may pin by version tag
-        # instead of SHA. KEEP zizmor.yml in sync with dryvist/.github/zizmor.yml.
-        args: [--persona=regular, --min-severity=medium, --min-confidence=medium, --config, zizmor.yml]
-
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.18
     hooks:
@@ -62,7 +57,7 @@ repos:
   # pyright + pytest run from the project venv — single version authority is
   # pyproject.toml [project.optional-dependencies].dev. KEEP IN SYNC with the
   # `pyright` / `pytest` hooks in nix-devenv/flake-modules/profiles/python.nix
-  # (which invoke the same tools off the Nix devshell PATH, not .venv/bin).
+  # (Nix uses the git-hooks native pyright hook + a custom .venv/bin/pytest hook).
   - repo: local
     hooks:
       - id: pyright
