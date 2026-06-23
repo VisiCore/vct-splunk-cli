@@ -17,6 +17,9 @@ dist/
 venv/
 ENV/
 
+# uv (this repo installs with `uv pip install -e`, not the uv lock workflow)
+uv.lock
+
 # Environment files (keep the example)
 .env
 .env.*

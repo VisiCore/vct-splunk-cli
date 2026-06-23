@@ -6,6 +6,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+This is the 0.2.0 development line (version bumped from 0.0.1).
+
+### Fixed
+
+- `server info` now exits with a clear error (exit 2) when `SPLUNK_URL` points at a
+  non-REST endpoint (for example the web UI), instead of returning all-null fields
+  with exit 0 (#18).
+
 ## [0.0.1] - 2026-06-22
 
 ### Added
