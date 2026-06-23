@@ -9,12 +9,11 @@ from __future__ import annotations
 
 import click
 
-from ..core import audit
 from ..core import saved_searches as core
-from ..core.client import config_from_env
 from ..core.namespace import ns_path, resolve_ns
 from . import output as out
 from .context import command
+from .write import do_write
 
 
 @click.group(name="saved-search")
@@ -51,10 +50,11 @@ def get(ctx, name) -> None:
 def create(ctx, name, search_, description, cron, is_scheduled) -> None:
     """Create a saved search. Gated write; requires an app (never 'search' by default)."""
     owner, app = resolve_ns(ctx.owner, ctx.app, for_write=True)
-    target = config_from_env(ctx.base_url).base_url
-    out.confirm_write(ctx, f"create saved search '{name}' in app '{app}'", target)
-    with ctx.client() as c:
-        result = core.create_saved_search(
+    result = do_write(
+        ctx,
+        action=f"create saved search '{name}' in app '{app}'",
+        audit_event={"action": "saved_search.create", "name": name, "app": app, "owner": owner},
+        run=lambda c: core.create_saved_search(
             c,
             name,
             owner=owner,
@@ -63,17 +63,8 @@ def create(ctx, name, search_, description, cron, is_scheduled) -> None:
             description=description,
             cron=cron,
             is_scheduled=is_scheduled,
-        )
-    if not (isinstance(result, dict) and result.get("dry_run")):
-        audit.record(
-            {
-                "action": "saved_search.create",
-                "name": name,
-                "app": app,
-                "owner": owner,
-                "target": target,
-            }
-        )
+        ),
+    )
     out.emit(result, ctx.output_mode, ctx.meta())
 
 
@@ -89,10 +80,11 @@ def create(ctx, name, search_, description, cron, is_scheduled) -> None:
 def update(ctx, name, search_, description, cron, is_scheduled) -> None:
     """Update a saved search (only the fields you pass). Gated write; requires an app."""
     owner, app = resolve_ns(ctx.owner, ctx.app, for_write=True)
-    target = config_from_env(ctx.base_url).base_url
-    out.confirm_write(ctx, f"update saved search '{name}' in app '{app}'", target)
-    with ctx.client() as c:
-        result = core.update_saved_search(
+    result = do_write(
+        ctx,
+        action=f"update saved search '{name}' in app '{app}'",
+        audit_event={"action": "saved_search.update", "name": name, "app": app, "owner": owner},
+        run=lambda c: core.update_saved_search(
             c,
             name,
             owner=owner,
@@ -101,17 +93,8 @@ def update(ctx, name, search_, description, cron, is_scheduled) -> None:
             description=description,
             cron=cron,
             is_scheduled=is_scheduled,
-        )
-    if not (isinstance(result, dict) and result.get("dry_run")):
-        audit.record(
-            {
-                "action": "saved_search.update",
-                "name": name,
-                "app": app,
-                "owner": owner,
-                "target": target,
-            }
-        )
+        ),
+    )
     out.emit(result, ctx.output_mode, ctx.meta())
 
 
@@ -121,20 +104,12 @@ def update(ctx, name, search_, description, cron, is_scheduled) -> None:
 def delete(ctx, name) -> None:
     """Delete a saved search. Gated write; requires an app."""
     owner, app = resolve_ns(ctx.owner, ctx.app, for_write=True)
-    target = config_from_env(ctx.base_url).base_url
-    out.confirm_write(ctx, f"delete saved search '{name}' in app '{app}'", target)
-    with ctx.client() as c:
-        result = core.delete_saved_search(c, name, owner=owner, app=app)
-    if not (isinstance(result, dict) and result.get("dry_run")):
-        audit.record(
-            {
-                "action": "saved_search.delete",
-                "name": name,
-                "app": app,
-                "owner": owner,
-                "target": target,
-            }
-        )
+    result = do_write(
+        ctx,
+        action=f"delete saved search '{name}' in app '{app}'",
+        audit_event={"action": "saved_search.delete", "name": name, "app": app, "owner": owner},
+        run=lambda c: core.delete_saved_search(c, name, owner=owner, app=app),
+    )
     out.emit(result, ctx.output_mode, ctx.meta())
 
 

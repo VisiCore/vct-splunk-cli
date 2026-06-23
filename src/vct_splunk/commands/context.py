@@ -31,6 +31,23 @@ from ..core.errors import SplunkError
 from . import output as out
 
 
+class AliasedGroup(click.Group):
+    """A Click group that also resolves extra verb aliases.
+
+    Lets a group offer Splunk-CLI-style verbs (``add`` / ``edit`` / ``remove``)
+    alongside our ``create`` / ``update`` / ``delete`` for familiarity, while
+    keeping ``--help`` to the canonical names. Pass an ``aliases`` mapping of
+    ``{alias: real_name}`` to the group decorator.
+    """
+
+    def __init__(self, *args: Any, aliases: dict[str, str] | None = None, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._aliases = aliases or {}
+
+    def get_command(self, ctx: click.Context, cmd_name: str) -> click.Command | None:
+        return super().get_command(ctx, self._aliases.get(cmd_name, cmd_name))
+
+
 @dataclass
 class Ctx:
     """The options shared by every ``splunk`` subcommand, resolved once per call.
