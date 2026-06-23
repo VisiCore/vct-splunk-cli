@@ -56,6 +56,13 @@ This is the 0.2.0 development line (version bumped from 0.0.1).
   `session_key` / `app` / `owner`. Precedence is flag > env > profile > default,
   so a profile only fills gaps and never overrides an explicit flag or env (#13).
 
+### Changed
+
+- Factory resource specs are now thin: each one carries just its REST path, so
+  you set fields with the generic `--set KEY=VALUE` and Splunk checks them on the
+  server. This drops the hand-kept field lists that used to copy Splunk's spec
+  and quietly fall out of date.
+
 ### Fixed
 
 - `server info` now exits with a clear error (exit 2) when `SPLUNK_URL` points at a
