@@ -76,9 +76,25 @@ instance.
 
 ## Checks before a PR
 
+Run the gate through the project venv (`.venv/bin/...`) — the same binaries CI
+calls — or via pre-commit. Do **not** route these through `uv run`: it executes
+arbitrary code and is deliberately permission-gated, so it prompts on every call.
+
 ```bash
-ruff check .     # lint (never silence a rule — fix it)
-ruff format .    # format
-pyright          # types
-pytest           # tests
+.venv/bin/ruff check .      # lint (never silence a rule — fix it)
+.venv/bin/ruff format .     # format
+.venv/bin/pyright           # types
+.venv/bin/pytest            # tests
 ```
+
+Or let pre-commit run the whole hook set (installed via `pre-commit install
+--install-hooks` after `uv pip install -e ".[dev]"`):
+
+```bash
+.venv/bin/pre-commit run --all-files                      # commit-stage gate
+.venv/bin/pre-commit run --all-files --hook-stage pre-push # adds pytest
+```
+
+The hook set (`.pre-commit-config.yaml`) is the dryvist org-wide Python standard
+— ruff + ruff-format + pyright at commit, pytest at pre-push. It is kept in sync
+with the Nix definition in `nix-devenv`; see the KEEP IN SYNC banner in that file.
