@@ -36,6 +36,8 @@ This is the 0.2.0 development line (version bumped from 0.0.1).
   running real create -> verify -> cleanup, with integration coverage for the
   namespaced saved-search and factory user lifecycles (#14).
 - A Nix flake dev shell (`nix develop` / direnv) per the workspace convention (#15).
+- Deeper health checks (resource usage, disk space, internal-error rate) shipped as
+  versioned check data (#11).
 
 ### Fixed
 
