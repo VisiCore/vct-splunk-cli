@@ -42,21 +42,21 @@ jobs:
       - name: Test
         run: .venv/bin/pytest
 
-  # Real create -> verify -> cleanup against a Dockerized Splunk Enterprise.
-  # COST CONTROL: this is expensive (boots two Splunk containers, ~6 min each), so
+  # Real create -> verify -> cleanup against a Dockerized Splunk Enterprise 10.x.
+  # COST CONTROL: this is expensive (boots a Splunk container, several minutes), so
   # it runs ONLY on manual dispatch -- never on push or pull_request -- and is
   # hard-capped by timeout-minutes. It is informational; the `check` job is the gate.
   # Run it on demand from the Actions tab ("Run workflow") when you want a live check.
   integration:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        # Pinned (not `latest`): a floating tag silently jumps major versions and
-        # breaks boot. Current plus an older supported release.
-        splunk-version: ["9.4", "9.2"]
+        # We only support Splunk 10.x; `latest` tracks the current 10.x release.
+        # Splunk 10 requires accepting the general terms (SPLUNK_GENERAL_TERMS below).
+        splunk-version: ["latest"]
     env:
       # A throwaway admin password for the ephemeral container. Override with the
       # SPLUNK_TEST_PASSWORD secret if org policy requires it.
@@ -85,15 +85,14 @@ jobs:
       - name: Wait for splunkd
         run: bash .github/scripts/wait-for-splunk.sh
 
-      - name: Mint a token
-        id: token
-        run: bash .github/scripts/mint-token.sh
-
+      # No auth script: the CLI exchanges SPLUNK_USERNAME/SPLUNK_PASSWORD for a
+      # session key itself (via /services/auth/login) when no token is set.
       - name: Integration tests
         env:
           SPLUNK_INTEGRATION_TEST: "true"
           SPLUNK_URL: https://localhost:8089
-          SPLUNK_TOKEN: ${{ steps.token.outputs.token }}
+          SPLUNK_USERNAME: admin
+          SPLUNK_PASSWORD: ${{ env.SPLUNK_PASSWORD }}
           SPLUNK_VERIFY: "false"
         run: .venv/bin/pytest -m integration -v
 
