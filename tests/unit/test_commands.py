@@ -375,3 +375,122 @@ def test_deploy_serverclass_create_dry_run_previews(monkeypatch):
     )
     assert result.exit_code == 0
     assert '"dry_run": true' in result.output
+
+
+def test_hec_global_enable_refuses_without_yes_noninteractive(monkeypatch):
+    _env(monkeypatch)
+    # Must refuse before any network call, so no client patch is needed.
+    result = CliRunner().invoke(cli, ["hec", "global-enable", "--output", "json"])
+    assert result.exit_code == 2
+    assert "usage_error" in result.output
+
+
+def test_hec_global_enable_dry_run_previews(monkeypatch):
+    _env(monkeypatch)
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        raise AssertionError("dry-run must not send a request")
+
+    _patch_client(monkeypatch, handler)
+    result = CliRunner().invoke(cli, ["hec", "global-enable", "--dry-run", "--output", "json"])
+    assert result.exit_code == 0
+    assert '"dry_run": true' in result.output
+
+
+def test_hec_rotate_dry_run_previews(monkeypatch):
+    _env(monkeypatch)
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        raise AssertionError("dry-run must not send a request")
+
+    _patch_client(monkeypatch, handler)
+    result = CliRunner().invoke(cli, ["hec", "rotate", "tok1", "--dry-run", "--output", "json"])
+    assert result.exit_code == 0
+    assert '"dry_run": true' in result.output
+
+
+def test_datamodel_list_renders(monkeypatch):
+    _env(monkeypatch)
+    _patch_client(
+        monkeypatch,
+        lambda req: httpx.Response(
+            200,
+            json={
+                "entry": [{"name": "Authentication", "content": {}, "acl": {}}],
+                "paging": {"total": 1},
+            },
+        ),
+    )
+    result = CliRunner().invoke(cli, ["datamodel", "list", "--output", "json"])
+    assert result.exit_code == 0
+    assert '"name": "Authentication"' in result.output
+
+
+def test_tag_list_renders(monkeypatch):
+    _env(monkeypatch)
+    _patch_client(
+        monkeypatch,
+        lambda req: httpx.Response(
+            200,
+            json={
+                "entry": [{"name": "important", "content": {}, "acl": {}}],
+                "paging": {"total": 1},
+            },
+        ),
+    )
+    result = CliRunner().invoke(cli, ["tag", "list", "--output", "json"])
+    assert result.exit_code == 0
+    assert '"name": "important"' in result.output
+
+
+def test_datamodel_accelerate_dry_run_previews(monkeypatch):
+    _env(monkeypatch)
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        raise AssertionError("dry-run must not send a request")
+
+    _patch_client(monkeypatch, handler)
+    result = CliRunner().invoke(
+        cli,
+        [
+            "datamodel",
+            "accelerate",
+            "Authentication",
+            "--enable",
+            "--app",
+            "a",
+            "--dry-run",
+            "--output",
+            "json",
+        ],
+    )
+    assert result.exit_code == 0
+    assert '"dry_run": true' in result.output
+
+
+def test_lookup_upload_requires_app(monkeypatch, tmp_path):
+    _env(monkeypatch)
+    csv = tmp_path / "t.csv"
+    csv.write_text("a,b\n1,2\n", encoding="utf-8")
+    # No --app and no SPLUNK_APP -> the namespaced write must refuse (exit 2).
+    result = CliRunner().invoke(cli, ["lookup", "upload", "--file", str(csv), "--output", "json"])
+    assert result.exit_code == 2
+    assert "usage_error" in result.output
+
+
+def test_lookup_upload_dry_run_previews_namespace(monkeypatch, tmp_path):
+    _env(monkeypatch)
+    csv = tmp_path / "t.csv"
+    csv.write_text("a,b\n1,2\n", encoding="utf-8")
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        raise AssertionError("dry-run must not send a request")
+
+    _patch_client(monkeypatch, handler)
+    result = CliRunner().invoke(
+        cli,
+        ["lookup", "upload", "--file", str(csv), "--app", "a", "--dry-run", "--output", "json"],
+    )
+    assert result.exit_code == 0
+    assert '"dry_run": true' in result.output
+    assert "/servicesNS/nobody/a/data/lookup-table-files" in result.output

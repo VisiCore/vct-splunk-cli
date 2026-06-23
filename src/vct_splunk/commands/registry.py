@@ -223,6 +223,26 @@ LOOKUP_DEFINITION = Spec(
     fields=(Field("filename", key="filename", help="Lookup table file name."),),
 )
 
+TAG = Spec(
+    name="tag",
+    path="saved/fvtags",
+    help="Field-value tags (use --set to tie field=value to tag names).",
+    namespaced=True,
+    verbs=("list", "get", "create", "update", "delete"),
+    # A tag entry ties a field=value pair to one or more tag names. The exact
+    # keys vary by Splunk version, so only the obvious one is modeled and the
+    # rest go through --set (validate-in-CI against a live instance).
+    fields=(Field("tag", key="tag", multi=True, help="Tag name (repeatable)."),),
+)
+
+DATAMODEL = Spec(
+    name="datamodel",
+    path="datamodel/model",
+    help="Data models (large JSON; use --set description/acceleration). Accelerate is separate.",
+    namespaced=True,
+    fields=(Field("description", key="description", help="Human description."),),
+)
+
 # --- KV Store (#9) -----------------------------------------------------------
 # Only the collection schema is CRUD-shaped. Schema fields are dynamic
 # (field.<name>=<type>), so they go through --set. Data records are a document
@@ -273,6 +293,8 @@ REGISTRY: list[Spec] = [
     EVENTTYPE,
     EXTRACTION,
     LOOKUP_DEFINITION,
+    TAG,
+    DATAMODEL,
     KVSTORE_COLLECTION,
     MESSAGE,
     APP,
