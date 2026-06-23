@@ -8,6 +8,7 @@ from . import __version__
 from .commands.api import api
 from .commands.health import health
 from .commands.index import index
+from .commands.saved_search import saved_search
 from .commands.search import search
 from .commands.server import server
 
@@ -18,7 +19,7 @@ def cli() -> None:
     """Read, search, health-check, and safely administer Splunk Enterprise over its REST API."""
 
 
-for _group in (server, api, index, search, health):
+for _group in (server, api, index, search, saved_search, health):
     cli.add_command(_group)
 
 
