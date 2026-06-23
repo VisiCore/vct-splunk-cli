@@ -29,6 +29,11 @@ This is the 0.2.0 development line (version bumped from 0.0.1).
   schemas, system messages, and app lifecycle (#5, #6, #8, #9, #10).
 - `kvstore records` / `get` / `insert` / `update` / `delete` / `purge` manage KV
   Store data records as a namespaced JSON document store; writes require an app (#9).
+- `cluster status` and `shcluster status` read indexer-cluster and search-head
+  cluster health, and `license list` / `get` / `usage` report licensing (#10).
+- `server restart` and `server settings get` / `set` manage the instance.
+  `restart` and `settings set` are gated writes, so they preview with `--dry-run`
+  and require `--yes` when run non-interactively (#10).
 - An explicit additive-only output-contract statement plus a contract test pinning
   the JSON envelopes, the documented exit codes, and prompt-injection safety (#16).
 - A minimal, read-only Splunk Cloud (ACS) slice: `cloud indexes` / `hec-tokens` /

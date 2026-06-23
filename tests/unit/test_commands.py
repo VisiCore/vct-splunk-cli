@@ -188,3 +188,99 @@ def test_saved_search_create_dry_run_previews_app_namespace(monkeypatch):
     assert result.exit_code == 0
     assert '"dry_run": true' in result.output
     assert "/servicesNS/nobody/my_app/saved/searches" in result.output
+
+
+def test_cluster_status_renders(monkeypatch):
+    _env(monkeypatch)
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        if req.url.path == "/services/cluster/config":
+            return httpx.Response(200, json={"entry": [{"content": {"mode": "manager"}}]})
+        return httpx.Response(200, json={"entry": [{"content": {"indexing_ready_flag": True}}]})
+
+    _patch_client(monkeypatch, handler)
+    result = CliRunner().invoke(cli, ["cluster", "status", "--output", "json"])
+    assert result.exit_code == 0
+    assert '"mode": "manager"' in result.output
+
+
+def test_license_list_renders(monkeypatch):
+    _env(monkeypatch)
+    _patch_client(
+        monkeypatch,
+        lambda req: httpx.Response(
+            200,
+            json={
+                "entry": [{"name": "lic1", "content": {"label": "Enterprise"}}],
+                "paging": {"total": 1},
+            },
+        ),
+    )
+    result = CliRunner().invoke(cli, ["license", "list", "--output", "json"])
+    assert result.exit_code == 0
+    assert '"name": "lic1"' in result.output
+
+
+def test_message_list_renders(monkeypatch):
+    _env(monkeypatch)
+    _patch_client(
+        monkeypatch,
+        lambda req: httpx.Response(
+            200,
+            json={
+                "entry": [{"name": "restart_required", "content": {"value": "Restart needed"}}],
+                "paging": {"total": 1},
+            },
+        ),
+    )
+    result = CliRunner().invoke(cli, ["message", "list", "--output", "json"])
+    assert result.exit_code == 0
+    assert '"name": "restart_required"' in result.output
+
+
+def test_server_settings_get_renders(monkeypatch):
+    _env(monkeypatch)
+    _patch_client(
+        monkeypatch,
+        lambda req: httpx.Response(
+            200, json={"entry": [{"content": {"serverName": "sh1", "host": "sh1"}}]}
+        ),
+    )
+    result = CliRunner().invoke(cli, ["server", "settings", "get", "--output", "json"])
+    assert result.exit_code == 0
+    assert '"serverName": "sh1"' in result.output
+
+
+def test_server_restart_refuses_without_yes_noninteractive(monkeypatch):
+    _env(monkeypatch)
+    # Must refuse before any network call, so no client patch is needed.
+    result = CliRunner().invoke(cli, ["server", "restart", "--output", "json"])
+    assert result.exit_code == 2
+    assert "usage_error" in result.output
+
+
+def test_server_restart_dry_run_previews(monkeypatch):
+    _env(monkeypatch)
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        raise AssertionError("dry-run must not send a request")
+
+    _patch_client(monkeypatch, handler)
+    result = CliRunner().invoke(cli, ["server", "restart", "--dry-run", "--output", "json"])
+    assert result.exit_code == 0
+    assert '"dry_run": true' in result.output
+
+
+def test_server_settings_set_dry_run_previews(monkeypatch):
+    _env(monkeypatch)
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        raise AssertionError("dry-run must not send a request")
+
+    _patch_client(monkeypatch, handler)
+    result = CliRunner().invoke(
+        cli,
+        ["server", "settings", "set", "--set", "host=sh1", "--dry-run", "--output", "json"],
+    )
+    assert result.exit_code == 0
+    assert '"dry_run": true' in result.output

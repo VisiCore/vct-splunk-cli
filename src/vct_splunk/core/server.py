@@ -28,3 +28,24 @@ def get_server_info(client: SplunkClient) -> dict[str, Any]:
         "os_name": content.get("os_name"),
         "guid": content.get("guid"),
     }
+
+
+def restart_server(client: SplunkClient) -> dict[str, Any]:
+    """Restart the Splunk server (a gated, blast-radius-significant write)."""
+    return client.write("POST", "/services/server/control/restart", {})
+
+
+def get_settings(client: SplunkClient) -> dict[str, Any]:
+    """Show the server's general settings."""
+    body = client.get("/services/server/settings/settings")
+    entries = body.get("entry") or []
+    return entries[0].get("content") or {} if entries else {}
+
+
+def set_settings(client: SplunkClient, settings: dict[str, Any]) -> dict[str, Any]:
+    """Apply changed server settings (form keys); a gated write."""
+    result = client.write("POST", "/services/server/settings/settings", settings)
+    if result.get("dry_run"):
+        return result
+    entries = result.get("entry") or []
+    return entries[0].get("content") or {} if entries else result
