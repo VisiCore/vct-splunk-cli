@@ -15,6 +15,7 @@ from typing import Any
 import httpx
 
 from .errors import APIError, AuthError, NotFoundError, TransportError, UsageError
+from .profiles import load_profile
 
 _RETRY_STATUS = {429, 503}
 _MAX_RETRIES = 3
@@ -27,18 +28,50 @@ class ClientConfig:
     verify: bool | str = True  # True/False, or a path to a CA bundle
     timeout: float = 30.0
     dry_run: bool = False
+    # Splunk accepts two REST auth schemes via the Authorization header: a JWT as
+    # "Bearer <token>" (the default) and a session key as "Splunk <sessionKey>".
+    auth_scheme: str = "Bearer"
 
 
-def config_from_env(base_url: str | None = None) -> ClientConfig:
-    url = base_url or os.environ.get("SPLUNK_URL")
+def config_from_env(base_url: str | None = None, *, profile: str | None = None) -> ClientConfig:
+    """Build a :class:`ClientConfig` from flags, the environment, and a profile.
+
+    Precedence for each value is **flag > env > profile > built-in default**: an
+    explicit ``base_url`` (from ``--base-url``) wins, then the environment, then
+    the active config-file profile (see :func:`vct_splunk.core.profiles.load_profile`),
+    then any hard-coded fallback. The profile is consulted only when the flag and
+    env var are both unset, so callers that set ``SPLUNK_URL`` / ``SPLUNK_TOKEN``
+    keep their existing behavior.
+
+    Args:
+        base_url: An explicit management URL from ``--base-url``, or None.
+        profile: The active profile name (from ``--profile`` / ``$SPLUNK_PROFILE``),
+            or None for no profile.
+
+    Returns:
+        A resolved config. Auth is ``Bearer`` when a token is present, else
+        ``Splunk`` when a session key is present.
+
+    Raises:
+        UsageError: If no URL or no credential can be resolved.
+    """
+    prof = load_profile(profile)
+    url = base_url or os.environ.get("SPLUNK_URL") or prof.get("url")
     if not url:
         raise UsageError("No Splunk URL. Set SPLUNK_URL or pass --base-url.")
-    token = os.environ.get("SPLUNK_TOKEN")
-    if not token:
-        raise UsageError("No auth token. Set SPLUNK_TOKEN.")
+    token = os.environ.get("SPLUNK_TOKEN") or prof.get("token")
+    session_key = os.environ.get("SPLUNK_SESSION_KEY") or prof.get("session_key")
+    if token:
+        scheme, credential = "Bearer", token
+    elif session_key:
+        scheme, credential = "Splunk", session_key
+    else:
+        raise UsageError("No auth credential. Set SPLUNK_TOKEN or SPLUNK_SESSION_KEY.")
     ca = os.environ.get("SPLUNK_CA_BUNDLE")
     verify_env = os.environ.get("SPLUNK_VERIFY", "true").strip().lower() not in {"0", "false", "no"}
-    return ClientConfig(base_url=url.rstrip("/"), token=token, verify=ca or verify_env)
+    return ClientConfig(
+        base_url=url.rstrip("/"), token=credential, verify=ca or verify_env, auth_scheme=scheme
+    )
 
 
 class SplunkClient:
@@ -48,7 +81,7 @@ class SplunkClient:
         self.config = config
         self._http = httpx.Client(
             base_url=config.base_url,
-            headers={"Authorization": f"Bearer {config.token}"},
+            headers={"Authorization": f"{config.auth_scheme} {config.token}"},
             verify=config.verify,
             timeout=config.timeout,
             transport=transport,
@@ -128,7 +161,7 @@ def _retry_after(resp: httpx.Response, attempt: int) -> float:
 
 def _handle(resp: httpx.Response, method: str, url: str) -> dict[str, Any]:
     if resp.status_code == 401:
-        raise AuthError("Authentication failed (401). Check SPLUNK_TOKEN.")
+        raise AuthError("Authentication failed (401). Check SPLUNK_TOKEN or SPLUNK_SESSION_KEY.")
     if resp.status_code == 403:
         raise AuthError(f"Permission denied (403) for {method} {url}.")
     if resp.status_code == 404:

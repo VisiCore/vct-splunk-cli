@@ -28,6 +28,7 @@ import click
 
 from ..core.client import SplunkClient, config_from_env
 from ..core.errors import SplunkError
+from ..core.profiles import load_profile
 from . import output as out
 
 
@@ -65,6 +66,9 @@ class Ctx:
             Used by namespaced resources (e.g. saved searches); ignored by
             system-level ones (e.g. indexes).
         owner: The owner namespace from ``--owner`` / ``$SPLUNK_OWNER``, or None.
+        profile: The active config-file profile name from ``--profile`` /
+            ``$SPLUNK_PROFILE``, or None. Supplies connection settings only where
+            a flag and env var leave them unset (flag > env > profile > default).
     """
 
     output_mode: str
@@ -73,13 +77,15 @@ class Ctx:
     base_url: str | None
     app: str | None = None
     owner: str | None = None
+    profile: str | None = None
 
     def client(self) -> SplunkClient:
         """Build a :class:`SplunkClient` from the environment plus this context.
 
-        Credentials and TLS settings are read from the environment (see
-        :func:`vct_splunk.core.client.config_from_env`); the ``dry_run`` flag is
-        carried over from the command line so that writes can be previewed.
+        Credentials and TLS settings are read from flags, the environment, and
+        the active profile (see :func:`vct_splunk.core.client.config_from_env`);
+        the ``dry_run`` flag is carried over from the command line so that writes
+        can be previewed.
 
         Returns:
             A ready-to-use client. Use it as a context manager so its underlying
@@ -88,7 +94,7 @@ class Ctx:
                 with ctx.client() as c:
                     ...
         """
-        cfg = config_from_env(self.base_url)
+        cfg = config_from_env(self.base_url, profile=self.profile)
         cfg.dry_run = self.dry_run
         return SplunkClient(cfg)
 
@@ -119,19 +125,22 @@ def command(fn: Callable) -> Callable:
     """
 
     @functools.wraps(fn)
-    def wrapper(output, table, dry_run, yes, base_url, app, owner, **kwargs: Any) -> Any:
+    def wrapper(output, table, dry_run, yes, base_url, app, owner, profile, **kwargs: Any) -> Any:
         # Click passes every option to the callback by name. The shared options
         # are named explicitly here; the command's own arguments arrive untouched
         # in **kwargs and are forwarded straight through to fn.
+        profile = profile or os.environ.get("SPLUNK_PROFILE")
+        prof = load_profile(profile)
         ctx = Ctx(
             out.resolve_mode(output, table),
             dry_run,
             yes,
             base_url,
-            # Flag wins over env; either may stay None, in which case the
-            # namespace policy (core.namespace.resolve_ns) supplies a safe default.
-            app=app or os.environ.get("SPLUNK_APP"),
-            owner=owner or os.environ.get("SPLUNK_OWNER"),
+            # Flag > env > profile; any may stay None, in which case the namespace
+            # policy (core.namespace.resolve_ns) supplies a safe default.
+            app=app or os.environ.get("SPLUNK_APP") or prof.get("app"),
+            owner=owner or os.environ.get("SPLUNK_OWNER") or prof.get("owner"),
+            profile=profile,
         )
         try:
             return fn(ctx, **kwargs)
@@ -143,6 +152,11 @@ def command(fn: Callable) -> Callable:
     # Click applies decorators bottom-up, so this list ends up reading in reverse
     # order in --help. The order is purely cosmetic.
     options = [
+        click.option(
+            "--profile",
+            default=None,
+            help="Config-file profile name (overridden by flags/env; or $SPLUNK_PROFILE).",
+        ),
         click.option(
             "--owner",
             default=None,
