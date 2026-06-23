@@ -127,6 +127,13 @@ so confidence there is capped. An MCP wrapper is a planned follow-up.
 SPLUNK_INTEGRATION_TEST=true .venv/bin/python -m pytest -m integration   # against a live/Docker Splunk
 ```
 
+CI runs the integration suite against a Dockerized `splunk/splunk` on an x86 runner,
+where KV Store (and its bundled MongoDB) runs natively. On Apple Silicon that MongoDB
+needs an AVX instruction the emulated image lacks, so boot the local container with KV
+Store **disabled** (`server.conf [kvstore] disabled = true` via the image's
+`default.yml` / `SPLUNK_DEFAULTS_URL`). Everything except KV Store works locally; the
+KV-Store-dependent checks run only in CI.
+
 ## Contributing
 
 The package separates a Click-free core from a thin CLI shell:

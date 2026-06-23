@@ -39,3 +39,57 @@ jobs:
 
       - name: Test
         run: .venv/bin/pytest
+
+  # Real create -> verify -> cleanup against a Dockerized Splunk Enterprise.
+  # Informational (not a required check): the unit `check` job above is the gate.
+  # KV Store and the bundled MongoDB run natively on this x86 runner, so the full
+  # suite works here (on Apple Silicon, boot the container with KV Store disabled).
+  integration:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Current plus an older supported release.
+        splunk-version: ["latest", "9.2"]
+    env:
+      # A throwaway admin password for the ephemeral container. Override with the
+      # SPLUNK_TEST_PASSWORD secret if org policy requires it.
+      SPLUNK_PASSWORD: ${{ secrets.SPLUNK_TEST_PASSWORD || 'Ch4ng3d-CI-Pass!' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install project
+        run: |
+          uv venv
+          uv pip install -e ".[dev]"
+
+      - name: Start Splunk
+        run: |
+          docker run -d --name splunk -p 8089:8089 \
+            -e SPLUNK_START_ARGS=--accept-license \
+            -e SPLUNK_PASSWORD="$SPLUNK_PASSWORD" \
+            splunk/splunk:${{ matrix.splunk-version }}
+
+      - name: Wait for splunkd
+        run: bash .github/scripts/wait-for-splunk.sh
+
+      - name: Mint a token
+        id: token
+        run: bash .github/scripts/mint-token.sh
+
+      - name: Integration tests
+        env:
+          SPLUNK_INTEGRATION_TEST: "true"
+          SPLUNK_URL: https://localhost:8089
+          SPLUNK_TOKEN: ${{ steps.token.outputs.token }}
+          SPLUNK_VERIFY: "false"
+        run: .venv/bin/pytest -m integration -v
+
+      - name: Splunk logs on failure
+        if: failure()
+        run: docker logs splunk

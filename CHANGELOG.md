@@ -32,6 +32,9 @@ This is the 0.2.0 development line (version bumped from 0.0.1).
 - A minimal, read-only Splunk Cloud (ACS) slice: `cloud indexes` / `hec-tokens` /
   `roles`, plus `inspect` reporting each backend's supported operations. Cloud
   coverage is not yet certified (no live canary); confidence is capped (#27).
+- A Dockerized `splunk/splunk` CI integration job (current plus an older release)
+  running real create -> verify -> cleanup, with integration coverage for the
+  namespaced saved-search and factory user lifecycles (#14).
 
 ### Fixed
 

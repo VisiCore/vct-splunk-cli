@@ -56,3 +56,54 @@ def test_end_to_end():
     finally:
         with SplunkClient(config_from_env()) as client:
             indexes.delete_index(client, name)
+
+
+def test_saved_search_lifecycle():
+    """Namespaced create -> verify -> cleanup. Uses --app search explicitly (the
+    namespace policy only blocks the silent default, not an explicit choice)."""
+    from vct_splunk.cli import cli
+
+    runner = CliRunner()
+    name = f"vct_ss_{uuid.uuid4().hex[:8]}"
+    created = runner.invoke(
+        cli,
+        [
+            "saved-search",
+            "create",
+            name,
+            "--search",
+            "index=_internal | head 1",
+            "--app",
+            "search",
+            "-y",
+            "--output",
+            "json",
+        ],
+    )
+    assert created.exit_code == 0
+    try:
+        got = runner.invoke(
+            cli, ["saved-search", "get", name, "--app", "search", "--output", "json"]
+        )
+        assert got.exit_code == 0
+    finally:
+        runner.invoke(
+            cli, ["saved-search", "delete", name, "--app", "search", "-y", "--output", "json"]
+        )
+
+
+def test_user_lifecycle(monkeypatch):
+    """A factory-generated resource: create -> verify -> cleanup."""
+    from vct_splunk.cli import cli
+
+    runner = CliRunner()
+    name = f"vct_u_{uuid.uuid4().hex[:8]}"
+    monkeypatch.setenv("SPLUNK_USER_PASSWORD", "Ci-Test-Pass-123!")
+    created = runner.invoke(
+        cli, ["user", "create", name, "--role", "user", "-y", "--output", "json"]
+    )
+    assert created.exit_code == 0
+    try:
+        assert runner.invoke(cli, ["user", "get", name, "--output", "json"]).exit_code == 0
+    finally:
+        runner.invoke(cli, ["user", "delete", name, "-y", "--output", "json"])
