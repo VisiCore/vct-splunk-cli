@@ -29,13 +29,22 @@ class AcsConfig:
 
 
 def acs_config_from_env(stack: str | None = None) -> AcsConfig:
-    """Build an ACS config from ``SPLUNK_ACS_STACK`` / ``SPLUNK_ACS_TOKEN``."""
+    """Build an ACS config: the stack (derived from SPLUNK_URL) + ``SPLUNK_ACS_TOKEN``.
+
+    The Cloud stack is normally derived from the ``*.splunkcloud.com`` host in
+    ``SPLUNK_URL`` and passed in as ``stack``; ``SPLUNK_ACS_STACK`` is a rare
+    explicit override. ``SPLUNK_ACS_TOKEN`` (a Bearer token, separate from the
+    Enterprise auth token) is always required for ACS operations.
+    """
     stack = stack or os.environ.get("SPLUNK_ACS_STACK")
     token = os.environ.get("SPLUNK_ACS_TOKEN")
     if not stack:
-        raise UsageError("No ACS stack. Set SPLUNK_ACS_STACK (your Splunk Cloud stack name).")
+        raise UsageError(
+            "Could not determine the Splunk Cloud stack. Set SPLUNK_URL to your "
+            "https://<stack>.splunkcloud.com host (or set SPLUNK_ACS_STACK)."
+        )
     if not token:
-        raise UsageError("No ACS token. Set SPLUNK_ACS_TOKEN.")
+        raise UsageError("No ACS token. Set SPLUNK_ACS_TOKEN for Splunk Cloud operations.")
     return AcsConfig(stack=stack, token=token)
 
 
