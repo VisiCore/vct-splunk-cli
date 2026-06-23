@@ -16,6 +16,11 @@ This is the 0.2.0 development line (version bumped from 0.0.1).
 - `search list` / `get` / `cancel` for the search-job lifecycle, plus a bounded
   `search run --export` that streams from the export endpoint (#3).
 - `saved-search list` / `get` / `create` / `update` / `delete` / `run` (#3).
+- `index update` / `delete` / `enable` / `disable` complete the index lifecycle;
+  `update` merges server-side, sending only the settings that changed (#2).
+- Splunk-CLI verb aliases (`add` / `edit` / `remove`) on the `index` group.
+- A single shared write path (`do_write`) behind every mutation, recording each
+  applied write to the audit log (first slice of #12).
 
 ### Fixed
 

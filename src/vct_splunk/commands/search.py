@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import click
 
-from ..core import audit
 from ..core import jobs as jobs_core
 from ..core import search as core
-from ..core.client import config_from_env
 from . import output as out
 from .context import command
+from .write import do_write
 
 
 @click.group()
@@ -39,13 +38,12 @@ def get(ctx, sid) -> None:
 @command
 def cancel(ctx, sid) -> None:
     """Cancel a running search job (frees its server resources). Gated write."""
-    config = config_from_env(ctx.base_url)
-    target = config.base_url
-    out.confirm_write(ctx, f"cancel search job '{sid}'", target)
-    with ctx.client() as c:
-        result = jobs_core.cancel_job(c, sid)
-    if not (isinstance(result, dict) and result.get("dry_run")):
-        audit.record({"action": "search.cancel", "sid": sid, "target": target})
+    result = do_write(
+        ctx,
+        action=f"cancel search job '{sid}'",
+        audit_event={"action": "search.cancel", "sid": sid},
+        run=lambda c: jobs_core.cancel_job(c, sid),
+    )
     out.emit(result, ctx.output_mode, ctx.meta())
 
 
