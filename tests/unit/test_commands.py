@@ -284,3 +284,94 @@ def test_server_settings_set_dry_run_previews(monkeypatch):
     )
     assert result.exit_code == 0
     assert '"dry_run": true' in result.output
+
+
+def test_app_install_requires_one_source(monkeypatch):
+    _env(monkeypatch)
+    # Neither --file nor --url: usage error before any network call.
+    result = CliRunner().invoke(cli, ["app", "install", "--output", "json"])
+    assert result.exit_code == 2
+    assert "usage_error" in result.output
+
+
+def test_app_install_url_dry_run_previews(monkeypatch):
+    _env(monkeypatch)
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        raise AssertionError("dry-run must not send a request")
+
+    _patch_client(monkeypatch, handler)
+    result = CliRunner().invoke(
+        cli, ["app", "install", "--url", "https://x/app.spl", "--dry-run", "--output", "json"]
+    )
+    assert result.exit_code == 0
+    assert '"dry_run": true' in result.output
+
+
+def test_deploy_client_list_renders(monkeypatch):
+    _env(monkeypatch)
+    _patch_client(
+        monkeypatch,
+        lambda req: httpx.Response(
+            200,
+            json={
+                "entry": [{"name": "client1", "content": {"hostname": "fwd1"}}],
+                "paging": {"total": 1},
+            },
+        ),
+    )
+    result = CliRunner().invoke(cli, ["deploy", "client", "list", "--output", "json"])
+    assert result.exit_code == 0
+    assert '"name": "client1"' in result.output
+
+
+def test_deploy_serverclass_list_renders(monkeypatch):
+    _env(monkeypatch)
+    _patch_client(
+        monkeypatch,
+        lambda req: httpx.Response(
+            200,
+            json={
+                "entry": [{"name": "sc1", "content": {"whitelist.0": "*"}}],
+                "paging": {"total": 1},
+            },
+        ),
+    )
+    result = CliRunner().invoke(cli, ["deploy", "serverclass", "list", "--output", "json"])
+    assert result.exit_code == 0
+    assert '"name": "sc1"' in result.output
+
+
+def test_deploy_reload_refuses_without_yes_noninteractive(monkeypatch):
+    _env(monkeypatch)
+    # Must refuse before any network call, so no client patch is needed.
+    result = CliRunner().invoke(cli, ["deploy", "reload", "--output", "json"])
+    assert result.exit_code == 2
+    assert "usage_error" in result.output
+
+
+def test_deploy_reload_dry_run_previews(monkeypatch):
+    _env(monkeypatch)
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        raise AssertionError("dry-run must not send a request")
+
+    _patch_client(monkeypatch, handler)
+    result = CliRunner().invoke(cli, ["deploy", "reload", "--dry-run", "--output", "json"])
+    assert result.exit_code == 0
+    assert '"dry_run": true' in result.output
+
+
+def test_deploy_serverclass_create_dry_run_previews(monkeypatch):
+    _env(monkeypatch)
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        raise AssertionError("dry-run must not send a request")
+
+    _patch_client(monkeypatch, handler)
+    result = CliRunner().invoke(
+        cli,
+        ["deploy", "serverclass", "create", "foo", "--set", "x=1", "--dry-run", "--output", "json"],
+    )
+    assert result.exit_code == 0
+    assert '"dry_run": true' in result.output

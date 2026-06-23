@@ -248,8 +248,8 @@ MESSAGE = Spec(
 )
 
 # --- Apps (#5) ---------------------------------------------------------------
-# Lifecycle only. Install-from-file/URL is a multipart upload and stays
-# hand-written.
+# Lifecycle only. Install-from-file/URL (the appinstall endpoint) does not fit
+# the CRUD shape and stays hand-written (see commands/apps.py).
 
 APP = Spec(
     name="app",
