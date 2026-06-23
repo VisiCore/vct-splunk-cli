@@ -96,6 +96,15 @@ class SplunkClient:
     def get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         return self._request("GET", path, params=params)
 
+    def get_json(self, path: str, params: dict[str, Any] | None = None) -> Any:
+        """GET a JSON document endpoint (e.g. KV Store data) and return it as-is.
+
+        Unlike :meth:`get`, the response is plain JSON (an array for a collection,
+        an object for one record) rather than the ``entry[].content`` envelope, so
+        the return type is the raw parsed value.
+        """
+        return self._request("GET", path, params=params)
+
     def post(
         self, path: str, data: dict[str, Any], *, timeout: float | None = None
     ) -> dict[str, Any]:
@@ -111,6 +120,22 @@ class SplunkClient:
                 "target": self.config.base_url,
             }
         return self._request(method, path, data=data)
+
+    def write_json(self, method: str, path: str, body: Any) -> Any:
+        """Mutating request with a JSON body (Content-Type: application/json).
+
+        The KV Store *data* endpoints are a JSON document store, not the Splunk
+        ``entry[].content`` envelope: requests carry a JSON body and responses are
+        plain JSON objects/arrays. This is the JSON-body sibling of :meth:`write`;
+        it is dry-run gated the same way and returns the parsed JSON otherwise.
+        """
+        if self.config.dry_run:
+            return {
+                "dry_run": True,
+                "request": {"method": method, "path": "/" + path.lstrip("/"), "body": body},
+                "target": self.config.base_url,
+            }
+        return self._request(method, path, json_body=body)
 
     def get_collection(
         self, path: str, params: dict[str, Any] | None = None, *, page: int = 200
@@ -128,8 +153,15 @@ class SplunkClient:
             if not entries or len(entries) < page or (total is not None and offset >= total):
                 return out
 
-    def _request(self, method, path, *, params=None, data=None, timeout=None) -> dict[str, Any]:
-        params = {**(params or {}), "output_mode": "json"}
+    def _request(
+        self, method, path, *, params=None, data=None, json_body=None, timeout=None
+    ) -> Any:
+        # The classic Splunk endpoints speak the entry/content envelope and need
+        # output_mode=json; the KV Store data store is already JSON, so a JSON-body
+        # request skips that param and sends application/json instead of form data.
+        params = dict(params or {})
+        if json_body is None:
+            params["output_mode"] = "json"
         url = "/" + path.lstrip("/")
         for attempt in range(_MAX_RETRIES + 1):
             try:
@@ -138,6 +170,7 @@ class SplunkClient:
                     url,
                     params=params,
                     data=data,
+                    json=json_body,
                     # Only None means "unset" — an explicit timeout (even 0) is honored.
                     timeout=self.config.timeout if timeout is None else timeout,
                 )
@@ -159,7 +192,7 @@ def _retry_after(resp: httpx.Response, attempt: int) -> float:
     return min(2.0**attempt, 8.0)
 
 
-def _handle(resp: httpx.Response, method: str, url: str) -> dict[str, Any]:
+def _handle(resp: httpx.Response, method: str, url: str) -> Any:
     if resp.status_code == 401:
         raise AuthError("Authentication failed (401). Check SPLUNK_TOKEN or SPLUNK_SESSION_KEY.")
     if resp.status_code == 403:

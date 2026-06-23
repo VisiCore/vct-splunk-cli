@@ -27,6 +27,8 @@ This is the 0.2.0 development line (version bumped from 0.0.1).
 - Many admin resources as generated CRUD groups: data inputs and outputs, search
   macros, event types, field extractions, lookup definitions, KV Store collection
   schemas, system messages, and app lifecycle (#5, #6, #8, #9, #10).
+- `kvstore records` / `get` / `insert` / `update` / `delete` / `purge` manage KV
+  Store data records as a namespaced JSON document store; writes require an app (#9).
 - An explicit additive-only output-contract statement plus a contract test pinning
   the JSON envelopes, the documented exit codes, and prompt-injection safety (#16).
 - A minimal, read-only Splunk Cloud (ACS) slice: `cloud indexes` / `hec-tokens` /
