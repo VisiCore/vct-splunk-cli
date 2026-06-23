@@ -54,3 +54,20 @@ def test_get_collection_paginates(client_for):
 
     entries = client_for(handler).get_collection("/services/data/indexes", page=2)
     assert [e["name"] for e in entries] == ["a", "b", "c"]
+
+
+def test_request_passes_explicit_timeout_else_config(client_for, monkeypatch):
+    # _request must forward an explicit timeout verbatim (including 0, which is a
+    # real value, not "unset") and fall back to config.timeout only when None.
+    client = client_for(lambda req: httpx.Response(200, json={}))
+    seen: list[object] = []
+    real = client._http.request
+
+    def spy(method, url, **kwargs):
+        seen.append(kwargs.get("timeout"))
+        return real(method, url, **kwargs)
+
+    monkeypatch.setattr(client._http, "request", spy)
+    client.post("/services/search/jobs", {"q": "1"}, timeout=0)
+    client.get("/services/server/info")
+    assert seen == [0, 30.0]  # explicit 0 honored; None -> ClientConfig default
