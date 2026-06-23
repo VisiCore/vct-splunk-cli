@@ -33,6 +33,13 @@ This is the 0.2.0 development line (version bumped from 0.0.1).
   `roles`, plus `inspect` reporting each backend's supported operations. Cloud
   coverage is not yet certified (no live canary); confidence is capped (#27).
 
+### Changed
+
+- Factory resource specs are now thin: each one carries just its REST path, so
+  you set fields with the generic `--set KEY=VALUE` and Splunk checks them on the
+  server. This drops the hand-kept field lists that used to copy Splunk's spec
+  and quietly fall out of date.
+
 ### Fixed
 
 - `server info` now exits with a clear error (exit 2) when `SPLUNK_URL` points at a
