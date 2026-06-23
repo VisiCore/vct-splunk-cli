@@ -6,9 +6,11 @@ import click
 
 from . import __version__
 from .commands.api import api
+from .commands.cloud import cloud
 from .commands.factory import build_group
 from .commands.health import health
 from .commands.index import index
+from .commands.inspect import inspect
 from .commands.registry import REGISTRY
 from .commands.saved_search import saved_search
 from .commands.search import search
@@ -21,8 +23,10 @@ def cli() -> None:
     """Read, search, health-check, and safely administer Splunk Enterprise over its REST API."""
 
 
-for _group in (server, api, index, search, saved_search, health):
+for _group in (server, api, index, search, saved_search, health, cloud):
     cli.add_command(_group)
+
+cli.add_command(inspect)
 
 # Factory-generated CRUD resources (users, roles, ...): each spec becomes a group.
 for _spec in REGISTRY:

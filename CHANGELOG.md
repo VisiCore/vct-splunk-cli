@@ -29,6 +29,9 @@ This is the 0.2.0 development line (version bumped from 0.0.1).
   schemas, system messages, and app lifecycle (#5, #6, #8, #9, #10).
 - An explicit additive-only output-contract statement plus a contract test pinning
   the JSON envelopes, the documented exit codes, and prompt-injection safety (#16).
+- A minimal, read-only Splunk Cloud (ACS) slice: `cloud indexes` / `hec-tokens` /
+  `roles`, plus `inspect` reporting each backend's supported operations. Cloud
+  coverage is not yet certified (no live canary); confidence is capped (#27).
 
 ### Fixed
 

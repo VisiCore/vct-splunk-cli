@@ -112,9 +112,13 @@ text is treated as data only and never drives a write.
 
 ## Scope
 
-This MVP targets **Splunk Enterprise on-prem** only, using your own credentials against the
-documented REST API. It does not use, bundle, or proxy any Splunk-distributed app. Splunk Cloud
-(ACS) and an MCP wrapper are planned follow-ups.
+The primary, certified target is **Splunk Enterprise on-prem**, using your own credentials
+against the documented REST API. It does not use, bundle, or proxy any Splunk-distributed app.
+
+A minimal, **read-only Splunk Cloud (ACS)** slice is included: `splunk cloud indexes` /
+`hec-tokens` / `roles` (set `SPLUNK_ACS_STACK` / `SPLUNK_ACS_TOKEN`), and `splunk inspect` reports
+which operations each backend supports. Cloud coverage is not yet certified against a live stack,
+so confidence there is capped. An MCP wrapper is a planned follow-up.
 
 ## Testing
 
