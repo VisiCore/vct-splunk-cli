@@ -21,6 +21,12 @@ This is the 0.2.0 development line (version bumped from 0.0.1).
 - Splunk-CLI verb aliases (`add` / `edit` / `remove`) on the `index` group.
 - A single shared write path (`do_write`) behind every mutation, recording each
   applied write to the audit log (first slice of #12).
+- A registry/factory engine: CRUD-shaped Splunk resources are described as data
+  and become generated command groups. Proven on access — `user`, `role`,
+  `capability` (#4).
+- Many admin resources as generated CRUD groups: data inputs and outputs, search
+  macros, event types, field extractions, lookup definitions, KV Store collection
+  schemas, system messages, and app lifecycle (#5, #6, #8, #9, #10).
 
 ### Fixed
 

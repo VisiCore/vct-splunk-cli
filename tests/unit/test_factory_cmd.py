@@ -98,3 +98,53 @@ def test_add_alias_on_generated_group(monkeypatch):
     )
     assert result.exit_code == 0
     assert '"dry_run": true' in result.output
+
+
+def test_namespaced_generated_group_requires_app(monkeypatch):
+    _env(monkeypatch)
+    monkeypatch.delenv("SPLUNK_APP", raising=False)
+    # macro is namespaced -> a write without --app must refuse (never target 'search').
+    result = CliRunner().invoke(
+        cli, ["macro", "create", "m1", "--definition", "x", "--dry-run", "--output", "json"]
+    )
+    assert result.exit_code == 2
+    assert "usage_error" in result.output
+
+
+def test_namespaced_generated_group_previews_app_namespace(monkeypatch):
+    _env(monkeypatch)
+    result = CliRunner().invoke(
+        cli,
+        [
+            "macro",
+            "create",
+            "m1",
+            "--definition",
+            "x",
+            "--app",
+            "my_app",
+            "--dry-run",
+            "--output",
+            "json",
+        ],
+    )
+    assert result.exit_code == 0
+    assert "/servicesNS/nobody/my_app/configs/conf-macros" in result.output
+
+
+def test_global_input_group_lists(monkeypatch):
+    _env(monkeypatch)
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "entry": [{"name": "/var/log", "content": {"index": "main"}}],
+                "paging": {"total": 1},
+            },
+        )
+
+    _patch_client(monkeypatch, handler)
+    result = CliRunner().invoke(cli, ["monitor-input", "list", "--output", "json"])
+    assert result.exit_code == 0
+    assert "/var/log" in result.output

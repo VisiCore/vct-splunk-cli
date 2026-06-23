@@ -50,6 +50,10 @@ splunk health check                             # native health; exits non-zero 
 splunk index create payments --max-gb 50 --frozen-secs 7776000   # gated write
 ```
 
+Many admin resources — `user`, `role`, `monitor-input`, `hec-token`, `macro`,
+`eventtype`, `kvstore-collection`, `app`, and more — are generated CRUD groups. Run
+`splunk --help` to list them and `splunk <group> --help` for each.
+
 Output is **TTY-adaptive**: a human-readable table on a terminal, JSON when piped or with
 `--output json`. stdout is pure data; diagnostics and prompts go to stderr, so this is safe:
 

@@ -6,12 +6,25 @@ command group per spec via :func:`vct_splunk.commands.factory.build_group`.
 Resources that do not fit the CRUD shape stay hand-written and are not listed here.
 
 Field ``key`` values are the official Splunk REST form-field names, so the surface
-stays familiar to a Splunk admin.
+stays familiar to a Splunk admin. Any field not given a typed option is still
+reachable through the generic ``--set KEY=VALUE`` escape hatch.
 """
 
 from __future__ import annotations
 
 from ..core.resource import Field, Spec
+
+# Verb set for inputs/outputs that also support enable/disable control endpoints.
+# (Plain CRUD is the Spec default, so it does not need a named constant.)
+_CRUD_TOGGLE = ("list", "get", "create", "update", "delete", "enable", "disable")
+
+# Fields shared by most data inputs.
+_INDEX_SOURCETYPE = (
+    Field("index", key="index", help="Target index."),
+    Field("sourcetype", key="sourcetype", help="Source type."),
+)
+
+# --- Access (#4) -------------------------------------------------------------
 
 USER = Spec(
     name="user",
@@ -82,4 +95,185 @@ CAPABILITY = Spec(
     verbs=("list",),
 )
 
-REGISTRY: list[Spec] = [USER, ROLE, CAPABILITY]
+# --- Inputs / outputs (#6) ---------------------------------------------------
+# Global, under /services/data/inputs|outputs. The HEC token's value is returned
+# in the create response (the caller needs it); token rotation stays hand-written.
+
+MONITOR_INPUT = Spec(
+    name="monitor-input",
+    path="/services/data/inputs/monitor",
+    help="File and directory monitor inputs.",
+    verbs=_CRUD_TOGGLE,
+    fields=(
+        *_INDEX_SOURCETYPE,
+        Field("host", key="host", help="Host value for events."),
+        Field("recursive", key="recursive", type="bool", help="Recurse into subdirectories."),
+        Field("whitelist", key="whitelist", help="Allowlist regex."),
+        Field("blacklist", key="blacklist", help="Denylist regex."),
+    ),
+)
+
+TCP_INPUT = Spec(
+    name="tcp-input",
+    path="/services/data/inputs/tcp/raw",
+    help="Raw TCP inputs.",
+    verbs=_CRUD_TOGGLE,
+    fields=(
+        *_INDEX_SOURCETYPE,
+        Field("connection_host", key="connection_host", help="Host from: ip|dns|none."),
+    ),
+)
+
+UDP_INPUT = Spec(
+    name="udp-input",
+    path="/services/data/inputs/udp",
+    help="UDP inputs.",
+    verbs=_CRUD_TOGGLE,
+    fields=(
+        *_INDEX_SOURCETYPE,
+        Field("connection_host", key="connection_host", help="Host from: ip|dns|none."),
+    ),
+)
+
+SCRIPT_INPUT = Spec(
+    name="script-input",
+    path="/services/data/inputs/script",
+    help="Scripted inputs.",
+    verbs=_CRUD_TOGGLE,
+    fields=(
+        *_INDEX_SOURCETYPE,
+        Field("interval", key="interval", help="Run interval (seconds or cron)."),
+    ),
+)
+
+HEC_TOKEN = Spec(
+    name="hec-token",
+    path="/services/data/inputs/http",
+    help="HTTP Event Collector tokens.",
+    verbs=_CRUD_TOGGLE,
+    fields=(
+        *_INDEX_SOURCETYPE,
+        Field("allowed_index", key="indexes", multi=True, help="Allowed index (repeatable)."),
+        Field("source", key="source", help="Default source."),
+    ),
+)
+
+OUTPUT_SERVER = Spec(
+    name="output-server",
+    path="/services/data/outputs/tcp/server",
+    help="Forwarder output servers (forwarding destinations).",
+    verbs=_CRUD_TOGGLE,
+    fields=(Field("method", key="method", help="Routing: clone|balance|autobalance."),),
+)
+
+OUTPUT_GROUP = Spec(
+    name="output-group",
+    path="/services/data/outputs/tcp/group",
+    help="Forwarder output groups.",
+    verbs=_CRUD_TOGGLE,
+    fields=(
+        Field("server", key="servers", multi=True, help="Member server host:port (repeatable)."),
+        Field("method", key="method", help="Routing: clone|balance|autobalance."),
+    ),
+)
+
+# --- Knowledge objects (#8) --------------------------------------------------
+# Namespaced. Tags, data models, and lookup-file upload stay hand-written.
+
+MACRO = Spec(
+    name="macro",
+    path="configs/conf-macros",
+    help="Search macros.",
+    namespaced=True,
+    fields=(
+        Field("definition", key="definition", help="The macro expansion."),
+        Field("args", key="args", help="Comma-separated argument names."),
+        Field("iseval", key="iseval", type="bool", help="Definition is an eval expression."),
+    ),
+)
+
+EVENTTYPE = Spec(
+    name="eventtype",
+    path="saved/eventtypes",
+    help="Event types.",
+    namespaced=True,
+    fields=(
+        Field("search", key="search", help="The search that defines the event type."),
+        Field("description", key="description", help="Description."),
+        Field("priority", key="priority", type="int", help="Priority (1-10)."),
+    ),
+)
+
+EXTRACTION = Spec(
+    name="extraction",
+    path="data/transforms/extractions",
+    help="Field extractions (transforms).",
+    namespaced=True,
+    fields=(
+        Field("regex", key="REGEX", help="Extraction regular expression."),
+        Field("format", key="FORMAT", help="Output format."),
+    ),
+)
+
+LOOKUP_DEFINITION = Spec(
+    name="lookup-definition",
+    path="data/transforms/lookups",
+    help="Lookup definitions (transforms).",
+    namespaced=True,
+    fields=(Field("filename", key="filename", help="Lookup table file name."),),
+)
+
+# --- KV Store (#9) -----------------------------------------------------------
+# Only the collection schema is CRUD-shaped. Schema fields are dynamic
+# (field.<name>=<type>), so they go through --set. Data records are a document
+# store and stay hand-written.
+
+KVSTORE_COLLECTION = Spec(
+    name="kvstore-collection",
+    path="storage/collections/config",
+    help="KV Store collection schemas (use --set field.<name>=<type> for fields).",
+    namespaced=True,
+)
+
+# --- Platform (#10) ----------------------------------------------------------
+# Cluster control, restart, and peers are action/read endpoints and stay
+# hand-written.
+
+MESSAGE = Spec(
+    name="message",
+    path="/services/messages",
+    help="System bulletin messages.",
+    verbs=("list", "get", "create", "delete"),
+    fields=(Field("value", key="value", help="Message text."),),
+)
+
+# --- Apps (#5) ---------------------------------------------------------------
+# Lifecycle only. Install-from-file/URL is a multipart upload and stays
+# hand-written.
+
+APP = Spec(
+    name="app",
+    path="/services/apps/local",
+    help="Installed apps (install from file/URL is separate).",
+    verbs=("list", "get", "delete", "enable", "disable"),
+)
+
+REGISTRY: list[Spec] = [
+    USER,
+    ROLE,
+    CAPABILITY,
+    MONITOR_INPUT,
+    TCP_INPUT,
+    UDP_INPUT,
+    SCRIPT_INPUT,
+    HEC_TOKEN,
+    OUTPUT_SERVER,
+    OUTPUT_GROUP,
+    MACRO,
+    EVENTTYPE,
+    EXTRACTION,
+    LOOKUP_DEFINITION,
+    KVSTORE_COLLECTION,
+    MESSAGE,
+    APP,
+]
