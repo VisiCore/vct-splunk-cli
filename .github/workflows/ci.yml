@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -11,6 +12,7 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -39,3 +41,61 @@ jobs:
 
       - name: Test
         run: .venv/bin/pytest
+
+  # Real create -> verify -> cleanup against a Dockerized Splunk Enterprise 10.x.
+  # COST CONTROL: this is expensive (boots a Splunk container, several minutes), so
+  # it runs ONLY on manual dispatch -- never on push or pull_request -- and is
+  # hard-capped by timeout-minutes. It is informational; the `check` job is the gate.
+  # Run it on demand from the Actions tab ("Run workflow") when you want a live check.
+  integration:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # We only support Splunk 10.x; `latest` tracks the current 10.x release.
+        # Splunk 10 requires accepting the general terms (SPLUNK_GENERAL_TERMS below).
+        splunk-version: ["latest"]
+    env:
+      # A throwaway admin password for the ephemeral container. Override with the
+      # SPLUNK_TEST_PASSWORD secret if org policy requires it.
+      SPLUNK_PASSWORD: ${{ secrets.SPLUNK_TEST_PASSWORD || 'Ch4ng3d-CI-Pass!' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install project
+        run: |
+          uv venv
+          uv pip install -e ".[dev]"
+
+      - name: Start Splunk
+        run: |
+          docker run -d --name splunk -p 8089:8089 \
+            -e SPLUNK_GENERAL_TERMS=--accept-sgt-current-at-splunk-com \
+            -e SPLUNK_START_ARGS=--accept-license \
+            -e SPLUNK_PASSWORD="$SPLUNK_PASSWORD" \
+            splunk/splunk:${{ matrix.splunk-version }}
+
+      - name: Wait for splunkd
+        run: bash .github/scripts/wait-for-splunk.sh
+
+      # No auth script: the CLI exchanges SPLUNK_USERNAME/SPLUNK_PASSWORD for a
+      # session key itself (via /services/auth/login) when no token is set.
+      - name: Integration tests
+        env:
+          SPLUNK_INTEGRATION_TEST: "true"
+          SPLUNK_URL: https://localhost:8089
+          SPLUNK_USERNAME: admin
+          SPLUNK_PASSWORD: ${{ env.SPLUNK_PASSWORD }}
+          SPLUNK_VERIFY: "false"
+        run: .venv/bin/pytest -m integration -v
+
+      - name: Splunk logs on failure
+        if: failure()
+        run: docker logs splunk
