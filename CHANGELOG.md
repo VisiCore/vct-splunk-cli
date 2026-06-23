@@ -38,6 +38,16 @@ This is the 0.2.0 development line (version bumped from 0.0.1).
 - A Nix flake dev shell (`nix develop` / direnv) per the workspace convention (#15).
 - Deeper health checks (resource usage, disk space, internal-error rate) shipped as
   versioned check data (#11).
+- Session-key auth: a credential in `SPLUNK_SESSION_KEY` is sent as
+  `Authorization: Splunk <key>` (alongside the existing `SPLUNK_TOKEN` ->
+  `Authorization: Bearer <token>`), plus `auth login` (exchange a
+  username/password for a session key) and `auth status` (report the resolved
+  target and active scheme without revealing the secret) (#13).
+- Config-file profiles: a `--profile` option (and `$SPLUNK_PROFILE`) selects a
+  named section in an INI file (`$VCT_SPLUNK_CONFIG`, else
+  `$XDG_CONFIG_HOME/vct-splunk/config`) supplying `url` / `token` /
+  `session_key` / `app` / `owner`. Precedence is flag > env > profile > default,
+  so a profile only fills gaps and never overrides an explicit flag or env (#13).
 
 ### Changed
 
