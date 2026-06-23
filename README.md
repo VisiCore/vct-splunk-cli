@@ -40,6 +40,12 @@ splunk api get /services/data/indexes           # GET-only raw escape hatch (any
 splunk index list                               # list indexes
 splunk index get main                           # one index
 splunk search run --query 'index=_internal | stats count by sourcetype' --earliest -1h
+splunk search run --query 'index=main' --export --max-rows 5000    # bounded stream from the export endpoint
+splunk search list                              # running / finished search jobs
+splunk search get <sid>                         # one job by SID
+splunk search cancel <sid>                      # cancel a job (gated write)
+splunk saved-search list --app my_app           # saved searches in an app
+splunk saved-search create nightly --search 'index=main | stats count' --app my_app --cron '0 2 * * *'
 splunk health check                             # native health; exits non-zero if warn/fail
 splunk index create payments --max-gb 50 --frozen-secs 7776000   # gated write
 ```
@@ -51,9 +57,25 @@ Output is **TTY-adaptive**: a human-readable table on a terminal, JSON when pipe
 splunk index list --output json | jq '.data[] | select(.disabled) | .name'
 ```
 
+### Namespaces (owner + app)
+
+Most search and knowledge objects live in a namespace — an **owner** plus an
+**app** (`/servicesNS/<owner>/<app>/...`). Two universal options set it:
+
+```bash
+splunk saved-search list --app my_app --owner nobody    # narrow a read
+splunk saved-search create nightly --search '...' --app my_app   # writes require an app
+export SPLUNK_APP=my_app SPLUNK_OWNER=nobody             # or set defaults once
+```
+
+Reads default to the `-` wildcard (every owner and app). **Writes require an
+explicit app** and never fall back to the default `search` app, so an object is
+never created somewhere you did not intend.
+
 ### Writes are gated
 
-`index create` is the only write in this MVP. It is safe by default:
+Writes (`index create`, `saved-search create`/`update`/`delete`, `search cancel`)
+are safe by default:
 
 ```bash
 splunk index create payments --dry-run         # preview the request; sends nothing

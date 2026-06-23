@@ -8,6 +8,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 This is the 0.2.0 development line (version bumped from 0.0.1).
 
+### Added
+
+- Namespace support: universal `--app` / `--owner` options (and `SPLUNK_APP` /
+  `SPLUNK_OWNER`) for namespaced resources. Reads default to the `-` wildcard;
+  writes require an explicit app and never default to `search`.
+- `search list` / `get` / `cancel` for the search-job lifecycle, plus a bounded
+  `search run --export` that streams from the export endpoint (#3).
+- `saved-search list` / `get` / `create` / `update` / `delete` / `run` (#3).
+
 ### Fixed
 
 - `server info` now exits with a clear error (exit 2) when `SPLUNK_URL` points at a
