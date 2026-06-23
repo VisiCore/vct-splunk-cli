@@ -27,18 +27,31 @@ class ClientConfig:
     verify: bool | str = True  # True/False, or a path to a CA bundle
     timeout: float = 30.0
     dry_run: bool = False
+    # Splunk accepts a JWT as "Bearer <token>" or a session key as "Splunk <sessionKey>".
+    auth_scheme: str = "Bearer"
 
 
 def config_from_env(base_url: str | None = None) -> ClientConfig:
     url = base_url or os.environ.get("SPLUNK_URL")
     if not url:
         raise UsageError("No Splunk URL. Set SPLUNK_URL or pass --base-url.")
+    # A JWT (SPLUNK_TOKEN) is the primary path and takes precedence; a session key
+    # (SPLUNK_SESSION_KEY, from /services/auth/login) is the simpler alternative.
     token = os.environ.get("SPLUNK_TOKEN")
-    if not token:
-        raise UsageError("No auth token. Set SPLUNK_TOKEN.")
+    if token:
+        scheme, credential = "Bearer", token
+    elif session_key := os.environ.get("SPLUNK_SESSION_KEY"):
+        scheme, credential = "Splunk", session_key
+    else:
+        raise UsageError(
+            "No auth. Set SPLUNK_TOKEN (a JWT) or SPLUNK_SESSION_KEY "
+            "(a session key from /services/auth/login)."
+        )
     ca = os.environ.get("SPLUNK_CA_BUNDLE")
     verify_env = os.environ.get("SPLUNK_VERIFY", "true").strip().lower() not in {"0", "false", "no"}
-    return ClientConfig(base_url=url.rstrip("/"), token=token, verify=ca or verify_env)
+    return ClientConfig(
+        base_url=url.rstrip("/"), token=credential, verify=ca or verify_env, auth_scheme=scheme
+    )
 
 
 class SplunkClient:
@@ -48,7 +61,7 @@ class SplunkClient:
         self.config = config
         self._http = httpx.Client(
             base_url=config.base_url,
-            headers={"Authorization": f"Bearer {config.token}"},
+            headers={"Authorization": f"{config.auth_scheme} {config.token}"},
             verify=config.verify,
             timeout=config.timeout,
             transport=transport,
