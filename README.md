@@ -22,7 +22,8 @@ Authenticate with environment variables (the token is never passed as a flag):
 
 ```bash
 export SPLUNK_URL="https://your-search-head:8089"
-export SPLUNK_TOKEN="<a Splunk authentication token>"
+export SPLUNK_TOKEN="<a Splunk authentication token>"   # a JWT; the primary path
+# optional: a Splunk session key is accepted instead, as SPLUNK_SESSION_KEY
 # optional:
 export SPLUNK_CA_BUNDLE="/path/to/ca.pem"   # custom CA for on-prem
 export SPLUNK_VERIFY="true"                  # TLS verification (default true)
