@@ -99,8 +99,10 @@ def test_user_lifecycle(monkeypatch):
     runner = CliRunner()
     name = f"vct_u_{uuid.uuid4().hex[:8]}"
     monkeypatch.setenv("SPLUNK_USER_PASSWORD", "Ci-Test-Pass-123!")
+    # The `user` spec carries only the password secret field; the required Splunk
+    # `roles` form param goes through the generic --set escape hatch.
     created = runner.invoke(
-        cli, ["user", "create", name, "--role", "user", "-y", "--output", "json"]
+        cli, ["user", "create", name, "--set", "roles=user", "-y", "--output", "json"]
     )
     assert created.exit_code == 0
     try:
