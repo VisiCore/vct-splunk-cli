@@ -8,6 +8,7 @@ from ..core import indexes as core
 from ..core.errors import UsageError
 from . import output as out
 from .context import AliasedGroup, command
+from .dispatch import dispatch_list
 from .write import do_write
 
 
@@ -20,9 +21,8 @@ def index() -> None:
 @index.command("list")
 @command
 def list_(ctx) -> None:
-    """List indexes."""
-    with ctx.client() as c:
-        out.emit(core.list_indexes(c), ctx.output_mode, ctx.meta())
+    """List indexes (Enterprise REST, or Cloud ACS when SPLUNK_URL is a Cloud stack)."""
+    out.emit(dispatch_list(ctx, "index", core.list_indexes), ctx.output_mode, ctx.meta())
 
 
 @index.command("get")

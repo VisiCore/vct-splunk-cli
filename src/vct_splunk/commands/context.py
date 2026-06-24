@@ -22,13 +22,17 @@ import functools
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import click
 
+from ..core.backends import deduce_backend
 from ..core.client import SplunkClient, config_from_env
 from ..core.errors import SplunkError
 from . import output as out
+
+if TYPE_CHECKING:
+    from ..core.acs.client import AcsClient
 
 
 class AliasedGroup(click.Group):
@@ -65,6 +69,9 @@ class Ctx:
             Used by namespaced resources (e.g. saved searches); ignored by
             system-level ones (e.g. indexes).
         owner: The owner namespace from ``--owner`` / ``$SPLUNK_OWNER``, or None.
+        backend: The backend deduced from the target URL (``"enterprise"`` or
+            ``"cloud"``) -- never user-set. Commands that both backends serve use
+            it to route to splunkd REST or ACS; writes use it to stop on Cloud.
     """
 
     output_mode: str
@@ -73,6 +80,7 @@ class Ctx:
     base_url: str | None
     app: str | None = None
     owner: str | None = None
+    backend: str = "enterprise"
 
     def client(self) -> SplunkClient:
         """Build a :class:`SplunkClient` from the environment plus this context.
@@ -91,6 +99,19 @@ class Ctx:
         cfg = config_from_env(self.base_url)
         cfg.dry_run = self.dry_run
         return SplunkClient(cfg)
+
+    def acs_client(self) -> AcsClient:
+        """Build an :class:`AcsClient` for the deduced Cloud stack.
+
+        Separate config from the REST :meth:`client`: the stack is derived from
+        the cloud host (``$SPLUNK_URL`` or ``--base-url``), and the ACS Bearer
+        token is read from ``$SPLUNK_ACS_TOKEN``. Use as a context manager.
+        """
+        from ..core.acs.client import AcsClient, acs_config_from_env
+        from ..core.backends import cloud_stack_from_url
+
+        stack = cloud_stack_from_url(self.base_url or os.environ.get("SPLUNK_URL"))
+        return AcsClient(acs_config_from_env(stack))
 
     def meta(self) -> dict[str, str | None]:
         """Return the metadata block that is attached to every JSON response.
@@ -132,6 +153,9 @@ def command(fn: Callable) -> Callable:
             # namespace policy (core.namespace.resolve_ns) supplies a safe default.
             app=app or os.environ.get("SPLUNK_APP"),
             owner=owner or os.environ.get("SPLUNK_OWNER"),
+            # Deduced from the target URL, never user-chosen. Drives backend
+            # routing (REST vs ACS) and the Cloud write guard.
+            backend=deduce_backend(base_url or os.environ.get("SPLUNK_URL")),
         )
         try:
             return fn(ctx, **kwargs)

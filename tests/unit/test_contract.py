@@ -41,6 +41,8 @@ def test_exit_codes_match_documented_contract():
     assert errors.UsageError("x").exit_code == 2
     assert errors.AuthError("x").exit_code == 3
     assert errors.NotFoundError("x").exit_code == 4
+    # An operation absent on the deduced backend is a "not found" for this target.
+    assert errors.UnsupportedBackendError("index", "create", "cloud").exit_code == 4
 
 
 def test_success_output_is_data_meta_envelope(monkeypatch):

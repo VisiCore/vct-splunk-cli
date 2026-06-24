@@ -31,6 +31,25 @@ class NotFoundError(SplunkError):
     code = "not_found"
 
 
+class UnsupportedBackendError(SplunkError):
+    """The requested operation does not exist on the deduced backend.
+
+    Exit code 4 (the "not found" family): from the user's view the endpoint simply
+    isn't there for this target (Cloud vs Enterprise), so the CLI stops cleanly
+    rather than falling through to an unofficial endpoint.
+    """
+
+    exit_code = 4
+    code = "unsupported_backend"
+
+    def __init__(self, resource: str, verb: str, backend: str) -> None:
+        nice = {"enterprise": "Splunk Enterprise", "cloud": "Splunk Cloud"}.get(backend, backend)
+        super().__init__(f"`{resource} {verb}` is not available on {nice}.")
+        self.resource = resource
+        self.verb = verb
+        self.backend = backend
+
+
 class APIError(SplunkError):
     exit_code = 1
     code = "api_error"
