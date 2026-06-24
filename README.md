@@ -18,7 +18,8 @@ uv pip install -e ".[dev]"      # editable install with test deps
 splunk --help
 ```
 
-Requires Python 3.10+.
+Requires Python 3.10+. A Nix dev shell is also provided: `nix develop` (or `direnv
+allow`) gives you a shell with Python, `uv`, and `ruff` ready.
 
 ## Usage
 
