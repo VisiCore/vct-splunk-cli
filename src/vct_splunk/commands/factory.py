@@ -21,6 +21,7 @@ from ..core.namespace import resolve_ns
 from ..core.resource import CrudResource, Field, Spec
 from . import output as out
 from .context import AliasedGroup, command
+from .dispatch import dispatch_list, has_cloud_list
 from .write import do_write
 
 _VERB_ALIASES = {"add": "create", "edit": "update", "remove": "delete"}
@@ -40,6 +41,16 @@ def build_group(spec: Spec) -> click.Group:
         @grp.command("list")
         @command
         def _list(ctx) -> None:
+            # Resources both backends serve (index/role/hec-token) route by the
+            # deduced backend: ACS on Cloud, REST otherwise. These specs are not
+            # namespaced, so there is no owner/app to resolve for the Cloud path.
+            if has_cloud_list(spec.name):
+                out.emit(
+                    dispatch_list(ctx, spec.name, lambda c: res.list(c, owner=None, app=None)),
+                    ctx.output_mode,
+                    ctx.meta(),
+                )
+                return
             owner, app = _ns(ctx, spec, for_write=False)
             with ctx.client() as c:
                 out.emit(res.list(c, owner=owner, app=app), ctx.output_mode, ctx.meta())

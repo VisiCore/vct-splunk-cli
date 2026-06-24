@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "comment": "The dev gate runs from .venv/bin (CI parity) or via pre-commit, NEVER `uv run` (which is deliberately gated globally because it executes arbitrary code). These allow-rules cover the safe, fixed gate commands so agents stop prompting; arbitrary `uv run <script>` stays gated upstream. See AGENTS.md > Checks before a PR.",
+    "allow": [
+      "Bash(.venv/bin/ruff:*)",
+      "Bash(.venv/bin/ruff-format:*)",
+      "Bash(.venv/bin/pyright:*)",
+      "Bash(.venv/bin/pytest:*)",
+      "Bash(.venv/bin/pre-commit:*)",
+      "Bash(pre-commit run:*)",
+      "Bash(pre-commit install:*)"
+    ]
+  }
+}
