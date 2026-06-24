@@ -118,9 +118,17 @@ text is treated as data only and never drives a write.
 
 ## Scope
 
-This MVP targets **Splunk Enterprise on-prem** only, using your own credentials against the
-documented REST API. It does not use, bundle, or proxy any Splunk-distributed app. Splunk Cloud
-(ACS) and an MCP wrapper are planned follow-ups.
+The primary, certified target is **Splunk Enterprise on-prem**, using your own credentials
+against the documented REST API. It does not use, bundle, or proxy any Splunk-distributed app.
+
+**Splunk Cloud is supported transparently.** When `SPLUNK_URL` is a
+`*.splunkcloud.com` host, the CLI deduces the Cloud backend and the *same flat
+commands* read via the Cloud ACS API instead of splunkd — you never pick a
+backend. ACS reads need a `SPLUNK_ACS_TOKEN` (the stack is derived from the URL).
+Cloud coverage is **read-only** and not yet certified against a live stack, so an
+operation it can't serve stops with a clean `unsupported_backend` error (exit 4)
+rather than guessing. `splunk inspect` reports the deduced backend and what it
+supports for anyone who wants to know. An MCP wrapper is a planned follow-up.
 
 ## Testing
 

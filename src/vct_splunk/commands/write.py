@@ -19,6 +19,7 @@ from typing import Any
 
 from ..core import audit
 from ..core.client import SplunkClient, config_from_env
+from ..core.errors import UnsupportedBackendError
 from . import output as out
 
 
@@ -47,6 +48,12 @@ def do_write(
     Returns:
         The operation result, ready for :func:`output.emit`.
     """
+    # Writes are Enterprise-only this release. On a deduced Cloud backend, stop
+    # cleanly before resolving credentials or prompting -- ACS-backed writes are a
+    # later release. audit_event["action"] is "<resource>.<verb>" (e.g. index.create).
+    if getattr(ctx, "backend", "enterprise") == "cloud":
+        resource, _, verb = str(audit_event.get("action", "")).partition(".")
+        raise UnsupportedBackendError(resource or "this resource", verb or "write", "cloud")
     target = target or config_from_env(ctx.base_url).base_url
     out.confirm_write(ctx, action, target)
     with ctx.client() as c:
