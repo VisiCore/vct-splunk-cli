@@ -3,7 +3,12 @@
 A small, scriptable CLI to read, search, health-check, and safely administer
 **Splunk Enterprise** over its documented REST API — built for AI CLI agents and humans alike.
 
-[![License](https://img.shields.io/badge/license-see%20LICENSE-blue.svg)](./LICENSE)
+[![CI](https://github.com/VisiCore/vct-splunk-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/VisiCore/vct-splunk-cli/actions/workflows/ci.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
+[![Python](https://img.shields.io/badge/python-3.10%E2%80%933.14-blue.svg)](https://www.python.org/)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![Checked with pyright](https://microsoft.github.io/pyright/img/pyright_badge.svg)](https://microsoft.github.io/pyright/)
+[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 
 ## Installation
 
