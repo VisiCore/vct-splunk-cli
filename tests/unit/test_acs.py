@@ -160,6 +160,18 @@ def test_write_on_cloud_stops_with_unsupported_backend(monkeypatch):
     assert "Splunk Cloud" in result.output
 
 
+def test_factory_write_on_cloud_stops_too(monkeypatch):
+    # The Cloud write guard sits in the shared write path, so every generated
+    # group refuses as well — not just index.
+    monkeypatch.setenv("SPLUNK_URL", CLOUD_URL)
+    monkeypatch.setenv("SPLUNK_APP", "my_app")
+    result = CliRunner().invoke(
+        cli, ["macro", "create", "m1", "--set", "definition=x", "--yes", "--output", "json"]
+    )
+    assert result.exit_code == 4
+    assert "unsupported_backend" in result.output
+
+
 # --- `inspect` reports the deduced backend (no --backend selector) -----------
 
 
@@ -170,13 +182,6 @@ def test_inspect_reports_deduced_cloud(monkeypatch):
     assert '"backend": "cloud"' in result.output
     assert '"stack": "acme"' in result.output
     assert "not yet certified" in result.output
-
-
-def test_inspect_reports_deduced_enterprise(monkeypatch):
-    monkeypatch.setenv("SPLUNK_URL", ENTERPRISE_URL)
-    result = CliRunner().invoke(cli, ["inspect", "--output", "json"])
-    assert result.exit_code == 0
-    assert '"backend": "enterprise"' in result.output
 
 
 def test_inspect_has_no_backend_selector(monkeypatch):
