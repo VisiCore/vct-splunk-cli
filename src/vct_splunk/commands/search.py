@@ -55,10 +55,8 @@ def cancel(ctx, sid) -> None:
 @click.option("--latest", default="now", show_default=True, help="Latest time.")
 @click.option(
     "--max-rows",
-    # IntRange(min=1) rejects 0 and negative values during argument parsing. This
-    # guard matters because the value is forwarded to Splunk's ``count``
-    # parameter, where ``count=0`` means "return *every* matching event" — the
-    # opposite of the safe, bounded search this command promises.
+    # Must stay >= 1: the value feeds Splunk's ``count``, where 0 means
+    # "return *every* matching event" — the opposite of a bounded search.
     type=click.IntRange(min=1),
     default=100,
     show_default=True,

@@ -29,9 +29,11 @@ This is the 0.2.0 development line (version bumped from 0.0.1).
   schemas, system messages, and app lifecycle (#5, #6, #8, #9, #10).
 - An explicit additive-only output-contract statement plus a contract test pinning
   the JSON envelopes, the documented exit codes, and prompt-injection safety (#16).
-- A minimal, read-only Splunk Cloud (ACS) slice: `cloud indexes` / `hec-tokens` /
-  `roles`, plus `inspect` reporting each backend's supported operations. Cloud
-  coverage is not yet certified (no live canary); confidence is capped (#27).
+- A minimal, read-only Splunk Cloud (ACS) slice. The backend is deduced from
+  `SPLUNK_URL` (no flag): on a `*.splunkcloud.com` URL, `index list`,
+  `role list`, and `hec-token list` route through ACS and writes are refused;
+  `splunk inspect` reports the deduced backend's supported operations offline.
+  Cloud coverage is not yet certified (no live canary); confidence is capped (#27).
 - A Dockerized `splunk/splunk` CI integration job (current plus an older release)
   running real create -> verify -> cleanup, with integration coverage for the
   namespaced saved-search and factory user lifecycles (#14).
