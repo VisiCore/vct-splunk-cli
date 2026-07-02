@@ -98,7 +98,7 @@ def test_search_run_executes(monkeypatch):
     assert '"count": 1' in result.output
 
 
-def test_health_check_exits_nonzero_on_fail(monkeypatch):
+def test_health_check_exits_5_on_fail(monkeypatch):
     _env(monkeypatch)
 
     def handler(req: httpx.Request) -> httpx.Response:
@@ -110,7 +110,9 @@ def test_health_check_exits_nonzero_on_fail(monkeypatch):
 
     _patch_client(monkeypatch, handler)
     result = CliRunner().invoke(cli, ["health", "check", "--output", "json"])
-    assert result.exit_code == 1
+    # Exit 5 is the dedicated "health findings" code, distinct from exit 1
+    # (API/transport error).
+    assert result.exit_code == 5
     assert '"finding": "fail"' in result.output
 
 

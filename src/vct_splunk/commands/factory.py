@@ -27,6 +27,23 @@ from .write import do_write
 _VERB_ALIASES = {"add": "create", "edit": "update", "remove": "delete"}
 
 
+def _help_for(spec: Spec, verb: str) -> str:
+    """One-line help for a generated command, in the hand-written commands' style."""
+    noun = spec.name.replace("-", " ")
+    gated = " Gated write (--dry-run previews; --yes when non-interactive)."
+    ns = " Requires an app (--app or $SPLUNK_APP)." if spec.namespaced else ""
+    texts = {
+        "list": f"List every {noun}.",
+        "get": f"Show one {noun}.",
+        "create": f"Create a {noun}.{gated}{ns}",
+        "update": f"Update a {noun} (only the fields you pass).{gated}{ns}",
+        "delete": f"Delete a {noun}.{gated}{ns}",
+        "enable": f"Enable a {noun}.{gated}",
+        "disable": f"Disable a {noun}.{gated}",
+    }
+    return texts[verb]
+
+
 def build_group(spec: Spec) -> click.Group:
     """Return the Click group for *spec*, exposing only the verbs it declares."""
     res = CrudResource(spec)
@@ -38,7 +55,7 @@ def build_group(spec: Spec) -> click.Group:
 
     if "list" in spec.verbs:
 
-        @grp.command("list")
+        @grp.command("list", help=_help_for(spec, "list"))
         @command
         def _list(ctx) -> None:
             # Resources both backends serve (index/role/hec-token) route by the
@@ -57,7 +74,7 @@ def build_group(spec: Spec) -> click.Group:
 
     if "get" in spec.verbs:
 
-        @grp.command("get")
+        @grp.command("get", help=_help_for(spec, "get"))
         @click.argument("name")
         @command
         def _get(ctx, name) -> None:
@@ -67,7 +84,7 @@ def build_group(spec: Spec) -> click.Group:
 
     if "create" in spec.verbs:
 
-        @grp.command("create")
+        @grp.command("create", help=_help_for(spec, "create"))
         @click.argument("name")
         @_field_options(spec)
         @command
@@ -84,7 +101,7 @@ def build_group(spec: Spec) -> click.Group:
 
     if "update" in spec.verbs:
 
-        @grp.command("update")
+        @grp.command("update", help=_help_for(spec, "update"))
         @click.argument("name")
         @_field_options(spec)
         @command
@@ -103,7 +120,7 @@ def build_group(spec: Spec) -> click.Group:
 
     if "delete" in spec.verbs:
 
-        @grp.command("delete")
+        @grp.command("delete", help=_help_for(spec, "delete"))
         @click.argument("name")
         @command
         def _delete(ctx, name) -> None:
@@ -126,7 +143,7 @@ def build_group(spec: Spec) -> click.Group:
 def _add_control(grp: click.Group, spec: Spec, res: CrudResource, verb: str) -> None:
     """Register an enable/disable control command (kept in a helper to bind *verb*)."""
 
-    @grp.command(verb)
+    @grp.command(verb, help=_help_for(spec, verb))
     @click.argument("name")
     @command
     def _control(ctx, name) -> None:

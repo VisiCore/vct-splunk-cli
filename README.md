@@ -65,7 +65,7 @@ splunk search get <sid>                         # one job by SID
 splunk search cancel <sid>                      # cancel a job (gated write)
 splunk saved-search list --app my_app           # saved searches in an app
 splunk saved-search create nightly --search 'index=main | stats count' --app my_app --cron '0 2 * * *'
-splunk health check                             # native health; exits non-zero if warn/fail
+splunk health check                             # native health; exits 5 if warn/fail
 splunk index create payments --max-gb 50 --frozen-secs 7776000   # gated write
 ```
 
@@ -120,7 +120,7 @@ set, else `$XDG_STATE_HOME/vct-splunk/audit.log`, else
 | 2 | usage or config error (e.g. write refused without `--yes`) |
 | 3 | authentication error (401/403) |
 | 4 | not found (404) |
-| non-zero | `health check` when any finding is `warn`/`fail` |
+| 5 | `health check` succeeded but some finding is `warn`/`fail` |
 
 ### Contract stability
 

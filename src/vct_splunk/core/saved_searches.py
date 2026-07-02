@@ -81,6 +81,26 @@ def delete_saved_search(client: SplunkClient, name: str, *, owner: str, app: str
     return client.write("DELETE", ns_path(f"{_SUFFIX}/{name}", owner=owner, app=app), {})
 
 
+def build_dispatch_payload(
+    *,
+    trigger_actions: bool = False,
+    earliest: str | None = None,
+    latest: str | None = None,
+) -> dict[str, Any]:
+    """Build the form body for dispatching a saved search.
+
+    Split out of :func:`dispatch_saved_search` so both the real request and the
+    ``--dry-run`` preview are built from the same code — the preview can never
+    drift from what actually gets sent.
+    """
+    data: dict[str, Any] = {"trigger_actions": int(bool(trigger_actions))}
+    if earliest is not None:
+        data["dispatch.earliest_time"] = earliest
+    if latest is not None:
+        data["dispatch.latest_time"] = latest
+    return data
+
+
 def dispatch_saved_search(
     client: SplunkClient,
     name: str,
@@ -97,11 +117,7 @@ def dispatch_saved_search(
     change, so it uses the non-gated POST. The returned SID can be polled with
     ``search get``.
     """
-    data: dict[str, Any] = {"trigger_actions": int(bool(trigger_actions))}
-    if earliest is not None:
-        data["dispatch.earliest_time"] = earliest
-    if latest is not None:
-        data["dispatch.latest_time"] = latest
+    data = build_dispatch_payload(trigger_actions=trigger_actions, earliest=earliest, latest=latest)
     body = client.post(ns_path(f"{_SUFFIX}/{name}/dispatch", owner=owner, app=app), data)
     sid = body.get("sid") if isinstance(body, dict) else None
     if not sid and isinstance(body, dict):

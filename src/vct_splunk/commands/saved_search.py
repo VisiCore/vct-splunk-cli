@@ -43,9 +43,11 @@ def get(ctx, name) -> None:
 @saved_search.command("create")
 @click.argument("name")
 @click.option("--search", "search_", required=True, help="SPL for the saved search.")
-@click.option("--description", default=None, help="Description.")
+@click.option("--description", default=None, help="Description of the saved search.")
 @click.option("--cron", default=None, help="Cron schedule, e.g. '0 6 * * *'.")
-@click.option("--scheduled/--no-scheduled", "is_scheduled", default=None, help="Enable scheduling.")
+@click.option(
+    "--scheduled/--no-scheduled", "is_scheduled", default=None, help="Enable or disable scheduling."
+)
 @command
 def create(ctx, name, search_, description, cron, is_scheduled) -> None:
     """Create a saved search. Gated write; requires an app (never 'search' by default)."""
@@ -70,11 +72,11 @@ def create(ctx, name, search_, description, cron, is_scheduled) -> None:
 
 @saved_search.command("update")
 @click.argument("name")
-@click.option("--search", "search_", default=None, help="New SPL.")
+@click.option("--search", "search_", default=None, help="New SPL for the saved search.")
 @click.option("--description", default=None, help="New description.")
 @click.option("--cron", default=None, help="New cron schedule.")
 @click.option(
-    "--scheduled/--no-scheduled", "is_scheduled", default=None, help="Enable/disable scheduling."
+    "--scheduled/--no-scheduled", "is_scheduled", default=None, help="Enable or disable scheduling."
 )
 @command
 def update(ctx, name, search_, description, cron, is_scheduled) -> None:
@@ -127,12 +129,16 @@ def run(ctx, name, trigger_actions, earliest, latest) -> None:
     """
     owner, app = resolve_ns(ctx.owner, ctx.app, for_write=False)
     if ctx.dry_run:
+        # Built by the same core function as the real request, so the preview
+        # can never disagree with what would be sent.
         preview = {
             "dry_run": True,
             "request": {
                 "method": "POST",
                 "path": ns_path(f"saved/searches/{name}/dispatch", owner=owner, app=app),
-                "body": {"trigger_actions": int(trigger_actions)},
+                "body": core.build_dispatch_payload(
+                    trigger_actions=trigger_actions, earliest=earliest, latest=latest
+                ),
             },
             "target": ctx.meta()["target"],
         }

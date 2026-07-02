@@ -1,6 +1,8 @@
 """Typed errors raised by the core layer. Click-free so the core stays a plain library.
 
 `exit_code` maps to the process exit status; the CLI shell renders these to stderr.
+Exit 5 is not an error class: `health check` exits 5 when the check succeeded but
+some finding is warn/fail, so scripts can tell a sick Splunk from a failed request.
 """
 
 from __future__ import annotations
