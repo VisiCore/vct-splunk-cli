@@ -1,10 +1,16 @@
+"""Saved-search CRUD through the generic engine (namespaced spec) plus dispatch."""
+
 from __future__ import annotations
 
 import httpx
 import pytest
 
+from vct_splunk.commands.registry import SAVED_SEARCH
 from vct_splunk.core import saved_searches as ss
 from vct_splunk.core.errors import NotFoundError
+from vct_splunk.core.resource import CrudResource
+
+res = CrudResource(SAVED_SEARCH)
 
 
 def test_list_uses_namespaced_path(client_for):
@@ -26,7 +32,7 @@ def test_list_uses_namespaced_path(client_for):
             },
         )
 
-    rows = ss.list_saved_searches(client_for(handler), owner="-", app="-")
+    rows = res.list(client_for(handler), owner="-", app="-")
     assert seen["path"] == "/servicesNS/-/-/saved/searches"
     assert rows[0]["name"] == "nightly"
     assert rows[0]["app"] == "my_app"  # app/owner/sharing surfaced from the acl block
@@ -35,7 +41,7 @@ def test_list_uses_namespaced_path(client_for):
 
 def test_get_missing_raises(client_for):
     with pytest.raises(NotFoundError):
-        ss.get_saved_search(
+        res.get(
             client_for(lambda req: httpx.Response(200, json={"entry": []})),
             "x",
             owner="-",
@@ -54,17 +60,16 @@ def test_create_posts_to_app_namespace(client_for):
             json={"entry": [{"name": "nightly", "content": {"search": "index=main"}, "acl": {}}]},
         )
 
-    result = ss.create_saved_search(
+    result = res.create(
         client_for(handler),
         "nightly",
+        fields={"search": "index=main", "cron": "0 2 * * *"},
         owner="nobody",
         app="my_app",
-        search="index=main",
-        cron="0 2 * * *",
     )
     assert seen["path"] == "/servicesNS/nobody/my_app/saved/searches"
     assert "name=nightly" in seen["body"]
-    assert "cron_schedule=" in seen["body"]
+    assert "cron_schedule=" in seen["body"]  # Field maps --cron to Splunk's key
     assert result["name"] == "nightly"
 
 
@@ -76,8 +81,12 @@ def test_update_omits_name_from_body(client_for):
         seen["body"] = req.content.decode()
         return httpx.Response(200, json={"entry": [{"name": "nightly", "content": {}, "acl": {}}]})
 
-    ss.update_saved_search(
-        client_for(handler), "nightly", owner="nobody", app="my_app", search="index=other"
+    res.update(
+        client_for(handler),
+        "nightly",
+        fields={"search": "index=other"},
+        owner="nobody",
+        app="my_app",
     )
     assert seen["path"] == "/servicesNS/nobody/my_app/saved/searches/nightly"
     assert "name=" not in seen["body"]  # no rename: name stays in the URL only
@@ -91,7 +100,7 @@ def test_delete_issues_delete(client_for):
         seen["method"] = req.method
         return httpx.Response(200, json={})
 
-    ss.delete_saved_search(client_for(handler), "nightly", owner="nobody", app="my_app")
+    res.delete(client_for(handler), "nightly", owner="nobody", app="my_app")
     assert seen["method"] == "DELETE"
 
 

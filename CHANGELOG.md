@@ -41,6 +41,13 @@ This is the 0.2.0 development line (version bumped from 0.0.1).
 
 ### Changed
 
+- `index` and `saved-search` CRUD now ride the same declarative engine as every
+  other resource group (specs in the registry), instead of hand-written
+  near-duplicates of it; only `saved-search run` (dispatch) stays hand-written.
+  Flags, aliases, request payloads, and output keys are unchanged, and both
+  groups gain the generic `--set KEY=VALUE` escape hatch. Namespaced
+  factory writes now record the resolved app/owner in the audit log and name
+  the app in the confirmation prompt.
 - `health check` now exits **5** when the check succeeded but a finding is
   warn/fail (it previously exited 1, which collided with "API/transport
   error"). Exit 5 is a new dedicated code; `health check` only ever promised
