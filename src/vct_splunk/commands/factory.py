@@ -30,18 +30,33 @@ _VERB_ALIASES = {"add": "create", "edit": "update", "remove": "delete"}
 def _help_for(spec: Spec, verb: str) -> str:
     """One-line help for a generated command, in the hand-written commands' style."""
     noun = spec.name.replace("-", " ")
+    a = f"an {noun}" if noun[0] in "aeiou" else f"a {noun}"
     gated = " Gated write (--dry-run previews; --yes when non-interactive)."
     ns = " Requires an app (--app or $SPLUNK_APP)." if spec.namespaced else ""
     texts = {
         "list": f"List every {noun}.",
         "get": f"Show one {noun}.",
-        "create": f"Create a {noun}.{gated}{ns}",
-        "update": f"Update a {noun} (only the fields you pass).{gated}{ns}",
-        "delete": f"Delete a {noun}.{gated}{ns}",
-        "enable": f"Enable a {noun}.{gated}",
-        "disable": f"Disable a {noun}.{gated}",
+        "create": f"Create {a}.{gated}{ns}",
+        "update": f"Update {a} (only the fields you pass).{gated}{ns}",
+        "delete": f"Delete {a}.{gated}{ns}",
+        "enable": f"Enable {a}.{gated}",
+        "disable": f"Disable {a}.{gated}",
     }
     return texts[verb]
+
+
+def _gate_args(spec: Spec, verb: str, name: str, owner, app) -> tuple[str, dict[str, Any]]:
+    """The confirmation phrase and audit event for one gated write.
+
+    Namespaced resources name the target app in the prompt and record the
+    resolved namespace in the audit log.
+    """
+    action = f"{verb} {spec.name} '{name}'"
+    event: dict[str, Any] = {"action": f"{spec.name}.{verb}", "name": name}
+    if spec.namespaced:
+        action += f" in app '{app}'"
+        event.update({"app": app, "owner": owner})
+    return action, event
 
 
 def build_group(spec: Spec) -> click.Group:
@@ -86,15 +101,16 @@ def build_group(spec: Spec) -> click.Group:
 
         @grp.command("create", help=_help_for(spec, "create"))
         @click.argument("name")
-        @_field_options(spec)
+        @_field_options(spec, for_create=True)
         @command
         def _create(ctx, name, **opts) -> None:
             owner, app = _ns(ctx, spec, for_write=True)
             fields, sets = _collect_fields(spec, opts)
+            action, event = _gate_args(spec, "create", name, owner, app)
             result = do_write(
                 ctx,
-                action=f"create {spec.name} '{name}'",
-                audit_event={"action": f"{spec.name}.create", "name": name},
+                action=action,
+                audit_event=event,
                 run=lambda c: res.create(c, name, fields=fields, sets=sets, owner=owner, app=app),
             )
             out.emit(result, ctx.output_mode, ctx.meta())
@@ -110,10 +126,11 @@ def build_group(spec: Spec) -> click.Group:
             fields, sets = _collect_fields(spec, opts)
             if not sets and all(v in (None, ()) for v in fields.values()):
                 raise UsageError("Nothing to update. Pass a field option or --set KEY=VALUE.")
+            action, event = _gate_args(spec, "update", name, owner, app)
             result = do_write(
                 ctx,
-                action=f"update {spec.name} '{name}'",
-                audit_event={"action": f"{spec.name}.update", "name": name},
+                action=action,
+                audit_event=event,
                 run=lambda c: res.update(c, name, fields=fields, sets=sets, owner=owner, app=app),
             )
             out.emit(result, ctx.output_mode, ctx.meta())
@@ -125,10 +142,11 @@ def build_group(spec: Spec) -> click.Group:
         @command
         def _delete(ctx, name) -> None:
             owner, app = _ns(ctx, spec, for_write=True)
+            action, event = _gate_args(spec, "delete", name, owner, app)
             result = do_write(
                 ctx,
-                action=f"delete {spec.name} '{name}'",
-                audit_event={"action": f"{spec.name}.delete", "name": name},
+                action=action,
+                audit_event=event,
                 run=lambda c: res.delete(c, name, owner=owner, app=app),
             )
             out.emit(result, ctx.output_mode, ctx.meta())
@@ -148,22 +166,27 @@ def _add_control(grp: click.Group, spec: Spec, res: CrudResource, verb: str) -> 
     @command
     def _control(ctx, name) -> None:
         owner, app = _ns(ctx, spec, for_write=True)
+        action, event = _gate_args(spec, verb, name, owner, app)
         result = do_write(
             ctx,
-            action=f"{verb} {spec.name} '{name}'",
-            audit_event={"action": f"{spec.name}.{verb}", "name": name},
+            action=action,
+            audit_event=event,
             run=lambda c: res.control(c, name, verb, owner=owner, app=app),
         )
         out.emit(result, ctx.output_mode, ctx.meta())
 
 
-def _field_options(spec: Spec):
-    """A decorator that adds one Click option per (non-secret) field, plus --set."""
+def _field_options(spec: Spec, *, for_create: bool = False):
+    """A decorator that adds one Click option per (non-secret) field, plus --set.
+
+    ``required`` fields are enforced only on create; update always sends just
+    the fields you pass.
+    """
     options = []
     for f in spec.fields:
         if f.secret:
             continue  # secrets are read from env / prompt, never a flag
-        options.append(_option_for(f))
+        options.append(_option_for(f, required=for_create and f.required))
     options.append(
         click.option(
             "--set",
@@ -182,13 +205,17 @@ def _field_options(spec: Spec):
     return decorate
 
 
-def _option_for(f: Field):
+def _option_for(f: Field, *, required: bool = False):
     dashed = f.opt.replace("_", "-")
     if f.type == "bool":
         return click.option(f"--{dashed}/--no-{dashed}", f.opt, default=None, help=f.help)
-    kwargs: dict[str, Any] = {"default": None, "help": f.help}
-    if f.multi:
-        kwargs["multiple"] = True
+    # An explicit default (even None) satisfies `required` in Click, so a
+    # required option must carry no default at all.
+    kwargs: dict[str, Any] = {"help": f.help}
+    if required:
+        kwargs["required"] = True
+    else:
+        kwargs["default"] = None
     if f.type == "int":
         kwargs["type"] = int
     elif f.type == "float":

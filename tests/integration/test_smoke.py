@@ -29,8 +29,9 @@ def _gate():
 
 def test_end_to_end():
     from vct_splunk.cli import cli
-    from vct_splunk.core import indexes
+    from vct_splunk.commands.registry import INDEX
     from vct_splunk.core.client import SplunkClient, config_from_env
+    from vct_splunk.core.resource import CrudResource
 
     runner = CliRunner()
     assert runner.invoke(cli, ["server", "info", "--output", "json"]).exit_code == 0
@@ -60,7 +61,7 @@ def test_end_to_end():
         assert runner.invoke(cli, ["index", "get", name, "--output", "json"]).exit_code == 0
     finally:
         with SplunkClient(config_from_env()) as client:
-            indexes.delete_index(client, name)
+            CrudResource(INDEX).delete(client, name)
 
 
 def test_saved_search_lifecycle():

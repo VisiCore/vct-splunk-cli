@@ -35,15 +35,16 @@ core, imperative shell" pattern):
   auth, retries, pagination, dry-run), `errors`, `audit`, `namespace`
   (owner/app resolution), `resource` (the generic CRUD engine: `Spec`/`Field`/
   `CrudResource`), `backends` + `acs/` (Splunk Cloud ACS support), and one
-  module per operation (`server`, `api`, `indexes`, `jobs`, `search`,
-  `saved_searches`, `health`).
+  module per hand-written operation (`server`, `api`, `jobs`, `search`,
+  `saved_searches` for dispatch, `health`).
 - `src/vct_splunk/commands/` — Click adapters, one module per hand-written
-  command group (`server`, `api`, `index`, `search`, `saved_search`, `health`,
-  `inspect`), plus shared plumbing: `context` (the `command` decorator and
-  `Ctx`), `output` (rendering, error envelope), `write` (the single gated write
-  path), `dispatch` (routes a few reads to Cloud ACS), and `registry` +
-  `factory` (resource specs declared as data, turned into generated CRUD
-  groups — `user`, `role`, `macro`, the data inputs/outputs, and friends).
+  command group (`server`, `api`, `search`, `health`, `inspect`, plus
+  `saved_search`'s `run`), plus shared plumbing: `context` (the `command`
+  decorator and `Ctx`), `output` (rendering, error envelope), `write` (the
+  single gated write path), `dispatch` (routes a few reads to Cloud ACS), and
+  `registry` + `factory` (resource specs declared as data, turned into
+  generated CRUD groups — `index`, `saved-search`, `user`, `role`, `macro`,
+  the data inputs/outputs, and friends).
 - `src/vct_splunk/cli.py` assembles the root group and the `splunk` entry point;
   `__main__.py` enables `python -m vct_splunk`.
 
