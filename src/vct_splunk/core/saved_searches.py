@@ -3,9 +3,9 @@
 Saved searches are **namespaced**: every call takes an explicit ``owner`` and
 ``app`` (the command layer resolves them via
 :func:`vct_splunk.core.namespace.resolve_ns`, which keeps writes out of the
-default ``search`` app). The shape mirrors :mod:`vct_splunk.core.indexes`; it is
-hand-written here rather than factored into a registry because saved searches are
-only the second CRUD-shaped resource — the factory arrives once a third lands.
+default ``search`` app). The CRUD shape mirrors :mod:`vct_splunk.core.indexes`
+and duplicates what the :mod:`vct_splunk.core.resource` engine provides — the
+plan is to fold both onto that engine, keeping only ``dispatch`` hand-written.
 """
 
 from __future__ import annotations

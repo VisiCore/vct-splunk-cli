@@ -127,9 +127,9 @@ def command(fn: Callable) -> Callable:
 
     Use this on a function whose first parameter is a :class:`Ctx`. The returned
     wrapper gains the common Click options (``--output``/``--table``/
-    ``--dry-run``/``--yes``/``--base-url``), so the command body can focus on its
-    own arguments. Any :class:`SplunkError` raised by the core is caught and
-    rendered to stderr with the correct exit code via
+    ``--dry-run``/``--yes``/``--base-url``/``--app``/``--owner``), so the
+    command body can focus on its own arguments. Any :class:`SplunkError` raised
+    by the core is caught and rendered to stderr with the correct exit code via
     :func:`vct_splunk.commands.output.fail`.
 
     Args:
@@ -164,8 +164,7 @@ def command(fn: Callable) -> Callable:
             # turns them into a JSON error envelope on stderr plus an exit code.
             out.fail(exc)
 
-    # Click applies decorators bottom-up, so this list ends up reading in reverse
-    # order in --help. The order is purely cosmetic.
+    # Click applies decorators bottom-up, so --help lists these in reverse order.
     options = [
         click.option(
             "--owner",

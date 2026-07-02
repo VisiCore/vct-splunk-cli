@@ -32,16 +32,33 @@ core, imperative shell" pattern):
 
 - `src/vct_splunk/core/` — plain functions and typed errors. **Never imports
   Click.** This is the reusable, unit-testable library: `client` (transport,
-  auth, retries, pagination, dry-run), `errors`, `audit`, and one module per
-  operation (`server`, `api`, `indexes`, `search`, `health`).
-- `src/vct_splunk/commands/` — Click adapters, one module per command group
-  (`server`, `api`, `index`, `search`, `health`), plus shared `context` (the
-  `command` decorator and `Ctx`) and `output` (rendering, error envelope,
-  write-gating).
+  auth, retries, pagination, dry-run), `errors`, `audit`, `namespace`
+  (owner/app resolution), `resource` (the generic CRUD engine: `Spec`/`Field`/
+  `CrudResource`), `backends` + `acs/` (Splunk Cloud ACS support), and one
+  module per operation (`server`, `api`, `indexes`, `jobs`, `search`,
+  `saved_searches`, `health`).
+- `src/vct_splunk/commands/` — Click adapters, one module per hand-written
+  command group (`server`, `api`, `index`, `search`, `saved_search`, `health`,
+  `inspect`), plus shared plumbing: `context` (the `command` decorator and
+  `Ctx`), `output` (rendering, error envelope), `write` (the single gated write
+  path), `dispatch` (routes a few reads to Cloud ACS), and `registry` +
+  `factory` (resource specs declared as data, turned into generated CRUD
+  groups — `user`, `role`, `macro`, the data inputs/outputs, and friends).
 - `src/vct_splunk/cli.py` assembles the root group and the `splunk` entry point;
   `__main__.py` enables `python -m vct_splunk`.
 
 Dependencies flow one way: `commands` import `core`, never the reverse.
+
+Two cross-cutting ideas to know about:
+
+- **Namespaces.** Namespaced resources take `--app` / `--owner` (or
+  `SPLUNK_APP` / `SPLUNK_OWNER`). Reads default to the `-` wildcard; writes
+  require an explicit app and never silently default to `search`.
+- **Transparent backend.** When `SPLUNK_URL` points at `*.splunkcloud.com`, a
+  few reads (`index list`, `role list`, `hec-token list`) route through the
+  Cloud ACS API and writes are refused; everything else talks to splunkd REST.
+  The backend is deduced from the URL — there is no flag to pick it. `splunk
+  inspect` reports what the deduced backend supports, offline.
 
 ## Conventions
 
@@ -55,11 +72,14 @@ Dependencies flow one way: `commands` import `core`, never the reverse.
 
 ## Safety
 
-- Writes are gated. `index create` is the only write: `--dry-run` previews and
-  sends nothing; otherwise it confirms on a TTY or requires `--yes` when
-  non-interactive (it never hangs on a hidden prompt).
-- Each applied write is appended to a local audit log (`$VCT_SPLUNK_AUDIT`, else
-  `$XDG_STATE_HOME/vct-splunk/audit.log`).
+- Writes are gated. Every mutation — index lifecycle, saved-search CRUD and
+  `search cancel`, and all factory-generated create/update/delete/enable/
+  disable — funnels through one shared path (`commands/write.py`): `--dry-run`
+  previews the exact request and sends nothing; otherwise it confirms on a TTY
+  or requires `--yes` when non-interactive (it never hangs on a hidden prompt).
+- Each applied write is appended to a local audit log: `$VCT_SPLUNK_AUDIT` if
+  set, else `$XDG_STATE_HOME/vct-splunk/audit.log`, else
+  `~/.local/state/vct-splunk/audit.log`.
 - `search run` is bounded by default (time window, row cap, timeout) so an agent
   cannot trigger an unbounded export by accident.
 
@@ -71,7 +91,8 @@ SPLUNK_INTEGRATION_TEST=true pytest -m integration    # against a live Splunk
 ```
 
 Unit tests live in `tests/unit/` and mock the transport; the gated end-to-end
-test in `tests/integration/` needs `SPLUNK_URL` / `SPLUNK_TOKEN` and a reachable
+tests in `tests/integration/` need `SPLUNK_URL`, credentials (`SPLUNK_TOKEN`,
+or the `SPLUNK_USERNAME` / `SPLUNK_PASSWORD` fallback CI uses), and a reachable
 instance.
 
 ## Checks before a PR

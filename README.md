@@ -10,6 +10,16 @@ A small, scriptable CLI to read, search, health-check, and safely administer
 [![Checked with pyright](https://microsoft.github.io/pyright/img/pyright_badge.svg)](https://microsoft.github.io/pyright/)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 
+## What is this?
+
+Splunk is a platform that collects and searches machine data (logs, metrics,
+events). Administering it usually means clicking through its web UI or calling
+its REST API by hand. This tool wraps that API in one predictable command,
+`splunk`, so a person — or an AI agent — can inspect a Splunk server, run
+searches, and make carefully guarded changes from a terminal or a script. Reads
+are always safe; anything that changes the server previews first, asks before
+acting, and leaves an audit trail.
+
 ## Installation
 
 ```bash
@@ -29,6 +39,8 @@ Authenticate with environment variables (the token is never passed as a flag):
 export SPLUNK_URL="https://your-search-head:8089"
 export SPLUNK_TOKEN="<a Splunk authentication token>"   # a JWT; the primary path
 # optional: a Splunk session key is accepted instead, as SPLUNK_SESSION_KEY
+# fallback: SPLUNK_USERNAME + SPLUNK_PASSWORD log in for a session key
+#           (discouraged — prefer a token; used by CI against Docker Splunk)
 # optional:
 export SPLUNK_CA_BUNDLE="/path/to/ca.pem"   # custom CA for on-prem
 export SPLUNK_VERIFY="true"                  # TLS verification (default true)
@@ -85,8 +97,8 @@ never created somewhere you did not intend.
 
 ### Writes are gated
 
-Writes (`index create`, `saved-search create`/`update`/`delete`, `search cancel`)
-are safe by default:
+Every write — the index lifecycle, `saved-search create`/`update`/`delete`,
+`search cancel`, and all generated-group mutations — is safe by default:
 
 ```bash
 splunk index create payments --dry-run         # preview the request; sends nothing
@@ -95,8 +107,9 @@ splunk index create payments --yes              # --yes is required when non-int
 ```
 
 A non-interactive write without `--yes` fails fast (exit 2) rather than hanging.
-Each applied write is appended to a local audit log (`$VCT_SPLUNK_AUDIT`, else
-`~/.local/state/vct-splunk/audit.log`).
+Each applied write is appended to a local audit log: `$VCT_SPLUNK_AUDIT` if
+set, else `$XDG_STATE_HOME/vct-splunk/audit.log`, else
+`~/.local/state/vct-splunk/audit.log`.
 
 ### Exit codes
 

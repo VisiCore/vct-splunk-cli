@@ -1,8 +1,10 @@
 """End-to-end smoke test against a live Splunk Enterprise.
 
-Gated: set SPLUNK_INTEGRATION_TEST=true plus SPLUNK_URL / SPLUNK_TOKEN. Runs
-against any reachable Splunk Enterprise instance — an ephemeral Dockerized
-`splunk/splunk`, or an existing instance whose REST management port is reachable.
+Gated: set SPLUNK_INTEGRATION_TEST=true plus SPLUNK_URL and credentials —
+SPLUNK_TOKEN, or SPLUNK_USERNAME / SPLUNK_PASSWORD (the fallback CI uses against
+Docker Splunk, which boots with a password and no token). Runs against any
+reachable Splunk Enterprise instance — an ephemeral Dockerized `splunk/splunk`,
+or an existing instance whose REST management port is reachable.
 """
 
 from __future__ import annotations
@@ -19,7 +21,10 @@ pytestmark = pytest.mark.integration
 @pytest.fixture(autouse=True)
 def _gate():
     if os.environ.get("SPLUNK_INTEGRATION_TEST") != "true":
-        pytest.skip("set SPLUNK_INTEGRATION_TEST=true (+ SPLUNK_URL/SPLUNK_TOKEN) to run")
+        pytest.skip(
+            "set SPLUNK_INTEGRATION_TEST=true (+ SPLUNK_URL and SPLUNK_TOKEN "
+            "or SPLUNK_USERNAME/SPLUNK_PASSWORD) to run"
+        )
 
 
 def test_end_to_end():

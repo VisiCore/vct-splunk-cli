@@ -35,9 +35,7 @@ def update_index(
     """Update an existing index's settings.
 
     A POST to the named index merges server-side, so only the settings that
-    changed are sent -- there is no read-modify-write. (Splunk's POST merges; it
-    does not replace, so we do not need to fetch-then-overlay the way a PUT-style
-    API would.)
+    changed are sent — there is no read-modify-write.
     """
     return _unwrap(client.write("POST", f"{_PATH}/{name}", _settings(max_gb, frozen_secs)))
 
