@@ -51,8 +51,13 @@ def cancel(ctx, sid) -> None:
 @click.argument("stdin_token", required=False, metavar="[-]")
 @click.option("--query", default=None, help="SPL query string.")
 @click.option("--file", "file_", type=click.File("r"), default=None, help="Read SPL from a file.")
-@click.option("--earliest", default="-24h", show_default=True, help="Earliest time.")
-@click.option("--latest", default="now", show_default=True, help="Latest time.")
+@click.option(
+    "--earliest",
+    default="-24h",
+    show_default=True,
+    help="Start of the search window (Splunk relative-time syntax).",
+)
+@click.option("--latest", default="now", show_default=True, help="End of the search window.")
 @click.option(
     "--max-rows",
     # Must stay >= 1: the value feeds Splunk's ``count``, where 0 means

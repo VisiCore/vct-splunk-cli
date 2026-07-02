@@ -41,6 +41,13 @@ This is the 0.2.0 development line (version bumped from 0.0.1).
 
 ### Changed
 
+- `health check` now exits **5** when the check succeeded but a finding is
+  warn/fail (it previously exited 1, which collided with "API/transport
+  error"). Exit 5 is a new dedicated code; `health check` only ever promised
+  "non-zero", so scripts keying on that keep working.
+- Factory-generated commands (`user`, `role`, `macro`, the inputs/outputs, …)
+  now carry help text matching the hand-written commands' style.
+- `api get --query` advertises `KEY=VALUE` (was `K=V`), matching `--set`.
 - Factory resource specs are now thin: each one carries just its REST path, so
   you set fields with the generic `--set KEY=VALUE` and Splunk checks them on the
   server. This drops the hand-kept field lists that used to copy Splunk's spec
@@ -48,6 +55,9 @@ This is the 0.2.0 development line (version bumped from 0.0.1).
 
 ### Fixed
 
+- `saved-search run --dry-run` now previews the exact request body, including
+  `dispatch.earliest_time` / `dispatch.latest_time` — the preview and the real
+  request are built by the same function, so they can no longer disagree.
 - `server info` now exits with a clear error (exit 2) when `SPLUNK_URL` points at a
   non-REST endpoint (for example the web UI), instead of returning all-null fields
   with exit 0 (#18).

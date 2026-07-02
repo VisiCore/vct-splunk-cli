@@ -68,7 +68,7 @@ Two cross-cutting ideas to know about:
 - Output contract: stdout is pure data (table on a TTY, JSON when piped or with
   `--output json`); diagnostics, prompts, and errors go to stderr.
 - Exit codes: 0 ok, 1 API/transport, 2 usage/config, 3 auth (401/403), 4 not
-  found. `health check` exits non-zero when any finding is warn or fail.
+  found, 5 `health check` succeeded but some finding is warn or fail.
 
 ## Safety
 
