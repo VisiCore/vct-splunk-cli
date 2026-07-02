@@ -9,6 +9,8 @@ subset does not declare.
 
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 from click.testing import CliRunner
@@ -18,7 +20,13 @@ from vct_splunk.core import backends
 from vct_splunk.core.acs import operations, pinned_spec
 from vct_splunk.core.acs.client import AcsClient, AcsConfig, acs_config_from_env
 from vct_splunk.core.client import ClientConfig, SplunkClient
-from vct_splunk.core.errors import AuthError, UsageError
+from vct_splunk.core.errors import (
+    APIError,
+    AuthError,
+    NotFoundError,
+    TransportError,
+    UsageError,
+)
 
 CLOUD_URL = "https://acme.splunkcloud.com:8089"
 ENTERPRISE_URL = "https://sh.corp:8089"
@@ -73,11 +81,36 @@ def test_acs_auth_error_maps_typed():
         operations.list_cloud_roles(_acs(lambda req: httpx.Response(401, json={})))
 
 
-def test_acs_config_requires_stack_and_token(monkeypatch):
+def test_acs_404_maps_not_found():
+    with pytest.raises(NotFoundError):
+        operations.list_cloud_roles(_acs(lambda req: httpx.Response(404, json={})))
+
+
+def test_acs_5xx_maps_api_error():
+    with pytest.raises(APIError):
+        operations.list_cloud_roles(_acs(lambda req: httpx.Response(500, json={})))
+
+
+def test_acs_unreachable_maps_transport_error():
+    def handler(req: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused")
+
+    with pytest.raises(TransportError):
+        operations.list_cloud_roles(_acs(handler))
+
+
+def test_acs_config_requires_stack(monkeypatch):
     monkeypatch.delenv("SPLUNK_ACS_STACK", raising=False)
     monkeypatch.delenv("SPLUNK_ACS_TOKEN", raising=False)
-    with pytest.raises(UsageError):
+    with pytest.raises(UsageError, match="stack"):
         acs_config_from_env()
+
+
+def test_acs_config_requires_token(monkeypatch):
+    # Stack resolved but no token: the error must name SPLUNK_ACS_TOKEN.
+    monkeypatch.delenv("SPLUNK_ACS_TOKEN", raising=False)
+    with pytest.raises(UsageError, match="SPLUNK_ACS_TOKEN"):
+        acs_config_from_env("acme")
 
 
 # --- Backend deduction from the URL ------------------------------------------
@@ -160,6 +193,18 @@ def test_write_on_cloud_stops_with_unsupported_backend(monkeypatch):
     assert "Splunk Cloud" in result.output
 
 
+def test_factory_write_on_cloud_stops_too(monkeypatch):
+    # The Cloud write guard sits in the shared write path, so every generated
+    # group refuses as well — not just index.
+    monkeypatch.setenv("SPLUNK_URL", CLOUD_URL)
+    monkeypatch.setenv("SPLUNK_APP", "my_app")
+    result = CliRunner().invoke(
+        cli, ["macro", "create", "m1", "--set", "definition=x", "--yes", "--output", "json"]
+    )
+    assert result.exit_code == 4
+    assert "unsupported_backend" in result.output
+
+
 # --- `inspect` reports the deduced backend (no --backend selector) -----------
 
 
@@ -172,15 +217,10 @@ def test_inspect_reports_deduced_cloud(monkeypatch):
     assert "not yet certified" in result.output
 
 
-def test_inspect_reports_deduced_enterprise(monkeypatch):
+def test_inspect_reports_enterprise_capabilities(monkeypatch):
     monkeypatch.setenv("SPLUNK_URL", ENTERPRISE_URL)
     result = CliRunner().invoke(cli, ["inspect", "--output", "json"])
     assert result.exit_code == 0
-    assert '"backend": "enterprise"' in result.output
-
-
-def test_inspect_has_no_backend_selector(monkeypatch):
-    monkeypatch.setenv("SPLUNK_URL", ENTERPRISE_URL)
-    # The old --backend selector is gone; passing it is now an error.
-    result = CliRunner().invoke(cli, ["inspect", "--backend", "cloud"])
-    assert result.exit_code != 0
+    data = json.loads(result.output)["data"]
+    assert data["backend"] == "enterprise"
+    assert data["capabilities"]["search"] is True  # full support, no caveat string

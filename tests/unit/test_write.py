@@ -69,3 +69,46 @@ def test_do_write_refuses_without_yes_noninteractive(monkeypatch, tmp_path):
             audit_event={"action": "x"},
             run=lambda c: {"name": "x"},
         )
+
+
+def test_interactive_confirm_gates_the_write(monkeypatch, tmp_path):
+    # On a real TTY (no --yes/--dry-run) the prompt decides: decline aborts
+    # before any request, accept lets the write run.
+    from types import SimpleNamespace
+
+    import click
+
+    monkeypatch.setenv("SPLUNK_TOKEN", "T")
+    monkeypatch.setenv("VCT_SPLUNK_AUDIT", str(tmp_path / "audit.log"))
+    tty = SimpleNamespace(isatty=lambda: True)
+    monkeypatch.setattr("vct_splunk.commands.output.sys", SimpleNamespace(stdin=tty, stderr=tty))
+
+    prompts: list[str] = []
+
+    def deny(message, **kwargs):
+        prompts.append(message)
+        raise click.Abort()
+
+    monkeypatch.setattr("vct_splunk.commands.output.click.confirm", deny)
+    with pytest.raises(click.Abort):
+        do_write(
+            _Ctx(),
+            action="delete index 'web'",
+            audit_event={"action": "x"},
+            run=lambda c: {"ok": True},
+        )
+    assert "delete index 'web'" in prompts[0]
+
+    monkeypatch.setattr("vct_splunk.commands.output.click.confirm", lambda *a, **k: True)
+    result = do_write(_Ctx(), action="a", audit_event={"action": "x"}, run=lambda c: {"ok": True})
+    assert result == {"ok": True}
+
+
+def test_audit_falls_back_to_xdg_state_home(monkeypatch, tmp_path):
+    from vct_splunk.core import audit
+
+    monkeypatch.delenv("VCT_SPLUNK_AUDIT", raising=False)
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+    written = audit.record({"action": "index.create"})
+    assert written == str(tmp_path / "vct-splunk" / "audit.log")
+    assert "index.create" in (tmp_path / "vct-splunk" / "audit.log").read_text()

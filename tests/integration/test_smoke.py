@@ -9,6 +9,7 @@ or an existing instance whose REST management port is reachable.
 
 from __future__ import annotations
 
+import json
 import os
 import uuid
 
@@ -40,6 +41,26 @@ def test_end_to_end():
         runner.invoke(cli, ["api", "get", "/services/server/info", "--output", "json"]).exit_code
         == 0
     )
+    # Health may legitimately warn on an ephemeral container: 0 and 5 both prove
+    # the command ran and rendered; anything else is a real failure.
+    assert runner.invoke(cli, ["health", "check", "--output", "json"]).exit_code in (0, 5)
+    ran = runner.invoke(
+        cli,
+        [
+            "search",
+            "run",
+            "--query",
+            "index=_internal | stats count",
+            "--earliest",
+            "-15m",
+            "--max-rows",
+            "5",
+            "--output",
+            "json",
+        ],
+    )
+    assert ran.exit_code == 0, ran.output
+    assert json.loads(ran.output)["data"]["count"] >= 0
 
     name = f"vctmvp_{uuid.uuid4().hex[:8]}"
     # The common flags (--dry-run, -y, --output) are defined on the *leaf* command
@@ -92,6 +113,15 @@ def test_saved_search_lifecycle():
             cli, ["saved-search", "get", name, "--app", "search", "--output", "json"]
         )
         assert got.exit_code == 0
+        # Dispatch it and poll the job once: proves the run path resolves a
+        # concrete namespace (a wildcard owner is a live-Splunk 400).
+        ran = runner.invoke(
+            cli, ["saved-search", "run", name, "--app", "search", "--output", "json"]
+        )
+        assert ran.exit_code == 0, ran.output
+        sid = json.loads(ran.output)["data"]["sid"]
+        assert sid
+        assert runner.invoke(cli, ["search", "get", sid, "--output", "json"]).exit_code == 0
     finally:
         runner.invoke(
             cli, ["saved-search", "delete", name, "--app", "search", "-y", "--output", "json"]

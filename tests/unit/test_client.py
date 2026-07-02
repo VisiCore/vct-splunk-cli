@@ -3,7 +3,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from vct_splunk.core.errors import AuthError, NotFoundError
+from vct_splunk.core.errors import APIError, AuthError, NotFoundError, TransportError
 
 
 def test_auth_header_and_json_mode(client_for):
@@ -41,6 +41,87 @@ def test_404_raises_not_found(client_for):
 def test_401_raises_auth(client_for):
     with pytest.raises(AuthError):
         client_for(lambda req: httpx.Response(401, json={})).get("/services/server/info")
+
+
+def test_403_raises_auth(client_for):
+    with pytest.raises(AuthError):
+        client_for(lambda req: httpx.Response(403, json={})).get("/services/server/info")
+
+
+def test_5xx_raises_api_error_with_safe_body(client_for):
+    with pytest.raises(APIError) as exc_info:
+        client_for(lambda req: httpx.Response(500, json={"messages": ["boom"]})).get("/services/x")
+    assert exc_info.value.exit_code == 1
+    assert exc_info.value.details == {"messages": ["boom"]}  # JSON body carried as details
+
+
+def test_400_non_json_body_is_truncated_text(client_for):
+    with pytest.raises(APIError) as exc_info:
+        client_for(lambda req: httpx.Response(400, text="x" * 1000)).get("/services/x")
+    assert exc_info.value.details == "x" * 500  # _safe_body caps raw text
+
+
+def test_unreachable_raises_transport_error(client_for):
+    def handler(req: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused")
+
+    with pytest.raises(TransportError):
+        client_for(handler).get("/services/server/info")
+
+
+def test_non_json_200_returns_raw_text(client_for):
+    client = client_for(lambda req: httpx.Response(200, text="<html>web ui</html>"))
+    assert client.get("/services/x") == {"raw": "<html>web ui</html>"}
+
+
+def test_retries_429_then_succeeds(client_for, monkeypatch):
+    sleeps: list[float] = []
+    monkeypatch.setattr("vct_splunk.core.client.time.sleep", sleeps.append)
+    calls = {"n": 0}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return httpx.Response(429, json={}, headers={"Retry-After": "7"})
+        return httpx.Response(200, json={"ok": True})
+
+    body = client_for(handler).get("/services/server/info")
+    assert body == {"ok": True}
+    assert calls["n"] == 2
+    assert sleeps == [7.0]  # the server's Retry-After wins over the backoff curve
+
+
+def test_retries_503_with_backoff_then_gives_up(client_for, monkeypatch):
+    sleeps: list[float] = []
+    monkeypatch.setattr("vct_splunk.core.client.time.sleep", sleeps.append)
+    calls = {"n": 0}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(503, json={})
+
+    # After exhausting retries the final 503 surfaces as a plain APIError.
+    with pytest.raises(APIError):
+        client_for(handler).get("/services/server/info")
+    assert calls["n"] == 4  # first try + 3 retries
+    # The exact curve is an implementation detail; pin only that it backs off.
+    assert len(sleeps) == 3 and sleeps == sorted(sleeps)
+
+
+def test_400_is_not_retried(client_for, monkeypatch):
+    monkeypatch.setattr(
+        "vct_splunk.core.client.time.sleep",
+        lambda s: pytest.fail("must not sleep on a non-retryable status"),
+    )
+    calls = {"n": 0}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(400, json={})
+
+    with pytest.raises(APIError):
+        client_for(handler).get("/services/x")
+    assert calls["n"] == 1
 
 
 def test_get_collection_paginates(client_for):
