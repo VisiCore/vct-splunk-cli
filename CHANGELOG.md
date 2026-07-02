@@ -62,6 +62,15 @@ This is the 0.2.0 development line (version bumped from 0.0.1).
 
 ### Fixed
 
+- `saved-search run` now dispatches to a concrete namespace (explicit `--app`,
+  owner defaulting to `nobody`). It previously used the read-style `-` wildcard
+  owner, which Splunk rejects with a 400 ("Cannot edit/create a saved search
+  for wildcarded users or applications") — found in a live end-to-end run
+  against Splunk 10.2.
+- `.env.example` no longer documents a `SPLUNK_BACKEND` variable (never read;
+  the backend is deduced from `SPLUNK_URL`) or a `splunk cloud …` command (does
+  not exist), and now documents the `SPLUNK_USERNAME`/`SPLUNK_PASSWORD` login
+  fallback and `SPLUNK_USER_PASSWORD`.
 - `saved-search run --dry-run` now previews the exact request body, including
   `dispatch.earliest_time` / `dispatch.latest_time` — the preview and the real
   request are built by the same function, so they can no longer disagree.

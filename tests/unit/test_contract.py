@@ -60,7 +60,9 @@ def test_api_error_envelope_exits_1(cli_env, patch_client):
     patch_client(lambda req: httpx.Response(500, json={"messages": ["boom"]}))
     result = CliRunner().invoke(cli, ["server", "info", "--output", "json"])
     assert result.exit_code == 1
-    assert json.loads(result.output)["error"]["code"] == "api_error"
+    error = json.loads(result.output)["error"]
+    assert error["code"] == "api_error"
+    assert error["details"] == {"messages": ["boom"]}  # server body surfaced for debugging
 
 
 def test_transport_error_envelope_exits_1(cli_env, patch_client):

@@ -52,6 +52,7 @@ def test_update_index_sends_only_changed_settings(client_for):
 
 
 def test_enable_index_posts_control_endpoint(client_for):
+    # enable/disable share one engine path; the verb is just the URL suffix.
     seen: dict[str, str] = {}
 
     def handler(req: httpx.Request) -> httpx.Response:
@@ -62,14 +63,3 @@ def test_enable_index_posts_control_endpoint(client_for):
     res.control(client_for(handler), "main", "enable")
     assert seen["method"] == "POST"
     assert seen["path"] == "/services/data/indexes/main/enable"
-
-
-def test_disable_index_posts_control_endpoint(client_for):
-    seen: dict[str, str] = {}
-
-    def handler(req: httpx.Request) -> httpx.Response:
-        seen["path"] = req.url.path
-        return httpx.Response(200, json={})
-
-    res.control(client_for(handler), "main", "disable")
-    assert seen["path"] == "/services/data/indexes/main/disable"

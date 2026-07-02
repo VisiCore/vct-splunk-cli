@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from vct_splunk.commands import output as out
+from vct_splunk.core.errors import UsageError
 
 
 def test_resolve_mode_explicit():
@@ -23,12 +26,6 @@ def test_table_empty_list_says_no_results(capsys):
     assert "(no results)" in capsys.readouterr().out
 
 
-def test_table_single_dict_renders_one_row(capsys):
-    out.emit({"name": "main", "disabled": False}, "table")
-    text = capsys.readouterr().out
-    assert "NAME" in text and "main" in text
-
-
 def test_emit_json_envelope(capsys):
     out.emit([{"a": 1}], "json", {"target": "splunk.test"})
     parsed = json.loads(capsys.readouterr().out)
@@ -37,9 +34,15 @@ def test_emit_json_envelope(capsys):
 
 
 def test_emit_table(capsys):
-    out.emit([{"name": "main", "size": 10}], "table")
+    # A bare dict renders the same as a one-row list.
+    out.emit({"name": "main", "size": 10}, "table")
     text = capsys.readouterr().out
     assert "NAME" in text and "main" in text
+
+
+def test_resolve_query_stdin_token_must_be_dash():
+    with pytest.raises(UsageError, match="stdin"):
+        out.resolve_query(None, None, "not-a-dash")
 
 
 def test_table_unions_keys_across_heterogeneous_rows(capsys):
