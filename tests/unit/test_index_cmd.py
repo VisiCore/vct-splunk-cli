@@ -12,6 +12,8 @@ from vct_splunk.cli import cli
 
 
 def test_create_refuses_without_yes_noninteractive(cli_env):
+    # The one CLI-level pin of the non-interactive refusal (canonical gate test
+    # lives in test_write.py).
     result = CliRunner().invoke(cli, ["index", "create", "myidx", "--output", "json"])
     assert result.exit_code == 2
     assert "usage_error" in result.output

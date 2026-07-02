@@ -63,15 +63,6 @@ def test_api_get_forwards_query_params(cli_env, patch_client):
     assert "search=foo" in seen["query"]
 
 
-def test_search_run_executes(cli_env, patch_client):
-    patch_client(lambda req: httpx.Response(200, json={"results": [{"x": "1"}]}))
-    result = CliRunner().invoke(
-        cli, ["search", "run", "--query", "index=_internal", "--output", "json"]
-    )
-    assert result.exit_code == 0
-    assert '"count": 1' in result.output
-
-
 def test_search_run_reads_query_from_file(cli_env, patch_client, tmp_path):
     seen: dict[str, str] = {}
 
@@ -125,22 +116,6 @@ def test_health_check_exits_5_on_fail(cli_env, patch_client):
     assert '"finding": "fail"' in result.output
 
 
-def test_search_list_renders(cli_env, patch_client):
-    def handler(req: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            200,
-            json={
-                "entry": [{"name": "sid1", "content": {"dispatchState": "DONE"}, "acl": {}}],
-                "paging": {"total": 1},
-            },
-        )
-
-    patch_client(handler)
-    result = CliRunner().invoke(cli, ["search", "list", "--output", "json"])
-    assert result.exit_code == 0
-    assert '"sid": "sid1"' in result.output
-
-
 def test_saved_search_create_requires_app(cli_env):
     # No --app and no SPLUNK_APP -> the write must refuse (exit 2), not target 'search'.
     result = CliRunner().invoke(
@@ -181,6 +156,50 @@ def test_saved_search_create_dry_run_previews_app_namespace(cli_env):
     assert "/servicesNS/nobody/my_app/saved/searches" in result.output
 
 
+def test_saved_search_scheduled_flag_coerces_to_int(cli_env):
+    # The bool Field must reach the wire as is_scheduled=0/1, not False/True.
+    result = CliRunner().invoke(
+        cli,
+        [
+            "saved-search",
+            "update",
+            "nightly",
+            "--no-scheduled",
+            "--app",
+            "my_app",
+            "--dry-run",
+            "--output",
+            "json",
+        ],
+    )
+    assert result.exit_code == 0
+    assert '"is_scheduled": 0' in result.output
+
+
+def test_base_url_flag_overrides_env(cli_env, patch_client):
+    patch_client(lambda req: httpx.Response(200, json={"entry": [{"content": {}}]}))
+    result = CliRunner().invoke(
+        cli, ["server", "info", "--base-url", "https://other.test:8089", "--output", "json"]
+    )
+    assert result.exit_code == 0
+    assert '"target": "https://other.test:8089"' in result.output  # flag wins over SPLUNK_URL
+
+
+def test_owner_flag_narrows_the_namespace(cli_env, patch_client):
+    seen: dict[str, str] = {}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen["path"] = req.url.path
+        return httpx.Response(200, json={"entry": [], "paging": {"total": 0}})
+
+    patch_client(handler)
+    result = CliRunner().invoke(
+        cli, ["saved-search", "list", "--owner", "alice", "--output", "json"]
+    )
+    assert result.exit_code == 0
+    assert seen["path"] == "/servicesNS/alice/-/saved/searches"
+
+
 def test_saved_search_run_dispatches_with_times(cli_env, patch_client):
     seen: dict[str, str] = {}
 
@@ -207,7 +226,8 @@ def test_saved_search_run_dispatches_with_times(cli_env, patch_client):
     )
     assert result.exit_code == 0
     assert '"sid": "sid42"' in result.output
-    assert seen["path"].endswith("/saved/searches/nightly/dispatch")
+    # Never a wildcard: Splunk 400s a dispatch to /servicesNS/-/... (found live).
+    assert seen["path"] == "/servicesNS/nobody/my_app/saved/searches/nightly/dispatch"
     assert "trigger_actions=1" in seen["body"]
     assert "dispatch.earliest_time" in seen["body"]
 

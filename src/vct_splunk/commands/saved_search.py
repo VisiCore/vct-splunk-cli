@@ -32,8 +32,13 @@ def run(ctx, name, trigger_actions, earliest, latest) -> None:
 
     Dispatching creates a server-side job like ``search run``; it is not a config
     change, so it is not gated. ``--dry-run`` previews the request instead.
+
+    Requires an app: Splunk rejects a dispatch POST to a wildcarded namespace
+    ("Cannot edit/create a saved search for wildcarded users or applications"),
+    so the namespace resolves like a write — explicit app, owner defaulting to
+    ``nobody`` (found live against Splunk 10.2).
     """
-    owner, app = resolve_ns(ctx.owner, ctx.app, for_write=False)
+    owner, app = resolve_ns(ctx.owner, ctx.app, for_write=True)
     if ctx.dry_run:
         # Built by the same core function as the real request, so the preview
         # can never disagree with what would be sent.
