@@ -19,7 +19,6 @@ GLOBAL_SPEC = Spec(
     help="Widgets.",
     fields=(
         Field("size_gb", key="sizeMB", type="float", scale=1024),
-        Field("tag", key="tags", multi=True),
         Field("color", key="color"),
     ),
     out_map={"sizeMB": "size_mb", "color": "color"},
@@ -34,7 +33,7 @@ NS_SPEC = Spec(
 )
 
 
-def test_create_maps_keys_scale_multi_and_set(client_for):
+def test_create_maps_keys_scale_and_set(client_for):
     seen: dict[str, str] = {}
 
     def handler(req: httpx.Request) -> httpx.Response:
@@ -46,7 +45,7 @@ def test_create_maps_keys_scale_multi_and_set(client_for):
     CrudResource(GLOBAL_SPEC).create(
         client_for(handler),
         "w1",
-        fields={"size_gb": 2, "tag": ("a", "b"), "color": "red"},
+        fields={"size_gb": 2, "color": "red"},
         sets=("extra=1",),
     )
     body = seen["body"]
@@ -54,7 +53,6 @@ def test_create_maps_keys_scale_multi_and_set(client_for):
     assert seen["path"] == "/services/data/widgets"
     assert "name=w1" in body
     assert "sizeMB=2048" in body  # scale: GB -> MB
-    assert "tags=a" in body and "tags=b" in body  # multi -> repeated key
     assert "color=red" in body
     assert "extra=1" in body  # --set passthrough
 

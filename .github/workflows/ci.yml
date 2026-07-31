@@ -10,42 +10,34 @@ permissions:
   contents: read
 
 jobs:
-  check:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.10", "3.13"]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v6
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install project
-        run: |
-          uv venv
-          uv pip install -e ".[dev]"
-
-      - name: Lint
-        run: .venv/bin/ruff check .
-
-      - name: Format check
-        run: .venv/bin/ruff format --check .
-
-      - name: Type check
-        run: .venv/bin/pyright
-
-      - name: Test
-        run: .venv/bin/pytest
+  # Lint / format / type / test via the org-wide reusable gate. Every `run:`
+  # step and the zizmor policy live ONCE in dryvist/.github — this repo carries
+  # neither. `python_ci` runs _python-ci.yml: `uv run --extra dev pre-commit run
+  # --all-files` (ruff + ruff-format + pyright + hygiene + markdownlint) +
+  # central zizmor + pytest across the matrix. Gated by the `python` filter.
+  gate:
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: write # required: _ci-gate.yml's queue watchdog cancels stuck jobs
+    uses: dryvist/.github/.github/workflows/_ci-gate.yml@main
+    with:
+      python_ci: true
+      # This repo narrows to min + latest; the org default is all non-EOL.
+      python_ci_versions: '["3.10", "3.14"]'
+      filters: |
+        python:
+          - '**/*.py'
+          - '**/*.md'
+          - 'pyproject.toml'
+          - '.pre-commit-config.yaml'
+          - '.markdownlint-cli2.yaml'
+          - '.github/workflows/**'
 
   # Real create -> verify -> cleanup against a Dockerized Splunk Enterprise 10.x.
   # COST CONTROL: this is expensive (boots a Splunk container, several minutes), so
   # it runs ONLY on manual dispatch -- never on push or pull_request -- and is
-  # hard-capped by timeout-minutes. It is informational; the `check` job is the gate.
+  # hard-capped by timeout-minutes. It is informational; the `gate` job is the gate.
   # Run it on demand from the Actions tab ("Run workflow") when you want a live check.
   integration:
     if: github.event_name == 'workflow_dispatch'

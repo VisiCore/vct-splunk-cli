@@ -19,6 +19,8 @@ import configparser
 import os
 from pathlib import Path
 
+from .errors import UsageError
+
 #: The profile keys a section may define. Anything else is ignored.
 PROFILE_KEYS = ("url", "token", "session_key", "app", "owner")
 
@@ -52,7 +54,7 @@ def load_profile(name: str | None) -> dict[str, str]:
     path = config_path()
     if not path.is_file():
         return {}
-    parser = configparser.ConfigParser()
+    parser = configparser.ConfigParser(interpolation=None)
     try:
         parser.read(path)
     except (OSError, configparser.Error):
@@ -60,4 +62,12 @@ def load_profile(name: str | None) -> dict[str, str]:
     if not parser.has_section(name):
         return {}
     section = parser[name]
-    return {key: section[key] for key in PROFILE_KEYS if key in section}
+    values = {key: section[key] for key in PROFILE_KEYS if key in section}
+    if os.name == "posix" and any(values.get(key) for key in ("token", "session_key")):
+        try:
+            mode = path.stat().st_mode & 0o777
+        except OSError:
+            return {}
+        if mode & 0o077:
+            raise UsageError(f"Profile file {path} contains credentials and must have mode 0600.")
+    return values

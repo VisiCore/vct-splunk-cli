@@ -22,14 +22,18 @@ import functools
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import click
 
+from ..core.backends import deduce_backend
 from ..core.client import SplunkClient, config_from_env
 from ..core.errors import SplunkError
 from ..core.profiles import load_profile
 from . import output as out
+
+if TYPE_CHECKING:
+    from ..core.acs.client import AcsClient
 
 
 class AliasedGroup(click.Group):
@@ -69,6 +73,9 @@ class Ctx:
         profile: The active config-file profile name from ``--profile`` /
             ``$SPLUNK_PROFILE``, or None. Supplies connection settings only where
             a flag and env var leave them unset (flag > env > profile > default).
+        backend: The backend deduced from the target URL (``"enterprise"`` or
+            ``"cloud"``) -- never user-set. Commands that both backends serve use
+            it to route to splunkd REST or ACS; writes use it to stop on Cloud.
     """
 
     output_mode: str
@@ -78,6 +85,7 @@ class Ctx:
     app: str | None = None
     owner: str | None = None
     profile: str | None = None
+    backend: str = "enterprise"
 
     def client(self) -> SplunkClient:
         """Build a :class:`SplunkClient` from the environment plus this context.
@@ -98,13 +106,26 @@ class Ctx:
         cfg.dry_run = self.dry_run
         return SplunkClient(cfg)
 
+    def acs_client(self) -> AcsClient:
+        """Build an :class:`AcsClient` for the deduced Cloud stack.
+
+        Separate config from the REST :meth:`client`: the stack is derived from
+        the cloud host (``$SPLUNK_URL`` or ``--base-url``), and the ACS Bearer
+        token is read from ``$SPLUNK_ACS_TOKEN``. Use as a context manager.
+        """
+        from ..core.acs.client import AcsClient, acs_config_from_env
+        from ..core.backends import cloud_stack_from_url
+
+        stack = cloud_stack_from_url(self.base_url)
+        return AcsClient(acs_config_from_env(stack))
+
     def meta(self) -> dict[str, str | None]:
         """Return the metadata block that is attached to every JSON response.
 
         Right now this is just the target Splunk URL, so a piece of output can be
         traced back to the instance it came from.
         """
-        return {"target": self.base_url or os.environ.get("SPLUNK_URL")}
+        return {"target": self.base_url}
 
 
 def command(fn: Callable) -> Callable:
@@ -112,9 +133,9 @@ def command(fn: Callable) -> Callable:
 
     Use this on a function whose first parameter is a :class:`Ctx`. The returned
     wrapper gains the common Click options (``--output``/``--table``/
-    ``--dry-run``/``--yes``/``--base-url``), so the command body can focus on its
-    own arguments. Any :class:`SplunkError` raised by the core is caught and
-    rendered to stderr with the correct exit code via
+    ``--dry-run``/``--yes``/``--base-url``/``--app``/``--owner``), so the
+    command body can focus on its own arguments. Any :class:`SplunkError` raised
+    by the core is caught and rendered to stderr with the correct exit code via
     :func:`vct_splunk.commands.output.fail`.
 
     Args:
@@ -129,28 +150,27 @@ def command(fn: Callable) -> Callable:
         # Click passes every option to the callback by name. The shared options
         # are named explicitly here; the command's own arguments arrive untouched
         # in **kwargs and are forwarded straight through to fn.
-        profile = profile or os.environ.get("SPLUNK_PROFILE")
-        prof = load_profile(profile)
-        ctx = Ctx(
-            out.resolve_mode(output, table),
-            dry_run,
-            yes,
-            base_url,
-            # Flag > env > profile; any may stay None, in which case the namespace
-            # policy (core.namespace.resolve_ns) supplies a safe default.
-            app=app or os.environ.get("SPLUNK_APP") or prof.get("app"),
-            owner=owner or os.environ.get("SPLUNK_OWNER") or prof.get("owner"),
-            profile=profile,
-        )
         try:
+            profile = profile or os.environ.get("SPLUNK_PROFILE")
+            prof = load_profile(profile)
+            target = base_url or os.environ.get("SPLUNK_URL") or prof.get("url")
+            ctx = Ctx(
+                out.resolve_mode(output, table),
+                dry_run,
+                yes,
+                target,
+                app=app or os.environ.get("SPLUNK_APP") or prof.get("app"),
+                owner=owner or os.environ.get("SPLUNK_OWNER") or prof.get("owner"),
+                profile=profile,
+                backend=deduce_backend(target),
+            )
             return fn(ctx, **kwargs)
         except SplunkError as exc:
             # The core stays Click-free and raises typed errors; the shell layer
             # turns them into a JSON error envelope on stderr plus an exit code.
             out.fail(exc)
 
-    # Click applies decorators bottom-up, so this list ends up reading in reverse
-    # order in --help. The order is purely cosmetic.
+    # Click applies decorators bottom-up, so --help lists these in reverse order.
     options = [
         click.option(
             "--profile",

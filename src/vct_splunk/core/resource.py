@@ -32,8 +32,9 @@ class Field:
         opt: The CLI option / parameter stem, e.g. ``max_gb`` -> ``--max-gb``.
         key: The Splunk form field name to send, e.g. ``maxTotalDataSizeMB``.
         type: The value type (drives the Click option type).
-        multi: True for a repeatable option whose values send a repeated key.
         secret: True for a value never accepted as a flag (read from env/prompt).
+        required: True when ``create`` cannot proceed without it (``update``
+            never requires a field — it sends only what you pass).
         scale: Optional numeric multiplier, e.g. ``1024`` for GB -> MB.
         help: Help text for the generated option.
     """
@@ -41,8 +42,8 @@ class Field:
     opt: str
     key: str
     type: FieldType = "str"
-    multi: bool = False
     secret: bool = False
+    required: bool = False
     scale: float | None = None
     help: str = ""
 
@@ -57,7 +58,6 @@ class Spec:
             ``/services/...`` path; for a ``namespaced`` resource it is the suffix
             under ``/servicesNS/<owner>/<app>/`` (e.g. ``configs/conf-macros``).
         help: Group help text.
-        id_key: The output key holding the object's name (almost always ``name``).
         verbs: The verbs to expose; a read-only resource passes ``("list",)``.
         fields: The create/update settings.
         out_map: Splunk-content-key -> output-key. Empty means pass content through.
@@ -67,7 +67,6 @@ class Spec:
     name: str
     path: str
     help: str
-    id_key: str = "name"
     verbs: tuple[Verb, ...] = ("list", "get", "create", "update", "delete")
     fields: tuple[Field, ...] = ()
     out_map: dict[str, str] = field(default_factory=dict)
@@ -77,9 +76,8 @@ class Spec:
 class CrudResource:
     """The generic CRUD operations for one :class:`Spec`, bound at construction.
 
-    Mirrors the hand-written :mod:`vct_splunk.core.indexes` module, generalized
-    over a spec. Namespaced resources take an ``owner`` and ``app`` (resolved by
-    the command layer); global resources ignore them.
+    Namespaced resources take an ``owner`` and ``app`` (resolved by the command
+    layer); global resources ignore them.
     """
 
     def __init__(self, spec: Spec) -> None:
@@ -109,7 +107,7 @@ class CrudResource:
         app: str | None = None,
     ) -> dict[str, Any]:
         data = self._body(fields, sets)
-        data[self.spec.id_key] = name
+        data["name"] = name
         return self._unwrap(client.write("POST", self._base(owner, app), data))
 
     def update(
@@ -159,9 +157,7 @@ class CrudResource:
             if value is None or value == ():
                 continue
             f = by_opt[opt]
-            if f.multi:
-                data[f.key] = list(value)
-            elif f.scale is not None:
+            if f.scale is not None:
                 data[f.key] = int(float(value) * f.scale)
             elif f.type == "bool":
                 data[f.key] = int(bool(value))
@@ -181,13 +177,16 @@ class CrudResource:
     def _out(self, entry: dict[str, Any]) -> dict[str, Any]:
         content = entry.get("content") or {}
         acl = entry.get("acl") or {}
-        out: dict[str, Any] = {}
+        # The name leads (first table column / JSON key); reassigning it after
+        # the content merge keeps the entry name authoritative over any content
+        # key of the same name.
+        out: dict[str, Any] = {"name": entry.get("name")}
         if self.spec.out_map:
             for splunk_key, out_key in self.spec.out_map.items():
                 out[out_key] = content.get(splunk_key)
         else:
             out.update(content)
-        out[self.spec.id_key] = entry.get("name")  # authoritative id, set last
+        out["name"] = entry.get("name")
         if self.spec.namespaced:
             out["app"] = acl.get("app")
             out["owner"] = acl.get("owner")

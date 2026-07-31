@@ -21,9 +21,42 @@ from ..core.namespace import resolve_ns
 from ..core.resource import CrudResource, Field, Spec
 from . import output as out
 from .context import AliasedGroup, command
+from .dispatch import dispatch_list, has_cloud_list
 from .write import do_write
 
 _VERB_ALIASES = {"add": "create", "edit": "update", "remove": "delete"}
+
+
+def _help_for(spec: Spec, verb: str) -> str:
+    """One-line help for a generated command, in the hand-written commands' style."""
+    noun = spec.name.replace("-", " ")
+    a = f"an {noun}" if noun[0] in "aeiou" else f"a {noun}"
+    gated = " Gated write (--dry-run previews; --yes when non-interactive)."
+    ns = " Requires an app (--app or $SPLUNK_APP)." if spec.namespaced else ""
+    texts = {
+        "list": f"List every {noun}.",
+        "get": f"Show one {noun}.",
+        "create": f"Create {a}.{gated}{ns}",
+        "update": f"Update {a} (only the fields you pass).{gated}{ns}",
+        "delete": f"Delete {a}.{gated}{ns}",
+        "enable": f"Enable {a}.{gated}",
+        "disable": f"Disable {a}.{gated}",
+    }
+    return texts[verb]
+
+
+def _gate_args(spec: Spec, verb: str, name: str, owner, app) -> tuple[str, dict[str, Any]]:
+    """The confirmation phrase and audit event for one gated write.
+
+    Namespaced resources name the target app in the prompt and record the
+    resolved namespace in the audit log.
+    """
+    action = f"{verb} {spec.name} '{name}'"
+    event: dict[str, Any] = {"action": f"{spec.name}.{verb}", "name": name}
+    if spec.namespaced:
+        action += f" in app '{app}'"
+        event.update({"app": app, "owner": owner})
+    return action, event
 
 
 def build_group(spec: Spec) -> click.Group:
@@ -37,16 +70,26 @@ def build_group(spec: Spec) -> click.Group:
 
     if "list" in spec.verbs:
 
-        @grp.command("list")
+        @grp.command("list", help=_help_for(spec, "list"))
         @command
         def _list(ctx) -> None:
+            # Resources both backends serve (index/role/hec-token) route by the
+            # deduced backend: ACS on Cloud, REST otherwise. These specs are not
+            # namespaced, so there is no owner/app to resolve for the Cloud path.
+            if has_cloud_list(spec.name):
+                out.emit(
+                    dispatch_list(ctx, spec.name, lambda c: res.list(c, owner=None, app=None)),
+                    ctx.output_mode,
+                    ctx.meta(),
+                )
+                return
             owner, app = _ns(ctx, spec, for_write=False)
             with ctx.client() as c:
                 out.emit(res.list(c, owner=owner, app=app), ctx.output_mode, ctx.meta())
 
     if "get" in spec.verbs:
 
-        @grp.command("get")
+        @grp.command("get", help=_help_for(spec, "get"))
         @click.argument("name")
         @command
         def _get(ctx, name) -> None:
@@ -56,24 +99,25 @@ def build_group(spec: Spec) -> click.Group:
 
     if "create" in spec.verbs:
 
-        @grp.command("create")
+        @grp.command("create", help=_help_for(spec, "create"))
         @click.argument("name")
-        @_field_options(spec)
+        @_field_options(spec, for_create=True)
         @command
         def _create(ctx, name, **opts) -> None:
             owner, app = _ns(ctx, spec, for_write=True)
             fields, sets = _collect_fields(spec, opts)
+            action, event = _gate_args(spec, "create", name, owner, app)
             result = do_write(
                 ctx,
-                action=f"create {spec.name} '{name}'",
-                audit_event={"action": f"{spec.name}.create", "name": name},
+                action=action,
+                audit_event=event,
                 run=lambda c: res.create(c, name, fields=fields, sets=sets, owner=owner, app=app),
             )
             out.emit(result, ctx.output_mode, ctx.meta())
 
     if "update" in spec.verbs:
 
-        @grp.command("update")
+        @grp.command("update", help=_help_for(spec, "update"))
         @click.argument("name")
         @_field_options(spec)
         @command
@@ -82,25 +126,27 @@ def build_group(spec: Spec) -> click.Group:
             fields, sets = _collect_fields(spec, opts)
             if not sets and all(v in (None, ()) for v in fields.values()):
                 raise UsageError("Nothing to update. Pass a field option or --set KEY=VALUE.")
+            action, event = _gate_args(spec, "update", name, owner, app)
             result = do_write(
                 ctx,
-                action=f"update {spec.name} '{name}'",
-                audit_event={"action": f"{spec.name}.update", "name": name},
+                action=action,
+                audit_event=event,
                 run=lambda c: res.update(c, name, fields=fields, sets=sets, owner=owner, app=app),
             )
             out.emit(result, ctx.output_mode, ctx.meta())
 
     if "delete" in spec.verbs:
 
-        @grp.command("delete")
+        @grp.command("delete", help=_help_for(spec, "delete"))
         @click.argument("name")
         @command
         def _delete(ctx, name) -> None:
             owner, app = _ns(ctx, spec, for_write=True)
+            action, event = _gate_args(spec, "delete", name, owner, app)
             result = do_write(
                 ctx,
-                action=f"delete {spec.name} '{name}'",
-                audit_event={"action": f"{spec.name}.delete", "name": name},
+                action=action,
+                audit_event=event,
                 run=lambda c: res.delete(c, name, owner=owner, app=app),
             )
             out.emit(result, ctx.output_mode, ctx.meta())
@@ -115,27 +161,32 @@ def build_group(spec: Spec) -> click.Group:
 def _add_control(grp: click.Group, spec: Spec, res: CrudResource, verb: str) -> None:
     """Register an enable/disable control command (kept in a helper to bind *verb*)."""
 
-    @grp.command(verb)
+    @grp.command(verb, help=_help_for(spec, verb))
     @click.argument("name")
     @command
     def _control(ctx, name) -> None:
         owner, app = _ns(ctx, spec, for_write=True)
+        action, event = _gate_args(spec, verb, name, owner, app)
         result = do_write(
             ctx,
-            action=f"{verb} {spec.name} '{name}'",
-            audit_event={"action": f"{spec.name}.{verb}", "name": name},
+            action=action,
+            audit_event=event,
             run=lambda c: res.control(c, name, verb, owner=owner, app=app),
         )
         out.emit(result, ctx.output_mode, ctx.meta())
 
 
-def _field_options(spec: Spec):
-    """A decorator that adds one Click option per (non-secret) field, plus --set."""
+def _field_options(spec: Spec, *, for_create: bool = False):
+    """A decorator that adds one Click option per (non-secret) field, plus --set.
+
+    ``required`` fields are enforced only on create; update always sends just
+    the fields you pass.
+    """
     options = []
     for f in spec.fields:
         if f.secret:
             continue  # secrets are read from env / prompt, never a flag
-        options.append(_option_for(f))
+        options.append(_option_for(f, required=for_create and f.required))
     options.append(
         click.option(
             "--set",
@@ -154,13 +205,17 @@ def _field_options(spec: Spec):
     return decorate
 
 
-def _option_for(f: Field):
+def _option_for(f: Field, *, required: bool = False):
     dashed = f.opt.replace("_", "-")
     if f.type == "bool":
         return click.option(f"--{dashed}/--no-{dashed}", f.opt, default=None, help=f.help)
-    kwargs: dict[str, Any] = {"default": None, "help": f.help}
-    if f.multi:
-        kwargs["multiple"] = True
+    # An explicit default (even None) satisfies `required` in Click, so a
+    # required option must carry no default at all.
+    kwargs: dict[str, Any] = {"help": f.help}
+    if required:
+        kwargs["required"] = True
+    else:
+        kwargs["default"] = None
     if f.type == "int":
         kwargs["type"] = int
     elif f.type == "float":

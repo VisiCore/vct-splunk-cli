@@ -1,5 +1,6 @@
-"""One CLI smoke through a factory-generated group (user), proving the wiring:
-field options, secret-from-env, do_write gating, verb subsetting, and aliases.
+"""CLI smoke through factory-generated groups, proving the wiring the engine
+tests can't see: field options, secret-from-env, verb subsetting, --set
+passthrough, and the enable/disable control path.
 """
 
 from __future__ import annotations
@@ -8,25 +9,9 @@ import httpx
 from click.testing import CliRunner
 
 from vct_splunk.cli import cli
-from vct_splunk.core.client import ClientConfig, SplunkClient
 
 
-def _env(monkeypatch):
-    monkeypatch.setenv("SPLUNK_URL", "https://splunk.test:8089")
-    monkeypatch.setenv("SPLUNK_TOKEN", "T")
-    monkeypatch.delenv("SPLUNK_USER_PASSWORD", raising=False)
-
-
-def _patch_client(monkeypatch, handler):
-    def make(self):
-        cfg = ClientConfig(base_url="https://splunk.test:8089", token="T", dry_run=self.dry_run)
-        return SplunkClient(cfg, transport=httpx.MockTransport(handler))
-
-    monkeypatch.setattr("vct_splunk.commands.context.Ctx.client", make)
-
-
-def test_generated_user_create_dry_run_previews(monkeypatch):
-    _env(monkeypatch)
+def test_generated_user_create_previews_set_fields(cli_env):
     result = CliRunner().invoke(
         cli,
         [
@@ -43,38 +28,46 @@ def test_generated_user_create_dry_run_previews(monkeypatch):
         ],
     )
     assert result.exit_code == 0
-    assert '"dry_run": true' in result.output
     assert "/services/authentication/users" in result.output
+    assert '"roles": "admin"' in result.output  # --set pairs land in the preview body
     assert "alice" in result.output
 
 
-def test_generated_user_create_refuses_without_yes(monkeypatch):
-    _env(monkeypatch)
-    result = CliRunner().invoke(
-        cli, ["user", "create", "alice", "--set", "roles=admin", "--output", "json"]
-    )
-    assert result.exit_code == 2
-    assert "usage_error" in result.output
-
-
-def test_capability_is_read_only(monkeypatch):
-    _env(monkeypatch)
+def test_capability_is_read_only(cli_env):
     # Verb subsetting: a read-only spec exposes no create subcommand.
     result = CliRunner().invoke(cli, ["capability", "create", "x"])
     assert result.exit_code == 2  # Click: no such command
 
 
-def test_password_is_never_a_flag(monkeypatch):
-    _env(monkeypatch)
+def test_password_is_never_a_flag(cli_env):
     result = CliRunner().invoke(
         cli, ["user", "create", "alice", "--password", "hunter2", "--dry-run", "--output", "json"]
     )
-    assert result.exit_code == 2  # no such option
-    assert "no such option" in result.output.lower()
+    # The secret field must not exist as an option (Click rejects it as unknown).
+    assert result.exit_code == 2
 
 
-def test_password_read_from_env_not_flag(monkeypatch, tmp_path):
-    _env(monkeypatch)
+def test_password_prompted_on_a_tty_when_env_unset(cli_env, patch_client, monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    monkeypatch.setenv("VCT_SPLUNK_AUDIT", str(tmp_path / "audit.log"))
+    # Rebind the module's `sys` (CliRunner swaps the real sys.stdin mid-invoke).
+    tty = SimpleNamespace(isatty=lambda: True)
+    monkeypatch.setattr("vct_splunk.commands.factory.sys", SimpleNamespace(stdin=tty, stderr=tty))
+    monkeypatch.setattr("vct_splunk.commands.factory.click.prompt", lambda *a, **k: "fromprompt")
+    seen: dict[str, str] = {}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen["body"] = req.content.decode()
+        return httpx.Response(201, json={"entry": [{"name": "alice", "content": {}}]})
+
+    patch_client(handler)
+    result = CliRunner().invoke(cli, ["user", "create", "alice", "--yes", "--output", "json"])
+    assert result.exit_code == 0, result.output
+    assert "password=fromprompt" in seen["body"]
+
+
+def test_password_read_from_env_not_flag(cli_env, patch_client, monkeypatch, tmp_path):
     monkeypatch.setenv("SPLUNK_USER_PASSWORD", "hunter2")
     monkeypatch.setenv("VCT_SPLUNK_AUDIT", str(tmp_path / "audit.log"))
     seen: dict[str, str] = {}
@@ -83,7 +76,7 @@ def test_password_read_from_env_not_flag(monkeypatch, tmp_path):
         seen["body"] = req.content.decode()
         return httpx.Response(201, json={"entry": [{"name": "alice", "content": {}}]})
 
-    _patch_client(monkeypatch, handler)
+    patch_client(handler)
     result = CliRunner().invoke(
         cli, ["user", "create", "alice", "--set", "roles=admin", "--yes", "--output", "json"]
     )
@@ -91,60 +84,31 @@ def test_password_read_from_env_not_flag(monkeypatch, tmp_path):
     assert "password=hunter2" in seen["body"]  # secret pulled from env, sent on the wire
 
 
-def test_add_alias_on_generated_group(monkeypatch):
-    _env(monkeypatch)
-    result = CliRunner().invoke(
-        cli, ["user", "add", "alice", "--set", "roles=admin", "--dry-run", "--output", "json"]
-    )
-    assert result.exit_code == 0
-    assert '"dry_run": true' in result.output
-
-
-def test_namespaced_generated_group_requires_app(monkeypatch):
-    _env(monkeypatch)
-    monkeypatch.delenv("SPLUNK_APP", raising=False)
-    # macro is namespaced -> a write without --app must refuse (never target 'search').
-    result = CliRunner().invoke(
-        cli, ["macro", "create", "m1", "--set", "definition=x", "--dry-run", "--output", "json"]
-    )
-    assert result.exit_code == 2
-    assert "usage_error" in result.output
-
-
-def test_namespaced_generated_group_previews_app_namespace(monkeypatch):
-    _env(monkeypatch)
+def test_namespaced_write_audits_app_and_owner(cli_env, patch_client, monkeypatch, tmp_path):
+    audit_file = tmp_path / "audit.log"
+    monkeypatch.setenv("VCT_SPLUNK_AUDIT", str(audit_file))
+    patch_client(lambda req: httpx.Response(201, json={"entry": [{"name": "m1", "content": {}}]}))
     result = CliRunner().invoke(
         cli,
-        [
-            "macro",
-            "create",
-            "m1",
-            "--set",
-            "definition=x",
-            "--app",
-            "my_app",
-            "--dry-run",
-            "--output",
-            "json",
-        ],
+        ["macro", "create", "m1", "--set", "definition=x", "--app", "my_app", "--yes"],
     )
-    assert result.exit_code == 0
-    assert "/servicesNS/nobody/my_app/configs/conf-macros" in result.output
+    assert result.exit_code == 0, result.output
+    contents = audit_file.read_text()
+    assert '"app": "my_app"' in contents
+    assert '"owner": "nobody"' in contents
 
 
-def test_global_input_group_lists(monkeypatch):
-    _env(monkeypatch)
+def test_control_verb_posts_control_endpoint(cli_env, patch_client, monkeypatch, tmp_path):
+    monkeypatch.setenv("VCT_SPLUNK_AUDIT", str(tmp_path / "audit.log"))
+    seen: dict[str, str] = {}
 
     def handler(req: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            200,
-            json={
-                "entry": [{"name": "/var/log", "content": {"index": "main"}}],
-                "paging": {"total": 1},
-            },
-        )
+        seen["method"] = req.method
+        seen["path"] = req.url.path
+        return httpx.Response(200, json={})
 
-    _patch_client(monkeypatch, handler)
-    result = CliRunner().invoke(cli, ["monitor-input", "list", "--output", "json"])
-    assert result.exit_code == 0
-    assert "/var/log" in result.output
+    patch_client(handler)
+    result = CliRunner().invoke(cli, ["monitor-input", "disable", "mon1", "--yes"])
+    assert result.exit_code == 0, result.output
+    assert seen["method"] == "POST"
+    assert seen["path"] == "/services/data/inputs/monitor/mon1/disable"

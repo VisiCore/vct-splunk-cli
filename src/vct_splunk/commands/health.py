@@ -17,9 +17,11 @@ def health() -> None:
 @health.command("check")
 @command
 def check(ctx) -> None:
-    """Check Splunk health. Exits non-zero if any finding is warn or fail."""
+    """Check Splunk health. Exits 5 if any finding is warn or fail."""
     with ctx.client() as c:
         verdicts = core.check_health(c)
     out.emit(verdicts, ctx.output_mode, ctx.meta())
     if any(v["finding"] in ("warn", "fail") for v in verdicts):
-        raise SystemExit(1)
+        # Exit 5 is reserved for health findings so scripts can tell a sick
+        # Splunk (the check itself succeeded) from a failed request (exit 1).
+        raise SystemExit(5)

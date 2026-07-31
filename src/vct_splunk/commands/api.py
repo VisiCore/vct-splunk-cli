@@ -17,7 +17,9 @@ def api() -> None:
 
 @api.command("get")
 @click.argument("path")
-@click.option("--query", "-q", multiple=True, metavar="K=V", help="Query parameter (repeatable).")
+@click.option(
+    "--query", "-q", multiple=True, metavar="KEY=VALUE", help="Query parameter (repeatable)."
+)
 @command
 def get(ctx, path, query) -> None:
     """GET any /services/... endpoint and print the JSON."""
@@ -30,7 +32,7 @@ def _parse_query(pairs) -> dict[str, str] | None:
     result: dict[str, str] = {}
     for kv in pairs:
         if "=" not in kv:
-            raise UsageError(f"--query expects K=V (got {kv!r}).")
+            raise UsageError(f"--query expects KEY=VALUE (got {kv!r}).")
         key, value = kv.split("=", 1)
         result[key] = value
     return result or None
