@@ -10,34 +10,38 @@ permissions:
   contents: read
 
 jobs:
-  # Run the shared non-Python gate first. The Python job below depends on this
-  # result, so tests do not start when an earlier CI check has failed.
-  gate:
+  # Review dependency changes on every pull request. This repository is public,
+  # so GitHub can provide the dependency graph used by this official action.
+  dependency-review:
     permissions:
       contents: read
-      pull-requests: read
-      actions: write # required: _ci-gate.yml's queue watchdog cancels stuck jobs
-    uses: dryvist/.github/.github/workflows/_ci-gate.yml@main
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5
+        with:
+          fail-on-severity: moderate
+
+  # Keep workflow-policy enforcement centralized without instantiating the
+  # unrelated Nix, Ansible, Markdown, or file-size jobs from _ci-gate.
+  workflow-security:
+    if: github.event_name == 'pull_request'
+    uses: dryvist/.github/.github/workflows/_zizmor.yml@main
     with:
-      python_ci: false
-      filters: |
-        python:
-          - '**/*.py'
-          - '**/*.md'
-          - 'pyproject.toml'
-          - '.pre-commit-config.yaml'
-          - '.markdownlint-cli2.yaml'
-          - '.github/workflows/**'
+      runner_label: ubuntu-latest
 
   # Run only the latest supported Python on PRs. A push to main (which occurs
   # after a merge) runs the supported min/latest matrix. This is deliberately
-  # downstream of the shared non-Python gate above.
+  # downstream of every applicable pull-request check above.
   python:
-    needs: gate
+    needs: [dependency-review, workflow-security]
     if: >-
       ${{
-        needs.gate.result == 'success' &&
-        (github.event_name == 'pull_request' || github.event_name == 'push')
+        !cancelled() &&
+        (github.event_name == 'push' ||
+          (needs.dependency-review.result == 'success' &&
+            needs.workflow-security.result == 'success'))
       }}
     uses: dryvist/.github/.github/workflows/_python-ci.yml@main
     with:
