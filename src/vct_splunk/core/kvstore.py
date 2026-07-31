@@ -49,7 +49,7 @@ def list_records(
         params["query"] = query
     if limit is not None:
         params["limit"] = limit
-    return client.get_json(_path(collection, owner=owner, app=app), params or None)
+    return client.get(_path(collection, owner=owner, app=app), params or None)
 
 
 def get_record(client: SplunkClient, collection: str, key: str, *, owner: str, app: str) -> Any:
@@ -59,7 +59,7 @@ def get_record(client: SplunkClient, collection: str, key: str, *, owner: str, a
         NotFoundError: If the record does not exist (a 404 already maps to
             NotFoundError in the client; an empty body is treated the same).
     """
-    record = client.get_json(_path(collection, key=key, owner=owner, app=app))
+    record = client.get(_path(collection, key=key, owner=owner, app=app))
     if not record:
         raise NotFoundError(f"Record {key!r} not found in collection {collection!r}.")
     return record

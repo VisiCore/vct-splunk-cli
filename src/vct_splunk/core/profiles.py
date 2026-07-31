@@ -38,7 +38,7 @@ def config_path() -> Path:
     return base / "vct-splunk" / "config"
 
 
-def load_profile(name: str | None) -> dict[str, str]:
+def load_profile(name: str | None, *, credentials: bool = True) -> dict[str, str]:
     """Return the named profile's keys, or ``{}`` when there is nothing to load.
 
     Args:
@@ -57,17 +57,34 @@ def load_profile(name: str | None) -> dict[str, str]:
     parser = configparser.ConfigParser(interpolation=None)
     try:
         parser.read(path)
-    except (OSError, configparser.Error):
+    except UnicodeError as exc:
+        raise UsageError(f"Profile file {path} is not valid UTF-8.") from exc
+    except configparser.Error as exc:
+        raise UsageError(f"Profile file {path} is malformed: {exc}.") from exc
+    except OSError:
         return {}
     if not parser.has_section(name):
         return {}
     section = parser[name]
-    values = {key: section[key] for key in PROFILE_KEYS if key in section}
-    if os.name == "posix" and any(values.get(key) for key in ("token", "session_key")):
-        try:
-            mode = path.stat().st_mode & 0o777
-        except OSError:
-            return {}
-        if mode & 0o077:
-            raise UsageError(f"Profile file {path} contains credentials and must have mode 0600.")
+    keys = (
+        PROFILE_KEYS
+        if credentials
+        else tuple(key for key in PROFILE_KEYS if key not in {"token", "session_key"})
+    )
+    values = {key: section[key] for key in keys if key in section}
     return values
+
+
+def require_private_profile() -> None:
+    """Require owner-only access before a selected profile credential is used."""
+    if os.name != "posix":
+        return
+    path = config_path()
+    try:
+        mode = path.stat().st_mode & 0o777
+    except OSError:
+        return
+    if mode & 0o077:
+        raise UsageError(
+            f"Profile file {path} contains selected credentials and must have mode 0600."
+        )

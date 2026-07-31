@@ -14,8 +14,8 @@ import sys
 import click
 
 from ..core import auth as core
+from ..core.client import auth_status_from_env
 from ..core.errors import UsageError
-from ..core.profiles import load_profile
 from . import output as out
 from .context import command
 
@@ -32,7 +32,7 @@ def _resolve_username(username: str | None) -> str:
     username = username or os.environ.get("SPLUNK_USERNAME")
     if username:
         return username
-    if not sys.stdin.isatty():
+    if not (sys.stdin.isatty() and sys.stderr.isatty()):
         raise UsageError("No username. Set SPLUNK_USERNAME or pass --username.")
     return click.prompt("Username", err=True)
 
@@ -46,7 +46,7 @@ def _resolve_password() -> str:
     password = os.environ.get("SPLUNK_PASSWORD")
     if password:
         return password
-    if not sys.stdin.isatty():
+    if not (sys.stdin.isatty() and sys.stderr.isatty()):
         raise UsageError("No password. Set SPLUNK_PASSWORD (run interactively to be prompted).")
     return click.prompt("Password", hide_input=True, err=True)
 
@@ -69,6 +69,22 @@ def login(ctx, username: str | None) -> None:
     url = ctx.base_url
     if not url:
         raise UsageError("No Splunk URL. Set SPLUNK_URL, select a profile, or pass --base-url.")
+    if ctx.dry_run:
+        preview = {
+            "dry_run": True,
+            "request": {
+                "method": "POST",
+                "path": "/services/auth/login",
+                "body": {
+                    "username": username or os.environ.get("SPLUNK_USERNAME") or "<prompt>",
+                    "password": "<redacted>",
+                    "output_mode": "json",
+                },
+            },
+            "target": url,
+        }
+        out.emit(preview, ctx.output_mode, ctx.meta())
+        return
     key = core.login(url, _resolve_username(username), _resolve_password(), verify=_verify())
     out.emit({"session_key": key}, ctx.output_mode, ctx.meta())
 
@@ -77,12 +93,9 @@ def login(ctx, username: str | None) -> None:
 @command
 def status(ctx) -> None:
     """Report the resolved target URL and active auth scheme (no secret shown)."""
-    prof = load_profile(ctx.profile)
-    url = ctx.base_url or os.environ.get("SPLUNK_URL") or prof.get("url")
-    if os.environ.get("SPLUNK_TOKEN") or prof.get("token"):
-        scheme = "Bearer"
-    elif os.environ.get("SPLUNK_SESSION_KEY") or prof.get("session_key"):
-        scheme = "Splunk"
-    else:
-        scheme = "none"
-    out.emit({"target": url, "auth_scheme": scheme}, ctx.output_mode, ctx.meta())
+    resolved = auth_status_from_env(ctx.base_url, profile=ctx.profile)
+    out.emit(
+        {"target": resolved.base_url, "auth_scheme": resolved.auth_scheme},
+        ctx.output_mode,
+        ctx.meta(),
+    )

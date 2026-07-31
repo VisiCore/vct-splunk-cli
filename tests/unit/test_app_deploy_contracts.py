@@ -44,13 +44,20 @@ def test_app_install_audit_uses_sanitized_url(cli_env, patch_client, monkeypatch
     audit = tmp_path / "audit.log"
     monkeypatch.setenv("VCT_SPLUNK_AUDIT", str(audit))
     source = "https://user:password@example.test:8443/apps/example.spl?token=secret#fragment"
-    patch_client(lambda req: httpx.Response(201, json={"entry": []}))
+    seen: dict[str, list[str]] = {}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen.update(parse_qs(req.content.decode()))
+        return httpx.Response(201, json={"entry": []})
+
+    patch_client(handler)
 
     result = CliRunner().invoke(
         cli, ["app", "install", "--url", source, "--yes", "--output", "json"]
     )
 
     assert result.exit_code == 0
+    assert seen == {"name": [source]}
     record = json.loads(audit.read_text())
     assert record["source"] == "https://example.test:8443/apps/example.spl"
     assert "user" not in audit.read_text()
@@ -58,6 +65,24 @@ def test_app_install_audit_uses_sanitized_url(cli_env, patch_client, monkeypatch
     assert "token" not in audit.read_text()
     assert "secret" not in audit.read_text()
     assert "fragment" not in audit.read_text()
+
+
+def test_app_install_dry_run_uses_sanitized_url(cli_env, patch_client):
+    source = "https://user:password@example.test:8443/apps/example.spl?token=secret#fragment"
+    patch_client(
+        lambda req: (_ for _ in ()).throw(AssertionError("dry-run must not send a request"))
+    )
+
+    result = CliRunner().invoke(
+        cli,
+        ["app", "install", "--url", source, "--dry-run", "--output", "json"],
+    )
+
+    assert result.exit_code == 0
+    body = json.loads(result.output)
+    assert body["data"]["request"]["body"] == {"name": "https://example.test:8443/apps/example.spl"}
+    for secret in ("user", "password", "token", "secret", "fragment"):
+        assert secret not in result.output
 
 
 def test_app_install_help_has_no_caller_local_file_option():

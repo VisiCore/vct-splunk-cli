@@ -11,7 +11,7 @@ import httpx
 import pytest
 
 from vct_splunk.commands.registry import INDEX, REGISTRY, SAVED_SEARCH
-from vct_splunk.core.errors import NotFoundError
+from vct_splunk.core.errors import NotFoundError, UsageError
 from vct_splunk.core.resource import CrudResource, Field, Spec
 
 GLOBAL_SPEC = Spec(
@@ -47,7 +47,7 @@ def test_create_maps_keys_scale_and_set(client_for):
         client_for(handler),
         "w1",
         fields={"size_gb": 2, "color": "red"},
-        sets=("extra=1",),
+        sets={"extra": "1"},
     )
     body = seen["body"]
     assert seen["method"] == "POST"
@@ -101,3 +101,49 @@ def test_every_registry_spec_uses_the_generic_read_engine(spec, client_for):
         f"/servicesNS/nobody/my_app/{spec.path.lstrip('/')}" if spec.namespaced else spec.path
     )
     assert seen == {"method": "GET", "path": expected}
+
+
+@pytest.mark.parametrize("operation", ["get", "update", "delete", "control"])
+def test_dynamic_name_paths_are_encoded(client_for, operation):
+    seen: dict[str, str] = {}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen["path"] = req.url.raw_path.decode().partition("?")[0]
+        return httpx.Response(200, json={"entry": [{"name": "east west", "content": {}}]})
+
+    resource = CrudResource(GLOBAL_SPEC)
+    client = client_for(handler)
+    if operation == "get":
+        resource.get(client, "east west")
+        suffix = ""
+    elif operation == "update":
+        resource.update(client, "east west", fields={"color": "blue"})
+        suffix = ""
+    elif operation == "delete":
+        resource.delete(client, "east west")
+        suffix = ""
+    else:
+        resource.control(client, "east west", "enable")
+        suffix = "/enable"
+
+    assert seen["path"] == f"/services/data/widgets/east%20west{suffix}"
+
+
+@pytest.mark.parametrize("operation", ["get", "update", "delete", "control"])
+@pytest.mark.parametrize("name", ["..", "a/b", "a\\b", "%252fetc", "a\nb"])
+def test_dynamic_name_traversal_sends_no_request(client_for, operation, name):
+    requests: list[httpx.Request] = []
+    resource = CrudResource(GLOBAL_SPEC)
+    client = client_for(lambda req: requests.append(req) or httpx.Response(200, json={"entry": []}))
+
+    with pytest.raises(UsageError):
+        if operation == "get":
+            resource.get(client, name)
+        elif operation == "update":
+            resource.update(client, name, fields={"color": "blue"})
+        elif operation == "delete":
+            resource.delete(client, name)
+        else:
+            resource.control(client, name, "enable")
+
+    assert requests == []

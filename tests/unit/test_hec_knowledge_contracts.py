@@ -72,14 +72,33 @@ def test_dynamic_names_refuse_traversal_before_request(cli_env, patch_client, na
 
 
 def test_datamodel_accelerate_encodes_name_and_sends_exact_body(cli_env, patch_client):
-    seen: dict[str, object] = {}
+    seen: list[dict[str, object]] = []
 
     def handler(req: httpx.Request) -> httpx.Response:
-        seen.update(
-            method=req.method,
-            path=req.url.raw_path.decode().partition("?")[0],
-            form=parse_qs(req.content.decode()),
+        seen.append(
+            {
+                "method": req.method,
+                "path": req.url.raw_path.decode().partition("?")[0],
+                "form": parse_qs(req.content.decode()),
+            }
         )
+        if req.method == "GET":
+            return httpx.Response(
+                200,
+                json={
+                    "entry": [
+                        {
+                            "name": "Auth Model",
+                            "content": {
+                                "acceleration": (
+                                    '{"enabled":false,"earliest_time":"-30d",'
+                                    '"cron_schedule":"15 * * * *"}'
+                                )
+                            },
+                        }
+                    ]
+                },
+            )
         return httpx.Response(200, json={"entry": []})
 
     patch_client(handler)
@@ -98,11 +117,43 @@ def test_datamodel_accelerate_encodes_name_and_sends_exact_body(cli_env, patch_c
     )
 
     assert result.exit_code == 0
-    assert seen == {
-        "method": "POST",
-        "path": "/servicesNS/nobody/search/datamodel/model/Auth%20Model",
-        "form": {"acceleration": ['{"enabled": true}']},
-    }
+    assert seen == [
+        {
+            "method": "GET",
+            "path": "/servicesNS/nobody/search/datamodel/model/Auth%20Model",
+            "form": {},
+        },
+        {
+            "method": "POST",
+            "path": "/servicesNS/nobody/search/datamodel/model/Auth%20Model",
+            "form": {
+                "acceleration": [
+                    '{"enabled":true,"earliest_time":"-30d","cron_schedule":"15 * * * *"}'
+                ]
+            },
+        },
+    ]
+
+
+def test_datamodel_accelerate_refuses_malformed_current_settings(cli_env, patch_client):
+    requests: list[httpx.Request] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        requests.append(req)
+        return httpx.Response(
+            200,
+            json={"entry": [{"name": "model", "content": {"acceleration": "not-json"}}]},
+        )
+
+    patch_client(handler)
+    result = CliRunner().invoke(
+        cli,
+        ["datamodel", "accelerate", "model", "--app", "search", "--yes", "--output", "json"],
+    )
+
+    assert result.exit_code == 1
+    assert [request.method for request in requests] == ["GET"]
+    assert "malformed acceleration settings" in result.output
 
 
 def test_lookup_upload_sends_server_staging_path(cli_env, patch_client):

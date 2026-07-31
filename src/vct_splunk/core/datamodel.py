@@ -6,9 +6,11 @@ spec. Toggling acceleration does not fit the CRUD shape and lives here.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from .client import SplunkClient
+from .errors import APIError, NotFoundError
 from .namespace import ns_path
 from .path import path_segment
 
@@ -20,16 +22,31 @@ def accelerate(
 ) -> dict[str, Any]:
     """Toggle acceleration on a data model.
 
-    Posts to the model stanza with an ``acceleration`` JSON field carrying
-    ``{"enabled": true|false}``. Splunk merges this into the model's
-    acceleration settings; only the ``enabled`` flag is changed.
-
-    ponytail: we send only ``acceleration={"enabled": ...}`` to the model
-    endpoint -- the simplest form Splunk accepts. Other acceleration knobs
-    (earliest time, cron) are reachable via ``datamodel update --set`` and are
-    not modeled here until a real need appears.
+    Splunk replaces the model's ``acceleration`` document rather than merging
+    its members. Applied writes therefore read the current document first and
+    change only ``enabled``, preserving tuning such as earliest time and cron.
+    Dry-runs remain request-free and preview the requested flag.
     """
-    flag = "true" if enabled else "false"
-    body = {"acceleration": f'{{"enabled": {flag}}}'}
     encoded = path_segment(name, label="data model name")
-    return client.write("POST", ns_path(f"{_MODEL}/{encoded}", owner=owner, app=app), body)
+    path = ns_path(f"{_MODEL}/{encoded}", owner=owner, app=app)
+    acceleration: dict[str, Any] = {}
+    if not client.config.dry_run:
+        entries = client.get(path).get("entry") or []
+        if not entries:
+            raise NotFoundError(f"Data model {name!r} not found.")
+        raw = (entries[0].get("content") or {}).get("acceleration")
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw)
+            except (TypeError, json.JSONDecodeError) as exc:
+                raise APIError(
+                    "Data model response contained malformed acceleration settings."
+                ) from exc
+        if raw is None:
+            raw = {}
+        if not isinstance(raw, dict):
+            raise APIError("Data model response contained malformed acceleration settings.")
+        acceleration = dict(raw)
+    acceleration["enabled"] = enabled
+    body = {"acceleration": json.dumps(acceleration, separators=(",", ":"))}
+    return client.write("POST", path, body)

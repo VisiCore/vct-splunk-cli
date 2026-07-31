@@ -14,13 +14,11 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 from .client import SplunkClient
-from .errors import SplunkError
+from .errors import AuthError, NotFoundError, SplunkError
 from .search import run_search
 
 _FINDING = {"green": "pass", "yellow": "warn", "red": "fail"}
 
-# Health checks ship as versioned data so a consumer can tell which generation of
-# thresholds and SPL produced a verdict. Bump when a check's meaning changes.
 HEALTH_CHECKS_VERSION = "1"
 
 # Calibration knobs for the resource/introspection checks. They are named module
@@ -29,6 +27,7 @@ _CPU_WARN_PCT = 90.0  # warn when combined system+user CPU exceeds this percenta
 _MEM_WARN_PCT = 90.0  # warn when used memory exceeds this percentage of total
 _DISK_WARN_FREE_PCT = 10.0  # warn when a partition's free space drops below this
 _ERROR_WARN_COUNT = 100  # warn when splunkd ERROR events in the window exceed this
+_INTERNAL_ERROR_WINDOW = "15m"
 
 
 @dataclass
@@ -42,7 +41,6 @@ class Verdict:
 
 def check_health(client: SplunkClient) -> list[dict[str, Any]]:
     verdicts = [
-        Verdict("checks_version", "applicable", "completed", "pass", HEALTH_CHECKS_VERSION),
         _reachable(client),
         *_splunkd(client),
         *_resource_usage(client),
@@ -70,15 +68,18 @@ def _splunkd(client: SplunkClient) -> list[Verdict]:
     try:
         body = client.get("/services/server/health/splunkd/details")
     except SplunkError as exc:
-        return [Verdict("splunkd_health", "unknown", "error", "fail", exc.message)]
+        return [_unavailable("splunkd_health", exc)]
     content = (body.get("entry") or [{}])[0].get("content", {})
+    overall = content.get("health")
+    if overall not in _FINDING:
+        return [_unknown("splunkd_health", "missing or unrecognized overall health")]
     out = [
         Verdict(
             "splunkd_overall",
             "applicable",
             "completed",
-            _FINDING.get(content.get("health"), "warn"),
-            f"health={content.get('health')}",
+            _FINDING[overall],
+            f"health={overall}",
         )
     ]
     for name, feature in sorted((content.get("features") or {}).items()):
@@ -110,7 +111,7 @@ def _resource_usage(client: SplunkClient) -> list[Verdict]:
             client.get("/services/server/status/resource-usage/hostwide").get("entry") or [{}]
         )[0].get("content", {})
     except SplunkError as exc:
-        return [Verdict("resource_usage", "unknown", "error", "fail", exc.message)]
+        return [_unavailable("resource_usage", exc)]
 
     cpu_system = _to_float(content.get("cpu_system_pct"))
     cpu_user = _to_float(content.get("cpu_user_pct"))
@@ -155,9 +156,9 @@ def _disk_space(client: SplunkClient) -> list[Verdict]:
     to read the endpoint collapses into a single error verdict.
     """
     try:
-        entries = client.get("/services/server/status/partitions-space").get("entry") or []
+        entries = client.get_collection("/services/server/status/partitions-space")
     except SplunkError as exc:
-        return [Verdict("disk_space", "unknown", "error", "fail", exc.message)]
+        return [_unavailable("disk_space", exc)]
 
     if not entries:
         return [_unknown("disk_space", "partition endpoint returned no data")]
@@ -205,12 +206,12 @@ def _internal_errors(client: SplunkClient) -> list[Verdict]:
         body = run_search(
             client,
             "index=_internal sourcetype=splunkd log_level=ERROR | stats count as error_count",
-            earliest="-15m",
+            earliest=f"-{_INTERNAL_ERROR_WINDOW}",
             latest="now",
             max_rows=1,
         )
     except SplunkError as exc:
-        return [Verdict("internal_errors", "unknown", "error", "fail", exc.message)]
+        return [_unavailable("internal_errors", exc)]
 
     results = body.get("results") or []
     if not results or not isinstance(results[0], dict):
@@ -225,14 +226,26 @@ def _internal_errors(client: SplunkClient) -> list[Verdict]:
             "applicable",
             "completed",
             "warn" if count > _ERROR_WARN_COUNT else "pass",
-            f"{count} splunkd ERROR events in 15m (warn>{_ERROR_WARN_COUNT})",
+            (
+                f"{count} splunkd ERROR events in {_INTERNAL_ERROR_WINDOW} "
+                f"(warn>{_ERROR_WARN_COUNT})"
+            ),
         )
     ]
 
 
 def _unknown(check: str, evidence: str) -> Verdict:
-    """Return a failed verdict for data whose health cannot be determined."""
-    return Verdict(check, "unknown", "error", "fail", evidence)
+    """Return a neutral verdict for data whose health cannot be determined."""
+    return Verdict(check, "unknown", "error", "na", evidence)
+
+
+def _unavailable(check: str, exc: SplunkError) -> Verdict:
+    """Describe an optional check that the target cannot or will not expose."""
+    if isinstance(exc, NotFoundError):
+        return Verdict(check, "not_applicable", "completed", "na", exc.message)
+    if isinstance(exc, AuthError):
+        return Verdict(check, "unknown", "permission_denied", "na", exc.message)
+    return Verdict(check, "unknown", "error", "na", exc.message)
 
 
 def _to_float(value: Any) -> float | None:
