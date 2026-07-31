@@ -59,6 +59,28 @@ def test_do_write_records_audit_on_real_write(monkeypatch, tmp_path):
     assert "https://splunk.test:8089" in contents  # target is recorded
 
 
+def test_do_write_redacts_credentials_from_confirmation_and_audit(monkeypatch, tmp_path):
+    monkeypatch.setenv("SPLUNK_TOKEN", "T")
+    audit_file = tmp_path / "audit.log"
+    monkeypatch.setenv("VCT_SPLUNK_AUDIT", str(audit_file))
+    ctx = _Ctx(yes=True)
+    ctx.base_url = "https://user:secret@splunk.test:8089/services?token=leak#fragment"
+
+    result = do_write(
+        ctx,
+        action="do thing",
+        audit_event={"action": "index.create", "name": "web"},
+        run=lambda c: {"name": "web"},
+    )
+
+    assert result == {"name": "web"}
+    contents = audit_file.read_text()
+    assert "https://splunk.test:8089/services" in contents
+    assert "user" not in contents
+    assert "secret" not in contents
+    assert "token=leak" not in contents
+
+
 def test_do_write_refuses_without_yes_noninteractive(monkeypatch, tmp_path):
     monkeypatch.setenv("SPLUNK_TOKEN", "T")
     monkeypatch.setenv("VCT_SPLUNK_AUDIT", str(tmp_path / "audit.log"))
