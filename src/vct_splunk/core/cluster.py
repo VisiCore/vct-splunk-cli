@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from .client import SplunkClient
-from .errors import NotFoundError
+from .errors import APIError, NotFoundError
 
 
 def cluster_status(client: SplunkClient) -> dict[str, Any]:
@@ -19,6 +19,10 @@ def cluster_status(client: SplunkClient) -> dict[str, Any]:
         info = _first_content(client.get("/services/cluster/manager/info"))
     except NotFoundError:
         return {"configured": False}
+    except APIError as exc:
+        if "cluster manager is not enabled" in str(exc.details).lower():
+            return {"configured": False}
+        raise
     if not info:
         return {"configured": False}
     return {
@@ -37,6 +41,10 @@ def shcluster_status(client: SplunkClient) -> dict[str, Any]:
         status = _first_content(client.get("/services/shcluster/status"))
     except NotFoundError:
         return {"configured": False}
+    except APIError as exc:
+        if "search head clustering is not enabled" in str(exc.details).lower():
+            return {"configured": False}
+        raise
     if not status:
         return {"configured": False}
     return {"configured": True, **status}

@@ -37,10 +37,16 @@ _VERB_ARGS: dict[str, tuple[str, ...]] = {
 _LIVE_GET_NAMES = {
     "app": "search",
     "index": "_internal",
+    "monitor-input": "/var/tmp/vct_ci_missing.log",
     "role": "admin",
+    "script-input": "/opt/splunk/etc/apps/search/bin/vct_ci_missing.sh",
     "user": "admin",
 }
 _LIVE_MISSING_NAME = "vct_ci_missing"
+_EXAMPLE_NAMES = {
+    "monitor-input": "/var/tmp/example.log",
+    "script-input": "/opt/splunk/etc/apps/search/bin/example.sh",
+}
 
 _SPECIAL: tuple[Case, ...] = (
     Case(("api", "get"), "read", (("/services/server/info", "-q", "count=1"),)),
@@ -146,6 +152,8 @@ def _generated_cases() -> tuple[Case, ...]:
     for spec in (INDEX, SAVED_SEARCH, *REGISTRY):
         for verb in spec.verbs:
             args = _VERB_ARGS[verb]
+            if args and args[0] == "example" and spec.name in _EXAMPLE_NAMES:
+                args = (_EXAMPLE_NAMES[spec.name], *args[1:])
             if spec is SAVED_SEARCH and verb == "create":
                 args = (*args, "--search", "index=x")
             kind: Kind = "read" if verb in {"list", "get"} else "write"
@@ -158,7 +166,7 @@ def _generated_cases() -> tuple[Case, ...]:
                 live_argv = (name,)
                 if spec.namespaced:
                     live_argv = (*live_argv, "--app", "search", "--owner", "nobody")
-                if name == _LIVE_MISSING_NAME:
+                if spec.name not in {"app", "index", "role", "user"}:
                     live_exit_codes = (4,)
             cases.append(
                 Case(

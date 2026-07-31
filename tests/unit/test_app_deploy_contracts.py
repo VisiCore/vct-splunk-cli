@@ -36,7 +36,7 @@ def test_app_install_uses_apps_local_contract(cli_env, patch_client, option, sou
     assert seen == {
         "method": "POST",
         "path": "/services/apps/local",
-        "form": {"name": [source], "update": ["true"]},
+        "form": {"name": [source], "filename": ["true"], "update": ["true"]},
     }
 
 
@@ -57,7 +57,7 @@ def test_app_install_audit_uses_sanitized_url(cli_env, patch_client, monkeypatch
     )
 
     assert result.exit_code == 0
-    assert seen == {"name": [source]}
+    assert seen == {"name": [source], "filename": ["true"]}
     record = json.loads(audit.read_text())
     assert record["source"] == "https://example.test:8443/apps/example.spl"
     assert "user" not in audit.read_text()
@@ -80,7 +80,10 @@ def test_app_install_dry_run_uses_sanitized_url(cli_env, patch_client):
 
     assert result.exit_code == 0
     body = json.loads(result.output)
-    assert body["data"]["request"]["body"] == {"name": "https://example.test:8443/apps/example.spl"}
+    assert body["data"]["request"]["body"] == {
+        "name": "https://example.test:8443/apps/example.spl",
+        "filename": "true",
+    }
     for secret in ("user", "password", "token", "secret", "fragment"):
         assert secret not in result.output
 

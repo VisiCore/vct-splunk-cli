@@ -50,13 +50,20 @@ def test_cluster_status_uses_manager_info(cli_env, patch_client):
     }
 
 
-@pytest.mark.parametrize("status", [200, 404])
+@pytest.mark.parametrize("status", [200, 404, 503])
 def test_cluster_status_normalizes_standalone(cli_env, patch_client, status):
     patch_client(
         lambda req: (
             httpx.Response(status, json={"entry": []})
             if status == 200
-            else httpx.Response(status, json={"messages": []})
+            else httpx.Response(
+                status,
+                json={
+                    "messages": [
+                        {"type": "ERROR", "text": "Cluster manager is not enabled on this node"}
+                    ]
+                },
+            )
         )
     )
     result = CliRunner().invoke(cli, ["cluster", "status", "--output", "json"])
@@ -96,13 +103,23 @@ def test_shcluster_status_uses_status_endpoint(cli_env, patch_client):
     }
 
 
-@pytest.mark.parametrize("status", [200, 404])
+@pytest.mark.parametrize("status", [200, 404, 503])
 def test_shcluster_status_normalizes_standalone(cli_env, patch_client, status):
     patch_client(
         lambda req: (
             httpx.Response(status, json={"entry": []})
             if status == 200
-            else httpx.Response(status, json={"messages": []})
+            else httpx.Response(
+                status,
+                json={
+                    "messages": [
+                        {
+                            "type": "ERROR",
+                            "text": "Search Head Clustering is not enabled on this node.",
+                        }
+                    ]
+                },
+            )
         )
     )
     result = CliRunner().invoke(cli, ["shcluster", "status", "--output", "json"])

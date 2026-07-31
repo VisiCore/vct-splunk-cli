@@ -33,6 +33,13 @@ NS_SPEC = Spec(
     verbs=("list", "get"),
 )
 
+PATH_SPEC = Spec(
+    name="monitor",
+    path="/services/data/inputs/monitor",
+    help="Monitor inputs.",
+    absolute_name=True,
+)
+
 
 def test_create_maps_keys_scale_and_set(client_for):
     seen: dict[str, str] = {}
@@ -127,6 +134,37 @@ def test_dynamic_name_paths_are_encoded(client_for, operation):
         suffix = "/enable"
 
     assert seen["path"] == f"/services/data/widgets/east%20west{suffix}"
+
+
+def test_absolute_path_identifiers_are_validated_and_encoded(client_for):
+    seen: dict[str, str] = {}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen["path"] = req.url.raw_path.decode().partition("?")[0]
+        return httpx.Response(200, json={})
+
+    CrudResource(PATH_SPEC).delete(client_for(handler), "/var/tmp/input.log")
+
+    assert seen["path"] == "/services/data/inputs/monitor/%2Fvar%2Ftmp%2Finput.log"
+
+
+@pytest.mark.parametrize(
+    ("spec", "name"),
+    [
+        (PATH_SPEC, "relative.log"),
+        (PATH_SPEC, "/var/../etc/passwd"),
+        (PATH_SPEC, "/var/%252e%252e/etc/passwd"),
+    ],
+)
+def test_path_identifiers_refuse_wrong_shape_and_traversal(client_for, spec, name):
+    requests: list[httpx.Request] = []
+    resource = CrudResource(spec)
+    client = client_for(lambda req: requests.append(req) or httpx.Response(200, json={}))
+
+    with pytest.raises(UsageError):
+        resource.delete(client, name)
+
+    assert requests == []
 
 
 @pytest.mark.parametrize("operation", ["get", "update", "delete", "control"])

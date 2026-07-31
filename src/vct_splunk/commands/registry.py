@@ -114,6 +114,7 @@ MONITOR_INPUT = Spec(
     path="/services/data/inputs/monitor",
     help="File and directory monitor inputs.",
     verbs=_CRUD_TOGGLE,
+    absolute_name=True,
 )
 
 TCP_INPUT = Spec(
@@ -135,6 +136,7 @@ SCRIPT_INPUT = Spec(
     path="/services/data/inputs/script",
     help="Scripted inputs.",
     verbs=_CRUD_TOGGLE,
+    absolute_name=True,
 )
 
 HEC_TOKEN = Spec(
