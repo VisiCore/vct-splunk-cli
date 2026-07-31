@@ -1,5 +1,4 @@
-"""Read-only ACS operations. The path constants are pinned against the vendored
-OpenAPI subset (a contract test asserts each one exists in that spec)."""
+"""Read-only ACS operations."""
 
 from __future__ import annotations
 
@@ -8,29 +7,35 @@ from typing import Any
 from ..errors import APIError
 from .client import AcsClient
 
-# ACS read paths used by this CLI. Keep in sync with openapi/adminconfig-v2.json
-# (the contract test enforces it).
+# ACS read paths and their official success envelopes. This is the runtime
+# declaration used by both the client and the credential-free contract test.
 INDEXES = "indexes"
 HEC_TOKENS = "inputs/http-event-collectors"
 ROLES = "roles"
 
-#: Every ACS path the CLI reads -- the contract test checks these are in the spec.
-READ_PATHS = (INDEXES, HEC_TOKENS, ROLES)
+LIST_ENVELOPES = {
+    INDEXES: "indexes",
+    HEC_TOKENS: "http_event_collectors",
+    ROLES: "roles",
+}
+
+#: Every ACS path the CLI reads.
+READ_PATHS = tuple(LIST_ENVELOPES)
 
 
 def list_cloud_indexes(client: AcsClient) -> list[dict[str, Any]]:
     """List indexes on the Cloud stack (ACS)."""
-    return _list(client, INDEXES, "indexes")
+    return _list(client, INDEXES, LIST_ENVELOPES[INDEXES])
 
 
 def list_hec_tokens(client: AcsClient) -> list[dict[str, Any]]:
     """List HTTP Event Collector tokens on the Cloud stack (ACS)."""
-    return [_without_tokens(item) for item in _list(client, HEC_TOKENS, "http_event_collectors")]
+    return [_without_tokens(item) for item in _list(client, HEC_TOKENS, LIST_ENVELOPES[HEC_TOKENS])]
 
 
 def list_cloud_roles(client: AcsClient) -> list[dict[str, Any]]:
     """List roles on the Cloud stack (ACS)."""
-    return _list(client, ROLES, "roles")
+    return _list(client, ROLES, LIST_ENVELOPES[ROLES])
 
 
 def _list(client: AcsClient, path: str, envelope: str) -> list[dict[str, Any]]:
