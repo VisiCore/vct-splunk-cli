@@ -74,6 +74,8 @@ This is the 0.2.0 development line (version bumped from 0.0.1).
 
 ### Changed
 
+- Project licensing changed from Apache-2.0 to the MIT License.
+
 - `index` and `saved-search` CRUD now ride the same declarative engine as every
   other resource group (specs in the registry), instead of hand-written
   near-duplicates of it; only `saved-search run` (dispatch) stays hand-written.

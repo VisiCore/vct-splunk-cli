@@ -7,7 +7,7 @@ name = "vct-splunk-cli"
 description = "splunk — read, search, health-check, and safely administer Splunk Enterprise over its REST API"
 readme = "README.md"
 requires-python = ">=3.10"
-license = "Apache-2.0"
+license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "VisiCore" }]
 keywords = ["splunk", "cli", "rest-api", "observability", "siem"]
