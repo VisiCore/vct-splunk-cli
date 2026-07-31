@@ -116,7 +116,7 @@ def test_deploy_serverclass_get_encodes_name(cli_env, patch_client):
 
     patch_client(handler)
     result = CliRunner().invoke(
-        cli, ["deploy", "serverclass", "get", "east west", "--output", "json"]
+        cli, ["deploy-server", "serverclass", "get", "east west", "--output", "json"]
     )
 
     assert result.exit_code == 0
@@ -142,7 +142,7 @@ def test_deploy_serverclass_write_exact_contract(cli_env, patch_client, verb):
     result = CliRunner().invoke(
         cli,
         [
-            "deploy",
+            "deploy-server",
             "serverclass",
             verb,
             "east west",
@@ -171,7 +171,7 @@ def test_deploy_serverclass_rejects_malformed_settings(cli_env, patch_client, ve
         raise AssertionError("malformed settings must not send a request")
 
     patch_client(handler)
-    args = ["deploy", "serverclass", verb, "example", "--set", setting]
+    args = ["deploy-server", "serverclass", verb, "example", "--set", setting]
     if setting == "x=1":
         args.extend(["--set", "x=2"])
     result = CliRunner().invoke(cli, [*args, "--yes", "--output", "json"])
@@ -186,7 +186,7 @@ def test_deploy_serverclass_rejects_traversal_before_request(cli_env, patch_clie
         raise AssertionError("unsafe names must not send a request")
 
     patch_client(handler)
-    args = ["deploy", "serverclass", verb, name]
+    args = ["deploy-server", "serverclass", verb, name]
     if verb != "get":
         args.extend(["--set", "x=1", "--yes"])
     result = CliRunner().invoke(cli, [*args, "--output", "json"])

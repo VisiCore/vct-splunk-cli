@@ -1,4 +1,4 @@
-"""`splunk deploy` commands for the deployment server. Shell layer (imports Click).
+"""Deployment-server and deployment-client commands. Shell layer (imports Click).
 
 These are system-level endpoints (not namespaced), so there is no --app/--owner
 logic. Writes (serverclass create/update, reload) route through the shared
@@ -18,17 +18,17 @@ from .context import command
 from .write import do_write
 
 
-@click.group(name="deploy")
-def deploy() -> None:
-    """Splunk deployment server (clients, server classes, config reload)."""
+@click.group(name="deploy-server")
+def deploy_server() -> None:
+    """Manage Splunk deployment-server configuration."""
 
 
-@deploy.group("client")
-def client_grp() -> None:
-    """Deployment clients."""
+@click.group(name="deploy-client")
+def deploy_client() -> None:
+    """Inspect Splunk deployment clients."""
 
 
-@client_grp.command("list")
+@deploy_client.command("list")
 @command
 def client_list(ctx) -> None:
     """List the deployment clients phoning home."""
@@ -37,7 +37,7 @@ def client_list(ctx) -> None:
     out.emit(data, ctx.output_mode, ctx.meta())
 
 
-@deploy.group("serverclass")
+@deploy_server.group("serverclass")
 def serverclass_grp() -> None:
     """Deployment server classes."""
 
@@ -100,7 +100,7 @@ def serverclass_update(ctx, name, _set) -> None:
     out.emit(result, ctx.output_mode, ctx.meta())
 
 
-@deploy.command("reload")
+@deploy_server.command("reload")
 @command
 def reload(ctx) -> None:
     """Reload the deployment server's server-class config. Gated write."""

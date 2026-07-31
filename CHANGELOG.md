@@ -39,10 +39,10 @@ This is the 0.2.0 development line (version bumped from 0.0.1).
 - `app install` adds an app from a splunkd-readable `--server-file` or `--url`,
   with `--update` to overwrite. It is a gated write, so it previews with
   `--dry-run` (#5).
-- `deploy` reads the deployment server: `deploy client list` and
-  `deploy serverclass list` / `get`. The gated writes `deploy serverclass create` /
-  `update` (each needs at least one `--set KEY=VALUE`) and `deploy reload` change
-  and reload server-class config (#5).
+- `deploy-client list` reads deployment clients; `deploy-server serverclass list` /
+  `get` reads deployment-server configuration. The gated writes `deploy-server
+  serverclass create` / `update` (each needs at least one `--set KEY=VALUE`) and
+  `deploy-server reload` change and reload server-class config (#5).
 - `cluster status` and `shcluster status` read indexer-cluster and search-head
   cluster health, and `license list` / `get` / `usage` report licensing (#10).
 - `server restart` and `server settings get` / `set` manage the instance.

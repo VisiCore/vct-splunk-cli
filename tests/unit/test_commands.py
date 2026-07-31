@@ -292,7 +292,7 @@ def test_deploy_client_list_renders(cli_env, patch_client):
             },
         ),
     )
-    result = CliRunner().invoke(cli, ["deploy", "client", "list", "--output", "json"])
+    result = CliRunner().invoke(cli, ["deploy-client", "list", "--output", "json"])
     assert result.exit_code == 0
     assert '"name": "client1"' in result.output
 
@@ -307,14 +307,14 @@ def test_deploy_serverclass_list_renders(cli_env, patch_client):
             },
         ),
     )
-    result = CliRunner().invoke(cli, ["deploy", "serverclass", "list", "--output", "json"])
+    result = CliRunner().invoke(cli, ["deploy-server", "serverclass", "list", "--output", "json"])
     assert result.exit_code == 0
     assert '"name": "sc1"' in result.output
 
 
 def test_deploy_reload_refuses_without_yes_noninteractive(cli_env):
     # Must refuse before any network call, so no client patch is needed.
-    result = CliRunner().invoke(cli, ["deploy", "reload", "--output", "json"])
+    result = CliRunner().invoke(cli, ["deploy-server", "reload", "--output", "json"])
     assert result.exit_code == 2
     assert "usage_error" in result.output
 
@@ -324,7 +324,7 @@ def test_deploy_reload_dry_run_previews(cli_env, patch_client):
         raise AssertionError("dry-run must not send a request")
 
     patch_client(handler)
-    result = CliRunner().invoke(cli, ["deploy", "reload", "--dry-run", "--output", "json"])
+    result = CliRunner().invoke(cli, ["deploy-server", "reload", "--dry-run", "--output", "json"])
     assert result.exit_code == 0
     assert '"dry_run": true' in result.output
 
@@ -336,7 +336,17 @@ def test_deploy_serverclass_create_dry_run_previews(cli_env, patch_client):
     patch_client(handler)
     result = CliRunner().invoke(
         cli,
-        ["deploy", "serverclass", "create", "foo", "--set", "x=1", "--dry-run", "--output", "json"],
+        [
+            "deploy-server",
+            "serverclass",
+            "create",
+            "foo",
+            "--set",
+            "x=1",
+            "--dry-run",
+            "--output",
+            "json",
+        ],
     )
     assert result.exit_code == 0
     assert '"dry_run": true' in result.output
