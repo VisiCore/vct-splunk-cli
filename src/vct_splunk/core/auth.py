@@ -41,7 +41,7 @@ def login(
         The session key string.
 
     Raises:
-        AuthError: On a 401 (bad credentials) or a missing ``sessionKey``.
+        AuthError: On a 401/403 (bad credentials) or a missing ``sessionKey``.
         APIError: On any other non-2xx response.
         TransportError: If Splunk cannot be reached.
     """
@@ -54,8 +54,8 @@ def login(
             )
     except httpx.HTTPError as exc:
         raise TransportError(f"Could not reach Splunk at {url}: {exc}") from exc
-    if resp.status_code == 401:
-        raise AuthError("Login failed (401). Check the username and password.")
+    if resp.status_code in {401, 403}:
+        raise AuthError(f"Login failed ({resp.status_code}). Check the username and password.")
     if resp.status_code >= 400:
         raise APIError(f"Splunk returned {resp.status_code} for POST /services/auth/login")
     try:

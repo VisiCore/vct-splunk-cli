@@ -20,6 +20,62 @@ from ..core.resource import Field, Spec
 # (Plain CRUD is the Spec default, so it does not need a named constant.)
 _CRUD_TOGGLE = ("list", "get", "create", "update", "delete", "enable", "disable")
 
+# --- Specs built outside the REGISTRY loop -----------------------------------
+# These two ride the same engine but are registered by hand: `index` predates the
+# factory and keeps its curated flags/output, and `saved-search` adds a
+# hand-written `run` (dispatch) command on top of the generated group.
+
+INDEX = Spec(
+    name="index",
+    path="/services/data/indexes",
+    help="Splunk indexes.",
+    verbs=_CRUD_TOGGLE,
+    fields=(
+        Field(
+            "max_gb",
+            key="maxTotalDataSizeMB",
+            type="float",
+            scale=1024,
+            help="Max index size in GB.",
+        ),
+        Field(
+            "frozen_secs",
+            key="frozenTimePeriodInSecs",
+            type="int",
+            help="Frozen time period in seconds.",
+        ),
+    ),
+    out_map={
+        "totalEventCount": "total_event_count",
+        "currentDBSizeMB": "current_size_mb",
+        "maxTotalDataSizeMB": "max_size_mb",
+        "frozenTimePeriodInSecs": "frozen_time_period_secs",
+        "disabled": "disabled",
+    },
+)
+
+SAVED_SEARCH = Spec(
+    name="saved-search",
+    path="saved/searches",
+    help="Splunk saved searches (namespaced by owner + app).",
+    verbs=("list", "get", "create", "update", "delete"),
+    namespaced=True,
+    fields=(
+        Field("search", key="search", required=True, help="SPL for the saved search."),
+        Field("description", key="description", help="Description of the saved search."),
+        Field("cron", key="cron_schedule", help="Cron schedule, e.g. '0 6 * * *'."),
+        Field("scheduled", key="is_scheduled", type="bool", help="Enable or disable scheduling."),
+    ),
+    out_map={
+        "search": "search",
+        "description": "description",
+        "disabled": "disabled",
+        "is_scheduled": "is_scheduled",
+        "cron_schedule": "cron_schedule",
+        "next_scheduled_time": "next_scheduled_time",
+    },
+)
+
 # --- Access (#4) -------------------------------------------------------------
 
 USER = Spec(

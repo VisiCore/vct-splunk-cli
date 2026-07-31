@@ -12,6 +12,7 @@ from typing import Any
 
 from .client import SplunkClient
 from .errors import NotFoundError
+from .path import path_segment
 
 _CLIENTS = "/services/deployment/server/clients"
 _SERVERCLASSES = "/services/deployment/server/serverclasses"
@@ -30,7 +31,8 @@ def list_serverclasses(client: SplunkClient) -> list[dict[str, Any]]:
 
 def get_serverclass(client: SplunkClient, name: str) -> dict[str, Any]:
     """Show one server class by name."""
-    entries = client.get(f"{_SERVERCLASSES}/{name}").get("entry") or []
+    encoded = path_segment(name, label="server class name")
+    entries = client.get(f"{_SERVERCLASSES}/{encoded}").get("entry") or []
     if not entries:
         raise NotFoundError(f"Server class {name!r} not found.")
     return _named(entries[0])
@@ -38,12 +40,14 @@ def get_serverclass(client: SplunkClient, name: str) -> dict[str, Any]:
 
 def create_serverclass(client: SplunkClient, name: str, settings: dict[str, Any]) -> dict[str, Any]:
     """Create a server class with the given form settings (a gated write)."""
+    path_segment(name, label="server class name")
     return _unwrap(client.write("POST", _SERVERCLASSES, {"name": name, **settings}))
 
 
 def update_serverclass(client: SplunkClient, name: str, settings: dict[str, Any]) -> dict[str, Any]:
     """Update a server class, sending only the changed settings (a gated write)."""
-    return _unwrap(client.write("POST", f"{_SERVERCLASSES}/{name}", settings))
+    encoded = path_segment(name, label="server class name")
+    return _unwrap(client.write("POST", f"{_SERVERCLASSES}/{encoded}", settings))
 
 
 def reload_config(client: SplunkClient) -> dict[str, Any]:

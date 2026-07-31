@@ -10,6 +10,7 @@ from typing import Any
 
 from .client import SplunkClient
 from .errors import NotFoundError
+from .path import path_segment
 
 _LICENSES = "/services/licenser/licenses"
 _POOLS = "/services/licenser/pools"
@@ -22,7 +23,9 @@ def list_licenses(client: SplunkClient) -> list[dict[str, Any]]:
 
 def get_license(client: SplunkClient, name: str) -> dict[str, Any]:
     """Show one license by its name (license hash)."""
-    entries = client.get(f"{_LICENSES}/{name}").get("entry") or []
+    entries = (
+        client.get(f"{_LICENSES}/{path_segment(name, label='license name')}").get("entry") or []
+    )
     if not entries:
         raise NotFoundError(f"License {name!r} not found.")
     return _license(entries[0])
@@ -50,6 +53,6 @@ def _pool(entry: dict[str, Any]) -> dict[str, Any]:
     return {
         "name": entry.get("name"),
         "stack_id": c.get("stack_id"),
-        "quota_bytes": c.get("quota"),
+        "quota_bytes": c.get("effective_quota"),
         "used_bytes": c.get("used_bytes"),
     }

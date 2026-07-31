@@ -1,27 +1,23 @@
-"""`splunk inspect` -- report the active backend and what it supports."""
+"""`splunk inspect` -- report the deduced backend and what it supports."""
 
 from __future__ import annotations
 
 import click
 
-from ..core.backends import inspect_backend
+from ..core.backends import inspect_report
 from . import output as out
 from .context import command
 
 
 @click.command("inspect")
-@click.option(
-    "--backend",
-    type=click.Choice(["enterprise", "cloud"]),
-    default=None,
-    help="Backend to inspect (default: $SPLUNK_BACKEND, else enterprise).",
-)
 @command
-def inspect(ctx, backend) -> None:
-    """Report the active backend (enterprise/cloud) and the operations it supports.
+def inspect(ctx) -> None:
+    """Report the backend deduced from SPLUNK_URL and the operations it supports.
 
-    Reads a static capability map -- it works offline and does not touch the live
-    instance. Unsupported operations are named explicitly, so a caller never falls
-    through to an unofficial endpoint.
+    The backend is deduced from the URL, never chosen -- this command just *shows*
+    it for anyone who explicitly wants to know which target (Enterprise or Cloud) a
+    given SPLUNK_URL resolves to and which operations exist there. It reads a static
+    capability map: offline, no live instance touched. Unsupported operations are
+    named, so a caller never falls through to an unofficial endpoint.
     """
-    out.emit(inspect_backend(backend), ctx.output_mode, ctx.meta())
+    out.emit(inspect_report(ctx.base_url), ctx.output_mode, ctx.meta())
