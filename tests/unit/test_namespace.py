@@ -19,6 +19,13 @@ def test_ns_path_requires_owner_and_app():
         ns_path("saved/searches", owner="", app="my_app")
 
 
+def test_ns_path_encodes_dynamic_namespace_segments():
+    assert (
+        ns_path("saved/searches", owner="first last", app="my app")
+        == "/servicesNS/first%20last/my%20app/saved/searches"
+    )
+
+
 def test_resolve_ns_read_defaults_to_wildcard():
     assert resolve_ns(None, None, for_write=False) == ("-", "-")
     assert resolve_ns("alice", None, for_write=False) == ("alice", "-")

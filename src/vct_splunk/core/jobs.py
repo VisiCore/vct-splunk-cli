@@ -10,6 +10,7 @@ from typing import Any
 
 from .client import SplunkClient
 from .errors import NotFoundError
+from .path import path_segment
 from .search import JOBS_PATH
 
 
@@ -24,7 +25,9 @@ def get_job(client: SplunkClient, sid: str) -> dict[str, Any]:
     Raises:
         NotFoundError: If no job has that SID.
     """
-    entries = client.get(f"{JOBS_PATH}/{sid}").get("entry") or []
+    entries = (
+        client.get(f"{JOBS_PATH}/{path_segment(sid, label='search job ID')}").get("entry") or []
+    )
     if not entries:
         raise NotFoundError(f"Search job {sid!r} not found.")
     return _job(entries[0])
@@ -36,7 +39,11 @@ def cancel_job(client: SplunkClient, sid: str) -> dict[str, Any]:
     A POST to the job's ``control`` endpoint with ``action=cancel``. Routed
     through the client's ``write`` so ``--dry-run`` previews it and sends nothing.
     """
-    return client.write("POST", f"{JOBS_PATH}/{sid}/control", {"action": "cancel"})
+    return client.write(
+        "POST",
+        f"{JOBS_PATH}/{path_segment(sid, label='search job ID')}/control",
+        {"action": "cancel"},
+    )
 
 
 def _job(entry: dict[str, Any]) -> dict[str, Any]:

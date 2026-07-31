@@ -178,6 +178,91 @@ def test_saved_search_create_dry_run_previews_app_namespace(cli_env):
     assert "/servicesNS/nobody/my_app/saved/searches" in result.output
 
 
+def test_cluster_status_renders(cli_env, patch_client):
+    def handler(req: httpx.Request) -> httpx.Response:
+        assert req.url.path == "/services/cluster/manager/info"
+        return httpx.Response(
+            200,
+            json={"entry": [{"content": {"label": "cluster-one", "indexing_ready_flag": True}}]},
+        )
+
+    patch_client(handler)
+    result = CliRunner().invoke(cli, ["cluster", "status", "--output", "json"])
+    assert result.exit_code == 0
+    assert '"label": "cluster-one"' in result.output
+
+
+def test_license_list_renders(cli_env, patch_client):
+    patch_client(
+        lambda req: httpx.Response(
+            200,
+            json={
+                "entry": [{"name": "lic1", "content": {"label": "Enterprise"}}],
+                "paging": {"total": 1},
+            },
+        ),
+    )
+    result = CliRunner().invoke(cli, ["license", "list", "--output", "json"])
+    assert result.exit_code == 0
+    assert '"name": "lic1"' in result.output
+
+
+def test_message_list_renders(cli_env, patch_client):
+    patch_client(
+        lambda req: httpx.Response(
+            200,
+            json={
+                "entry": [{"name": "restart_required", "content": {"value": "Restart needed"}}],
+                "paging": {"total": 1},
+            },
+        ),
+    )
+    result = CliRunner().invoke(cli, ["message", "list", "--output", "json"])
+    assert result.exit_code == 0
+    assert '"name": "restart_required"' in result.output
+
+
+def test_server_settings_get_renders(cli_env, patch_client):
+    patch_client(
+        lambda req: httpx.Response(
+            200, json={"entry": [{"content": {"serverName": "sh1", "host": "sh1"}}]}
+        ),
+    )
+    result = CliRunner().invoke(cli, ["server", "settings", "get", "--output", "json"])
+    assert result.exit_code == 0
+    assert '"serverName": "sh1"' in result.output
+
+
+def test_server_restart_refuses_without_yes_noninteractive(cli_env):
+    # Must refuse before any network call, so no client patch is needed.
+    result = CliRunner().invoke(cli, ["server", "restart", "--output", "json"])
+    assert result.exit_code == 2
+    assert "usage_error" in result.output
+
+
+def test_server_restart_dry_run_previews(cli_env, patch_client):
+    def handler(req: httpx.Request) -> httpx.Response:
+        raise AssertionError("dry-run must not send a request")
+
+    patch_client(handler)
+    result = CliRunner().invoke(cli, ["server", "restart", "--dry-run", "--output", "json"])
+    assert result.exit_code == 0
+    assert '"dry_run": true' in result.output
+
+
+def test_server_settings_set_dry_run_previews(cli_env, patch_client):
+    def handler(req: httpx.Request) -> httpx.Response:
+        raise AssertionError("dry-run must not send a request")
+
+    patch_client(handler)
+    result = CliRunner().invoke(
+        cli,
+        ["server", "settings", "set", "--set", "host=sh1", "--dry-run", "--output", "json"],
+    )
+    assert result.exit_code == 0
+    assert '"dry_run": true' in result.output
+
+
 def test_saved_search_scheduled_flag_coerces_to_int(cli_env):
     # The bool Field must reach the wire as is_scheduled=0/1, not False/True.
     result = CliRunner().invoke(
