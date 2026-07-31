@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from typing import Any
+from urllib.parse import parse_qs
 
 import httpx
 import pytest
@@ -37,8 +38,7 @@ def test_health_maps_findings(client_for):
     assert verdicts["splunkd_overall"]["finding"] == "pass"
     assert verdicts["feature:Indexing"]["finding"] == "warn"
     assert verdicts["feature:Indexing"]["applicability"] == "applicable"
-    # Checks ship as versioned data, surfaced as its own verdict.
-    assert verdicts["checks_version"]["evidence"] == health.HEALTH_CHECKS_VERSION
+    assert "checks_version" not in verdicts
 
 
 def _resource_handler(content: dict[str, Any]) -> Callable[[httpx.Request], httpx.Response]:
@@ -75,10 +75,10 @@ def test_resource_usage_normal_passes(client_for):
         {"cpu_system_pct": "nan", "cpu_user_pct": "10"},
     ],
 )
-def test_resource_usage_unknown_cpu_is_error(client_for, content):
+def test_resource_usage_unknown_cpu_is_neutral(client_for, content):
     verdicts = {v.check: v for v in health._resource_usage(client_for(_resource_handler(content)))}
     cpu = verdicts["resource_cpu"]
-    assert (cpu.applicability, cpu.execution, cpu.finding) == ("unknown", "error", "fail")
+    assert (cpu.applicability, cpu.execution, cpu.finding) == ("unknown", "error", "na")
 
 
 @pytest.mark.parametrize(
@@ -91,13 +91,13 @@ def test_resource_usage_unknown_cpu_is_error(client_for, content):
         {"mem": "100", "mem_used": "garbage"},
     ],
 )
-def test_resource_usage_unknown_memory_is_error(client_for, content):
+def test_resource_usage_unknown_memory_is_neutral(client_for, content):
     verdicts = {v.check: v for v in health._resource_usage(client_for(_resource_handler(content)))}
     memory = verdicts["resource_memory"]
     assert (memory.applicability, memory.execution, memory.finding) == (
         "unknown",
         "error",
-        "fail",
+        "na",
     )
 
 
@@ -125,13 +125,13 @@ def _disk_handler(entries):
     return handler
 
 
-def test_disk_space_empty_results_are_error(client_for):
+def test_disk_space_empty_results_are_neutral(client_for):
     verdict = health._disk_space(client_for(_disk_handler([])))[0]
     assert (verdict.check, verdict.applicability, verdict.execution, verdict.finding) == (
         "disk_space",
         "unknown",
         "error",
-        "fail",
+        "na",
     )
 
 
@@ -145,12 +145,12 @@ def test_disk_space_empty_results_are_error(client_for):
         {"capacity": "100", "free": "garbage"},
     ],
 )
-def test_disk_space_unknown_partition_data_is_error(client_for, content):
+def test_disk_space_unknown_partition_data_is_neutral(client_for, content):
     verdict = health._disk_space(client_for(_disk_handler([{"content": content}])))[0]
     assert (verdict.applicability, verdict.execution, verdict.finding) == (
         "unknown",
         "error",
-        "fail",
+        "na",
     )
 
 
@@ -164,10 +164,14 @@ def test_disk_space_valid_zero_free_warns(client_for):
 def test_internal_errors_high_count_warns(client_for):
     # error_count comes back from Splunk as a string; the check must coerce it.
     def handler(req: httpx.Request) -> httpx.Response:
+        assert parse_qs(req.content.decode())["earliest_time"] == [
+            f"-{health._INTERNAL_ERROR_WINDOW}"
+        ]
         return httpx.Response(200, json={"results": [{"error_count": "500"}]})
 
     verdicts = {v.check: v for v in health._internal_errors(client_for(handler))}
     assert verdicts["internal_errors"].finding == "warn"  # 500 > 100 threshold
+    assert health._INTERNAL_ERROR_WINDOW in verdicts["internal_errors"].evidence
 
 
 def test_internal_errors_low_count_passes(client_for):
@@ -189,7 +193,7 @@ def test_internal_errors_low_count_passes(client_for):
         {"results": [{"error_count": "nan"}]},
     ],
 )
-def test_internal_errors_unknown_data_is_error(client_for, body):
+def test_internal_errors_unknown_data_is_neutral(client_for, body):
     def handler(req: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json=body)
 
@@ -197,7 +201,7 @@ def test_internal_errors_unknown_data_is_error(client_for, body):
     assert (verdict.applicability, verdict.execution, verdict.finding) == (
         "unknown",
         "error",
-        "fail",
+        "na",
     )
 
 
@@ -228,7 +232,7 @@ def test_health_unreachable_server_is_fail_not_crash(client_for):
     assert (reachable["execution"], reachable["finding"]) == ("error", "fail")
 
 
-def test_health_endpoint_error_reports_unknown_applicability(client_for):
+def test_health_endpoint_error_reports_neutral_unknown_applicability(client_for):
     def handler(req: httpx.Request) -> httpx.Response:
         if req.url.path.endswith("/server/info"):
             return httpx.Response(200, json={"entry": [{"content": {"version": "9.4"}}]})
@@ -241,5 +245,34 @@ def test_health_endpoint_error_reports_unknown_applicability(client_for):
     assert (splunkd["applicability"], splunkd["execution"], splunkd["finding"]) == (
         "unknown",
         "error",
-        "fail",
+        "na",
     )
+
+
+def test_disk_space_paginates_all_partitions(client_for):
+    offsets: list[int] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        offset = int(req.url.params["offset"])
+        offsets.append(offset)
+        size = 200 if offset == 0 else 1
+        entries = [
+            {
+                "content": {
+                    "mount_point": f"/disk-{offset + index}",
+                    "capacity": "100",
+                    "free": "50",
+                }
+            }
+            for index in range(size)
+        ]
+        return httpx.Response(
+            200,
+            json={"entry": entries, "paging": {"total": 201}},
+        )
+
+    verdicts = health._disk_space(client_for(handler))
+
+    assert offsets == [0, 200]
+    assert len(verdicts) == 201
+    assert all(verdict.finding == "pass" for verdict in verdicts)
