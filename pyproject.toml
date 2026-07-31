@@ -63,7 +63,11 @@ include = ["src", "tests", "VERSION", "README.md", "CHANGELOG.md", "LICENSE"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra --strict-markers"
+# importlib import mode lets the Enterprise and Cloud suites share the
+# `test_catalog.py` filename; `pythonpath` keeps the shared `cli_catalog` helper
+# importable without relying on a conftest side effect.
+addopts = "-ra --strict-markers --import-mode=importlib"
+pythonpath = ["tests"]
 markers = [
     "integration: end-to-end test needing a live Splunk (set SPLUNK_INTEGRATION_TEST=true)",
     "enterprise: tests against Splunk Enterprise",

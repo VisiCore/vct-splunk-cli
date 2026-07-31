@@ -30,21 +30,28 @@ jobs:
           python -m venv .venv
           .venv/bin/python -m pip install -e ".[dev]"
 
-      - name: Run read-only Cloud canary
+      - name: Cloud reads (every catalogued read command)
         run: >-
-          .venv/bin/pytest -m "integration and cloud and read"
-          -vv --tb=short --junitxml=cloud-read.xml
+          .venv/bin/pytest tests/integration/cloud/read/test_catalog.py
+          -m "integration and cloud and read"
+          -vv --color=yes --tb=short --junitxml=cloud-read.xml
+
+      - name: Cloud ACS operations (below the CLI)
+        run: >-
+          .venv/bin/pytest tests/integration/cloud/read/test_acs_operations.py
+          -m "integration and cloud and read"
+          -vv --color=yes --tb=short --junitxml=cloud-acs.xml
 
       - name: Publish test summary
         if: always()
         uses: test-summary/action@37b508cfee6d4d080eedd00b5bb240a6a784a6a5 # v2
         with:
-          paths: cloud-read.xml
+          paths: cloud-*.xml
 
       - name: Upload test report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: cloud-read-${{ github.run_id }}
-          path: cloud-read.xml
+          path: cloud-*.xml
           if-no-files-found: ignore

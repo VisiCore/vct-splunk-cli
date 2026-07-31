@@ -15,6 +15,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Install and test with only the standard library's `venv` and `pip`. Setup no
   longer needs a separate package manager, and the documented commands are the
   same ones CI runs on macOS, Linux, and Windows.
+- Add a Splunk Cloud read catalog that mirrors the Enterprise one: it runs every
+  catalogued read against a live stack, requires the ACS-backed reads to
+  succeed, and requires every other read to fail with a typed error envelope
+  rather than guessing at an endpoint the stack does not serve.
 - Add catalog-driven live coverage for all 61 Enterprise reads and 93 writes,
   including cleanup, global-state restoration, restart/reconnect, a container
   CI gate on code pull requests and `main` merges, a manual Cloud read canary,
