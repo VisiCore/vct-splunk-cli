@@ -20,7 +20,7 @@ def cluster_status(client: SplunkClient) -> dict[str, Any]:
     except NotFoundError:
         return {"configured": False}
     except APIError as exc:
-        if "cluster manager is not enabled" in str(exc.details).lower():
+        if _is_not_enabled(exc):
             return {"configured": False}
         raise
     if not info:
@@ -42,12 +42,21 @@ def shcluster_status(client: SplunkClient) -> dict[str, Any]:
     except NotFoundError:
         return {"configured": False}
     except APIError as exc:
-        if "search head clustering is not enabled" in str(exc.details).lower():
+        if _is_not_enabled(exc):
             return {"configured": False}
         raise
     if not status:
         return {"configured": False}
     return {"configured": True, **status}
+
+
+def _is_not_enabled(exc: APIError) -> bool:
+    """True when splunkd 503s because the clustering feature is off on this node.
+
+    Requires both signals: 503 alone also covers a genuinely-down manager, and
+    the "not enabled" phrase alone could appear in an unrelated error body.
+    """
+    return exc.status == 503 and "not enabled" in str(exc.details).lower()
 
 
 def _first_content(body: dict[str, Any]) -> dict[str, Any]:

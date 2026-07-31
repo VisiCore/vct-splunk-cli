@@ -237,7 +237,7 @@ def _special(case: Case, harness) -> None:
         harness.write(*path)
     elif path[:2] == ("deploy-server", "serverclass"):
         name = _name("serverclass")
-        if path[-1] == "update":
+        if path[-1] != "create":
             harness.write(
                 "deploy-server",
                 "serverclass",
@@ -246,7 +246,16 @@ def _special(case: Case, harness) -> None:
                 "--set",
                 "whitelist.0=*",
             )
-        harness.write(*path, name, "--set", "whitelist.0=*")
+        if path[-1] != "delete":
+            harness.cleanup(
+                f"delete server class {name}",
+                "deploy-server",
+                "serverclass",
+                "delete",
+                name,
+            )
+        args = () if path[-1] == "delete" else ("--set", "whitelist.0=*")
+        harness.write(*path, name, *args)
     elif path in {("hec", "global-disable"), ("hec", "global-enable")}:
         current = harness.run("api", "get", "/services/data/inputs/http/http")
         disabled = str(current.get("disabled", "0")).lower() in {"1", "true"}
@@ -306,7 +315,8 @@ def _special(case: Case, harness) -> None:
             plan.name,
             *_namespace(plan),
         )
-        harness.write(*path, plan.name, "--app", "search", "--earliest", "-15m")
+        job = harness.write(*path, plan.name, "--app", "search", "--earliest", "-15m")
+        harness.cleanup(f"cancel job {job['sid']}", "search", "cancel", str(job["sid"]))
     elif path == ("search", "cancel"):
         plan = _plan("saved-search")
         _create(harness, "saved-search", plan)

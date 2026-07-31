@@ -50,6 +50,12 @@ def update_serverclass(client: SplunkClient, name: str, settings: dict[str, Any]
     return _unwrap(client.write("POST", f"{_SERVERCLASSES}/{encoded}", settings))
 
 
+def delete_serverclass(client: SplunkClient, name: str) -> dict[str, Any]:
+    """Delete a server class by name (a gated write)."""
+    encoded = path_segment(name, label="server class name")
+    return client.write("DELETE", f"{_SERVERCLASSES}/{encoded}", {})
+
+
 def reload_config(client: SplunkClient) -> dict[str, Any]:
     """Reload the deployment server's server-class configuration (a gated write)."""
     return client.write("POST", _RELOAD, {})
