@@ -131,16 +131,8 @@ class SplunkClient:
     def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
         self._http.close()
 
-    def get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        return self._request("GET", path, params=params)
-
-    def get_json(self, path: str, params: dict[str, Any] | None = None) -> Any:
-        """GET a JSON document endpoint (e.g. KV Store data) and return it as-is.
-
-        Unlike :meth:`get`, the response is plain JSON (an array for a collection,
-        an object for one record) rather than the ``entry[].content`` envelope, so
-        the return type is the raw parsed value.
-        """
+    def get(self, path: str, params: dict[str, Any] | None = None) -> Any:
+        """GET an endpoint and return its parsed JSON response."""
         return self._request("GET", path, params=params)
 
     def post(
