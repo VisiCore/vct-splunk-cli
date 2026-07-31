@@ -4,6 +4,7 @@ from collections.abc import Callable
 from typing import Any
 
 import httpx
+import pytest
 
 from vct_splunk.core import health
 
@@ -65,6 +66,41 @@ def test_resource_usage_normal_passes(client_for):
     assert verdicts["resource_memory"].finding == "pass"
 
 
+@pytest.mark.parametrize(
+    "content",
+    [
+        {},
+        {"cpu_system_pct": "", "cpu_user_pct": "10"},
+        {"cpu_system_pct": "garbage", "cpu_user_pct": "10"},
+        {"cpu_system_pct": "nan", "cpu_user_pct": "10"},
+    ],
+)
+def test_resource_usage_unknown_cpu_is_error(client_for, content):
+    verdicts = {v.check: v for v in health._resource_usage(client_for(_resource_handler(content)))}
+    cpu = verdicts["resource_cpu"]
+    assert (cpu.applicability, cpu.execution, cpu.finding) == ("unknown", "error", "fail")
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        {},
+        {"mem": "", "mem_used": "1"},
+        {"mem": "garbage", "mem_used": "1"},
+        {"mem": "0", "mem_used": "0"},
+        {"mem": "100", "mem_used": "garbage"},
+    ],
+)
+def test_resource_usage_unknown_memory_is_error(client_for, content):
+    verdicts = {v.check: v for v in health._resource_usage(client_for(_resource_handler(content)))}
+    memory = verdicts["resource_memory"]
+    assert (memory.applicability, memory.execution, memory.finding) == (
+        "unknown",
+        "error",
+        "fail",
+    )
+
+
 def test_disk_space_low_free_warns(client_for):
     def handler(req: httpx.Request) -> httpx.Response:
         return httpx.Response(
@@ -82,6 +118,49 @@ def test_disk_space_low_free_warns(client_for):
     assert verdicts["disk:/var"].finding == "pass"  # 80% free
 
 
+def _disk_handler(entries):
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"entry": entries})
+
+    return handler
+
+
+def test_disk_space_empty_results_are_error(client_for):
+    verdict = health._disk_space(client_for(_disk_handler([])))[0]
+    assert (verdict.check, verdict.applicability, verdict.execution, verdict.finding) == (
+        "disk_space",
+        "unknown",
+        "error",
+        "fail",
+    )
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        {},
+        {"capacity": "", "free": "1"},
+        {"capacity": "garbage", "free": "1"},
+        {"capacity": "0", "free": "0"},
+        {"capacity": "100", "free": "garbage"},
+    ],
+)
+def test_disk_space_unknown_partition_data_is_error(client_for, content):
+    verdict = health._disk_space(client_for(_disk_handler([{"content": content}])))[0]
+    assert (verdict.applicability, verdict.execution, verdict.finding) == (
+        "unknown",
+        "error",
+        "fail",
+    )
+
+
+def test_disk_space_valid_zero_free_warns(client_for):
+    verdict = health._disk_space(
+        client_for(_disk_handler([{"content": {"capacity": "100", "free": "0"}}]))
+    )[0]
+    assert (verdict.execution, verdict.finding) == ("completed", "warn")
+
+
 def test_internal_errors_high_count_warns(client_for):
     # error_count comes back from Splunk as a string; the check must coerce it.
     def handler(req: httpx.Request) -> httpx.Response:
@@ -97,6 +176,37 @@ def test_internal_errors_low_count_passes(client_for):
 
     verdicts = {v.check: v for v in health._internal_errors(client_for(handler))}
     assert verdicts["internal_errors"].finding == "pass"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {},
+        {"results": []},
+        {"results": [{}]},
+        {"results": [{"error_count": ""}]},
+        {"results": [{"error_count": "garbage"}]},
+        {"results": [{"error_count": "nan"}]},
+    ],
+)
+def test_internal_errors_unknown_data_is_error(client_for, body):
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=body)
+
+    verdict = health._internal_errors(client_for(handler))[0]
+    assert (verdict.applicability, verdict.execution, verdict.finding) == (
+        "unknown",
+        "error",
+        "fail",
+    )
+
+
+def test_internal_errors_valid_zero_passes(client_for):
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"results": [{"error_count": "0"}]})
+
+    verdict = health._internal_errors(client_for(handler))[0]
+    assert (verdict.execution, verdict.finding) == ("completed", "pass")
 
 
 def test_health_red_maps_to_fail(client_for):

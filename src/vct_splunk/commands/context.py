@@ -116,7 +116,7 @@ class Ctx:
         from ..core.acs.client import AcsClient, acs_config_from_env
         from ..core.backends import cloud_stack_from_url
 
-        stack = cloud_stack_from_url(self.base_url or os.environ.get("SPLUNK_URL"))
+        stack = cloud_stack_from_url(self.base_url)
         return AcsClient(acs_config_from_env(stack))
 
     def meta(self) -> dict[str, str | None]:
@@ -125,8 +125,7 @@ class Ctx:
         Right now this is just the target Splunk URL, so a piece of output can be
         traced back to the instance it came from.
         """
-        profile = load_profile(self.profile)
-        return {"target": self.base_url or os.environ.get("SPLUNK_URL") or profile.get("url")}
+        return {"target": self.base_url}
 
 
 def command(fn: Callable) -> Callable:
@@ -151,23 +150,20 @@ def command(fn: Callable) -> Callable:
         # Click passes every option to the callback by name. The shared options
         # are named explicitly here; the command's own arguments arrive untouched
         # in **kwargs and are forwarded straight through to fn.
-        profile = profile or os.environ.get("SPLUNK_PROFILE")
-        prof = load_profile(profile)
-        ctx = Ctx(
-            out.resolve_mode(output, table),
-            dry_run,
-            yes,
-            base_url,
-            # Flag > env > profile; any may stay None, in which case the namespace
-            # policy (core.namespace.resolve_ns) supplies a safe default.
-            app=app or os.environ.get("SPLUNK_APP") or prof.get("app"),
-            owner=owner or os.environ.get("SPLUNK_OWNER") or prof.get("owner"),
-            profile=profile,
-            # Deduced from the target URL, never user-chosen. Drives backend
-            # routing (REST vs ACS) and the Cloud write guard.
-            backend=deduce_backend(base_url or os.environ.get("SPLUNK_URL") or prof.get("url")),
-        )
         try:
+            profile = profile or os.environ.get("SPLUNK_PROFILE")
+            prof = load_profile(profile)
+            target = base_url or os.environ.get("SPLUNK_URL") or prof.get("url")
+            ctx = Ctx(
+                out.resolve_mode(output, table),
+                dry_run,
+                yes,
+                target,
+                app=app or os.environ.get("SPLUNK_APP") or prof.get("app"),
+                owner=owner or os.environ.get("SPLUNK_OWNER") or prof.get("owner"),
+                profile=profile,
+                backend=deduce_backend(target),
+            )
             return fn(ctx, **kwargs)
         except SplunkError as exc:
             # The core stays Click-free and raises typed errors; the shell layer

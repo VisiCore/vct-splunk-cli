@@ -221,3 +221,13 @@ def test_config_from_env_env_url_wins_over_profile(monkeypatch, tmp_path):
     monkeypatch.setenv("SPLUNK_TOKEN", "T")
     cfg = config_from_env(profile="prod")
     assert cfg.base_url == "https://from-env:8089"
+
+
+def test_config_from_env_profile_only_resolves_url_and_token(monkeypatch, tmp_path):
+    _clear_auth_env(monkeypatch)
+    cfgfile = tmp_path / "config"
+    cfgfile.write_text("[prod]\nurl = https://from-profile:8089\ntoken = T%PROFILE\n")
+    cfgfile.chmod(0o600)
+    monkeypatch.setenv("VCT_SPLUNK_CONFIG", str(cfgfile))
+    cfg = config_from_env(profile="prod")
+    assert (cfg.base_url, cfg.token) == ("https://from-profile:8089", "T%PROFILE")
