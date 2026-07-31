@@ -38,13 +38,13 @@ This is the 0.2.0 development line (version bumped from 0.0.1).
   running real create -> verify -> cleanup, with integration coverage for the
   namespaced saved-search and factory user lifecycles (#14).
 - A Nix flake dev shell (`nix develop` / direnv) per the workspace convention (#15).
-- Deeper health checks (resource usage, disk space, internal-error rate) shipped as
-  versioned check data (#11).
-- Session-key auth: a credential in `SPLUNK_SESSION_KEY` is sent as
-  `Authorization: Splunk <key>` (alongside the existing `SPLUNK_TOKEN` ->
-  `Authorization: Bearer <token>`), plus `auth login` (exchange a
-  username/password for a session key) and `auth status` (report the resolved
-  target and active scheme without revealing the secret) (#13).
+- Deeper health checks for resource usage, disk space, and the internal-error
+  rate. The internal-error check uses a bounded search of `index=_internal`;
+  when the credential lacks that search capability, the check reports that it
+  is unavailable without marking the instance unhealthy (#11).
+- `auth login` exchanges a username/password for a session key, and `auth
+  status` reports the resolved target and active scheme without revealing the
+  secret (#13).
 - Config-file profiles: a `--profile` option (and `$SPLUNK_PROFILE`) selects a
   named section in an INI file (`$VCT_SPLUNK_CONFIG`, else
   `$XDG_CONFIG_HOME/vct-splunk/config`) supplying `url` / `token` /
