@@ -152,17 +152,63 @@ supports for anyone who wants to know. An MCP wrapper is a planned follow-up.
 
 ## Testing
 
+The unit suite is credential-free:
+
 ```bash
-.venv/bin/python -m pytest                 # unit tests (mocked HTTP)
-SPLUNK_INTEGRATION_TEST=true .venv/bin/python -m pytest -m integration   # against a live/Docker Splunk
+.venv/bin/python -m pytest
 ```
 
-CI runs the integration suite against a Dockerized `splunk/splunk` on an x86 runner,
-where KV Store (and its bundled MongoDB) runs natively. On Apple Silicon that MongoDB
-needs an AVX instruction the emulated image lacks, so boot the local container with KV
-Store **disabled** (`server.conf [kvstore] disabled = true` via the image's
-`default.yml` / `SPLUNK_DEFAULTS_URL`). Everything except KV Store works locally; the
-KV-Store-dependent checks run only in CI.
+Live tests use strict markers: `integration`, `enterprise`, `cloud`, `acs`,
+`read`, and `write`. Enterprise reads require `SPLUNK_INTEGRATION_TEST=true`;
+writes additionally require `SPLUNK_WRITE_TEST=true` and must target a disposable
+instance. The catalog drives both suites: 61 read leaves and 92 write/action
+leaves.
+
+For a clear PowerShell transcript and a machine-readable report:
+
+```powershell
+$env:SPLUNK_INTEGRATION_TEST = "true"
+$env:SPLUNK_URL = "https://localhost:8089"
+$env:SPLUNK_USERNAME = "admin"
+$env:SPLUNK_PASSWORD = "<disposable-instance-password>"
+$env:SPLUNK_VERIFY = "false"
+
+python -m pytest tests/integration/enterprise/read -vv --tb=short `
+  --junitxml=enterprise-read.xml 2>&1 |
+  Tee-Object -FilePath enterprise-read.log
+
+$env:SPLUNK_WRITE_TEST = "true"
+$env:SPLUNK_TEST_SERVER_FIXTURE_DIR = "/opt/splunk/var/run/splunk/lookup_tmp"
+python -m pytest tests/integration/enterprise/write -vv --tb=short `
+  --junitxml=enterprise-write.xml 2>&1 |
+  Tee-Object -FilePath enterprise-write.log
+```
+
+For a client Splunk Cloud stack, set only the environment credentials and run
+the read-only lane. It exercises every currently supported Cloud read
+(`index list`, `role list`, and `hec-token list`) through the public ACS API;
+writes remain structurally unreachable.
+
+```powershell
+$env:SPLUNK_ACS_LIVE_TEST = "true"
+$env:SPLUNK_URL = "https://client-stack.splunkcloud.com"
+$env:SPLUNK_ACS_TOKEN = "<acs-token>"
+# Optional overrides:
+# $env:SPLUNK_ACS_STACK = "client-stack"
+# $env:SPLUNK_ACS_BASE_URL = "https://admin.splunkcloudgc.com" # FedRAMP
+
+python -m pytest -m "integration and cloud and read" -vv --tb=short `
+  --junitxml=cloud-read.xml 2>&1 |
+  Tee-Object -FilePath cloud-read.log
+```
+
+On every merge to `main`, CI first runs the Python 3.10–3.14 unit matrix, then
+boots `splunk/splunk:latest`, publishes a named 61-read test summary, applies
+all 92 write lifecycles with reverse cleanup, restarts splunkd last, and proves
+the CLI reconnects. Pull requests run the credential-free gate on Python 3.14.
+The manual **Splunk Cloud Read Canary** workflow uses Python and outbound HTTPS
+only; the scheduled **ACS Public Contract** workflow detects upstream OpenAPI
+drift without credentials.
 
 ## Contributing
 

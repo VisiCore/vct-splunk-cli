@@ -22,10 +22,22 @@ pyright            # types
 pytest             # unit tests (mocked; no network)
 ```
 
-The end-to-end test is gated and needs a live Splunk:
+The live suites are independently gated and need a reachable Splunk Enterprise:
 
 ```bash
-SPLUNK_INTEGRATION_TEST=true pytest -m integration
+SPLUNK_INTEGRATION_TEST=true pytest -m "integration and enterprise and read"
+SPLUNK_INTEGRATION_TEST=true SPLUNK_WRITE_TEST=true \
+  pytest -m "integration and enterprise and write"
+```
+
+The write lane is destructive and is intended only for the disposable
+`splunk/splunk:latest` container. It exercises every mutation through the CLI,
+restores global state, fails cleanup leaks, and restarts Splunk last.
+
+The read-only Cloud canary needs `SPLUNK_URL` and `SPLUNK_ACS_TOKEN`:
+
+```bash
+SPLUNK_ACS_LIVE_TEST=true pytest -m "integration and cloud and read"
 ```
 
 ## Project layout

@@ -6,6 +6,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+- Add catalog-driven live coverage for all 61 Enterprise reads and 92 writes,
+  including cleanup, global-state restoration, restart/reconnect, mandatory
+  `main`-merge container CI, a manual Cloud read canary, and scheduled ACS
+  public-contract drift detection.
+- Correct live Splunk 10 contracts for file-based app installation, absolute
+  monitor/script input identifiers, and standalone cluster status responses.
+
 This is the 0.2.0 development line (version bumped from 0.0.1).
 
 ### Added
