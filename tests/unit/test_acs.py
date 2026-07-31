@@ -3,8 +3,7 @@
 The backend is deduced from SPLUNK_URL (a ``*.splunkcloud.com`` host is Cloud);
 the user sees one flat command surface. Cloud certification is deferred (no live
 canary), so these use a mocked transport rather than recorded cassettes. The
-spec-pinned test ensures the client never calls an ACS path the vendored OpenAPI
-subset does not declare.
+public-spec test verifies the operation declarations against Splunk's OpenAPI.
 """
 
 from __future__ import annotations
@@ -17,7 +16,7 @@ from click.testing import CliRunner
 
 from vct_splunk.cli import cli
 from vct_splunk.core import backends
-from vct_splunk.core.acs import operations, pinned_spec
+from vct_splunk.core.acs import operations
 from vct_splunk.core.acs.client import AcsClient, AcsConfig, acs_config_from_env
 from vct_splunk.core.client import ClientConfig, SplunkClient
 from vct_splunk.core.errors import (
@@ -58,10 +57,8 @@ def _patch_rest(monkeypatch, handler) -> None:
 # --- ACS client + operations (unchanged behaviour) ---------------------------
 
 
-def test_acs_read_paths_are_pinned_to_the_spec():
-    declared = set(pinned_spec()["paths"])
-    for path in operations.READ_PATHS:
-        assert f"/{path}" in declared  # never call a path the spec does not pin
+def test_acs_read_paths_match_list_declarations():
+    assert tuple(operations.LIST_ENVELOPES) == operations.READ_PATHS
 
 
 def test_list_cloud_indexes_hits_indexes_path():
@@ -69,16 +66,60 @@ def test_list_cloud_indexes_hits_indexes_path():
 
     def handler(req: httpx.Request) -> httpx.Response:
         seen["path"] = req.url.path
-        return httpx.Response(200, json=[{"name": "main"}, {"name": "audit"}])
+        return httpx.Response(200, json={"indexes": [{"name": "main"}, {"name": "audit"}]})
 
     result = operations.list_cloud_indexes(_acs(handler))
     assert seen["path"].endswith("/adminconfig/v2/indexes")
     assert [i["name"] for i in result] == ["main", "audit"]
 
 
-def test_acs_auth_error_maps_typed():
+def test_acs_list_paginates_with_count_and_offset():
+    offsets: list[int] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        assert req.url.params["count"] == "100"
+        offset = int(req.url.params["offset"])
+        offsets.append(offset)
+        size = 100 if offset == 0 else 2
+        return httpx.Response(
+            200, json={"roles": [{"name": f"role-{offset + i}"} for i in range(size)]}
+        )
+
+    result = operations.list_cloud_roles(_acs(handler))
+
+    assert offsets == [0, 100]
+    assert len(result) == 102
+
+
+@pytest.mark.parametrize("body", [{}, {"roles": {}}, {"roles": ["bad"]}])
+def test_acs_rejects_missing_or_malformed_envelope(body):
+    with pytest.raises(APIError):
+        operations.list_cloud_roles(_acs(lambda req: httpx.Response(200, json=body)))
+
+
+def test_acs_hec_tokens_are_removed_at_operation_boundary():
+    result = operations.list_hec_tokens(
+        _acs(
+            lambda req: httpx.Response(
+                200,
+                json={
+                    "http_event_collectors": [
+                        {"spec": {"name": "one"}, "token": "secret"},
+                        {"spec": {"name": "two", "token": "nested-secret"}},
+                    ]
+                },
+            )
+        )
+    )
+
+    assert result == [{"spec": {"name": "one"}}, {"spec": {"name": "two"}}]
+    assert "secret" not in json.dumps(result)
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_acs_auth_error_maps_typed(status):
     with pytest.raises(AuthError):
-        operations.list_cloud_roles(_acs(lambda req: httpx.Response(401, json={})))
+        operations.list_cloud_roles(_acs(lambda req: httpx.Response(status, json={})))
 
 
 def test_acs_404_maps_not_found():
@@ -86,9 +127,33 @@ def test_acs_404_maps_not_found():
         operations.list_cloud_roles(_acs(lambda req: httpx.Response(404, json={})))
 
 
-def test_acs_5xx_maps_api_error():
+def test_acs_5xx_maps_api_error(monkeypatch):
+    monkeypatch.setattr("vct_splunk.core.acs.client.time.sleep", lambda delay: None)
     with pytest.raises(APIError):
         operations.list_cloud_roles(_acs(lambda req: httpx.Response(500, json={})))
+
+
+def test_acs_malformed_json_maps_api_error():
+    with pytest.raises(APIError, match="malformed JSON"):
+        operations.list_cloud_roles(_acs(lambda req: httpx.Response(200, content=b"{not-json")))
+
+
+@pytest.mark.parametrize("status", [429, 500, 501, 502, 503, 504])
+def test_acs_retries_bounded_statuses(monkeypatch, status):
+    calls = 0
+    sleeps: list[float] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls < 3:
+            return httpx.Response(status, headers={"Retry-After": "7"}, json={})
+        return httpx.Response(200, json={"roles": []})
+
+    monkeypatch.setattr("vct_splunk.core.acs.client.time.sleep", sleeps.append)
+    assert operations.list_cloud_roles(_acs(handler)) == []
+    assert calls == 3
+    assert sleeps == [7.0, 7.0]
 
 
 def test_acs_unreachable_maps_transport_error():
@@ -111,6 +176,23 @@ def test_acs_config_requires_token(monkeypatch):
     monkeypatch.delenv("SPLUNK_ACS_TOKEN", raising=False)
     with pytest.raises(UsageError, match="SPLUNK_ACS_TOKEN"):
         acs_config_from_env("acme")
+
+
+@pytest.mark.parametrize("stack", ["../other", "a/b", ".hidden", "two words", ""])
+def test_acs_config_rejects_invalid_stack(monkeypatch, stack):
+    monkeypatch.setenv("SPLUNK_ACS_TOKEN", "T")
+    monkeypatch.setenv("SPLUNK_ACS_STACK", stack)
+    with pytest.raises(UsageError, match="stack"):
+        acs_config_from_env()
+
+
+def test_acs_config_supports_base_url_override(monkeypatch):
+    monkeypatch.setenv("SPLUNK_ACS_TOKEN", "T")
+    monkeypatch.setenv("SPLUNK_ACS_BASE_URL", "https://admin.splunkcloudgc.com/")
+
+    config = acs_config_from_env("fed-stack")
+
+    assert config.base_url == "https://admin.splunkcloudgc.com"
 
 
 # --- Backend deduction from the URL ------------------------------------------
@@ -157,7 +239,12 @@ def test_flat_list_routes_to_acs_on_cloud(monkeypatch, argv, acs_path):
 
     def handler(req: httpx.Request) -> httpx.Response:
         seen["path"] = req.url.path
-        return httpx.Response(200, json=[{"name": "main"}])
+        envelope = {
+            "indexes": "indexes",
+            "roles": "roles",
+            "http-event-collectors": "http_event_collectors",
+        }[req.url.path.rsplit("/", 1)[-1]]
+        return httpx.Response(200, json={envelope: [{"name": "main"}]})
 
     _patch_acs(monkeypatch, handler)
     result = CliRunner().invoke(cli, [*argv, "--output", "json"])

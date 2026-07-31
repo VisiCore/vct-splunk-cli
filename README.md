@@ -143,6 +143,8 @@ against the documented REST API. It does not use, bundle, or proxy any Splunk-di
 `*.splunkcloud.com` host, the CLI deduces the Cloud backend and the *same flat
 commands* read via the Cloud ACS API instead of splunkd — you never pick a
 backend. ACS reads need a `SPLUNK_ACS_TOKEN` (the stack is derived from the URL).
+The ACS origin defaults to the commercial endpoint `https://admin.splunk.com`;
+set `SPLUNK_ACS_BASE_URL=https://admin.splunkcloudgc.com` for FedRAMP stacks.
 Cloud coverage is **read-only** and not yet certified against a live stack, so an
 operation it can't serve stops with a clean `unsupported_backend` error (exit 4)
 rather than guessing. `splunk inspect` reports the deduced backend and what it
