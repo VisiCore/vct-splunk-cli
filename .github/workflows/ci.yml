@@ -32,7 +32,7 @@ jobs:
       runner_label: ubuntu-latest
 
   # Run only the latest supported Python on PRs. A push to main (which occurs
-  # after a merge) runs the supported min/latest matrix. This is deliberately
+  # after a merge) runs every supported Python. This is deliberately
   # downstream of every applicable pull-request check above.
   python:
     needs: [dependency-review, workflow-security]
@@ -49,7 +49,7 @@ jobs:
         ${{
           github.event_name == 'pull_request' &&
           '["3.14"]' ||
-          '["3.10", "3.14"]'
+          '["3.10", "3.11", "3.12", "3.13", "3.14"]'
         }}
       gate_python_version: "3.14"
       runner_label: ubuntu-latest
