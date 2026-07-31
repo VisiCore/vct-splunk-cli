@@ -10,29 +10,49 @@ permissions:
   contents: read
 
 jobs:
-  # Lint / format / type / test via the org-wide reusable gate. Every `run:`
-  # step and the zizmor policy live ONCE in dryvist/.github — this repo carries
-  # neither. `python_ci` runs _python-ci.yml: `uv run --extra dev pre-commit run
-  # --all-files` (ruff + ruff-format + pyright + hygiene + markdownlint) +
-  # central zizmor + pytest across the matrix. Gated by the `python` filter.
-  gate:
+  # Review dependency changes on every pull request. This repository is public,
+  # so GitHub can provide the dependency graph used by this official action.
+  dependency-review:
     permissions:
       contents: read
-      pull-requests: read
-      actions: write # required: _ci-gate.yml's queue watchdog cancels stuck jobs
-    uses: dryvist/.github/.github/workflows/_ci-gate.yml@main
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5
+        with:
+          fail-on-severity: moderate
+
+  # Keep workflow-policy enforcement centralized without instantiating the
+  # unrelated Nix, Ansible, Markdown, or file-size jobs from _ci-gate.
+  workflow-security:
+    if: github.event_name == 'pull_request'
+    uses: dryvist/.github/.github/workflows/_zizmor.yml@main
     with:
-      python_ci: true
-      # This repo narrows to min + latest; the org default is all non-EOL.
-      python_ci_versions: '["3.10", "3.14"]'
-      filters: |
-        python:
-          - '**/*.py'
-          - '**/*.md'
-          - 'pyproject.toml'
-          - '.pre-commit-config.yaml'
-          - '.markdownlint-cli2.yaml'
-          - '.github/workflows/**'
+      runner_label: ubuntu-latest
+
+  # Run only the latest supported Python on PRs. A push to main (which occurs
+  # after a merge) runs every supported Python. This is deliberately
+  # downstream of every applicable pull-request check above.
+  python:
+    needs: [dependency-review, workflow-security]
+    if: >-
+      ${{
+        !cancelled() &&
+        (github.event_name == 'push' ||
+          (needs.dependency-review.result == 'success' &&
+            needs.workflow-security.result == 'success'))
+      }}
+    uses: dryvist/.github/.github/workflows/_python-ci.yml@main
+    with:
+      python_versions: >-
+        ${{
+          github.event_name == 'pull_request' &&
+          '["3.14"]' ||
+          '["3.10", "3.11", "3.12", "3.13", "3.14"]'
+        }}
+      gate_python_version: "3.14"
+      runner_label: ubuntu-latest
 
   # Real create -> verify -> cleanup against a Dockerized Splunk Enterprise 10.x.
   # COST CONTROL: this is expensive (boots a Splunk container, several minutes), so
