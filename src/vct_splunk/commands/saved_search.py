@@ -12,6 +12,7 @@ from __future__ import annotations
 import click
 
 from ..core import saved_searches as core
+from ..core.errors import UnsupportedBackendError
 from ..core.namespace import ns_path, resolve_ns
 from . import output as out
 from .context import command
@@ -38,6 +39,8 @@ def run(ctx, name, trigger_actions, earliest, latest) -> None:
     so the namespace resolves like a write — explicit app, owner defaulting to
     ``nobody`` (found live against Splunk 10.2).
     """
+    if ctx.backend == "cloud":
+        raise UnsupportedBackendError("saved-search", "run", "cloud")
     owner, app = resolve_ns(ctx.owner, ctx.app, for_write=True)
     if ctx.dry_run:
         # Built by the same core function as the real request, so the preview

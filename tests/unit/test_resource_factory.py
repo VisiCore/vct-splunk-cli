@@ -10,6 +10,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
+from vct_splunk.commands.registry import INDEX, REGISTRY, SAVED_SEARCH
 from vct_splunk.core.errors import NotFoundError
 from vct_splunk.core.resource import CrudResource, Field, Spec
 
@@ -82,3 +83,21 @@ def test_get_missing_raises_notfound(client_for):
         CrudResource(GLOBAL_SPEC).get(
             client_for(lambda req: httpx.Response(200, json={"entry": []})), "nope"
         )
+
+
+@pytest.mark.parametrize("spec", [INDEX, SAVED_SEARCH, *REGISTRY], ids=lambda spec: spec.name)
+def test_every_registry_spec_uses_the_generic_read_engine(spec, client_for):
+    seen: dict[str, str] = {}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen["method"] = req.method
+        seen["path"] = req.url.path
+        return httpx.Response(200, json={"entry": [], "paging": {"total": 0}})
+
+    owner = "nobody" if spec.namespaced else None
+    app = "my_app" if spec.namespaced else None
+    assert CrudResource(spec).list(client_for(handler), owner=owner, app=app) == []
+    expected = (
+        f"/servicesNS/nobody/my_app/{spec.path.lstrip('/')}" if spec.namespaced else spec.path
+    )
+    assert seen == {"method": "GET", "path": expected}
