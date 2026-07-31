@@ -3,8 +3,7 @@
 The backend is deduced from SPLUNK_URL (a ``*.splunkcloud.com`` host is Cloud);
 the user sees one flat command surface. Cloud certification is deferred (no live
 canary), so these use a mocked transport rather than recorded cassettes. The
-spec-pinned test ensures the client never calls an ACS path the vendored OpenAPI
-subset does not declare.
+public-spec test verifies the operation declarations against Splunk's OpenAPI.
 """
 
 from __future__ import annotations
@@ -17,7 +16,7 @@ from click.testing import CliRunner
 
 from vct_splunk.cli import cli
 from vct_splunk.core import backends
-from vct_splunk.core.acs import operations, pinned_spec
+from vct_splunk.core.acs import operations
 from vct_splunk.core.acs.client import AcsClient, AcsConfig, acs_config_from_env
 from vct_splunk.core.client import ClientConfig, SplunkClient
 from vct_splunk.core.errors import (
@@ -58,10 +57,8 @@ def _patch_rest(monkeypatch, handler) -> None:
 # --- ACS client + operations (unchanged behaviour) ---------------------------
 
 
-def test_acs_read_paths_are_pinned_to_the_spec():
-    declared = set(pinned_spec()["paths"])
-    for path in operations.READ_PATHS:
-        assert f"/{{stack}}/adminconfig/v2/{path}" in declared
+def test_acs_read_paths_match_list_declarations():
+    assert tuple(operations.LIST_ENVELOPES) == operations.READ_PATHS
 
 
 def test_list_cloud_indexes_hits_indexes_path():
