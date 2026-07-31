@@ -7,24 +7,15 @@ logic. Writes (serverclass create/update, reload) route through the shared
 
 from __future__ import annotations
 
-from typing import Any
-
 import click
 
 from ..core import deploy as core
 from ..core.errors import UsageError
+from ..core.parsing import parse_key_value_pairs
+from ..core.path import path_segment
 from . import output as out
 from .context import command
 from .write import do_write
-
-
-def _parse_sets(pairs: tuple[str, ...]) -> dict[str, Any]:
-    """Split repeated ``KEY=VALUE`` strings into a form-field dict."""
-    out_: dict[str, Any] = {}
-    for pair in pairs:
-        key, _, val = pair.partition("=")
-        out_[key] = val
-    return out_
 
 
 @click.group(name="deploy")
@@ -65,6 +56,7 @@ def serverclass_list(ctx) -> None:
 @command
 def serverclass_get(ctx, name) -> None:
     """Show one server class by name."""
+    path_segment(name, label="server class name")
     with ctx.client() as c:
         data = core.get_serverclass(c, name)
     out.emit(data, ctx.output_mode, ctx.meta())
@@ -78,7 +70,8 @@ def serverclass_create(ctx, name, _set) -> None:
     """Create a server class. Requires at least one --set. Gated write."""
     if not _set:
         raise UsageError("Nothing to create. Pass at least one --set KEY=VALUE.")
-    settings = _parse_sets(_set)
+    path_segment(name, label="server class name")
+    settings = parse_key_value_pairs(_set)
     result = do_write(
         ctx,
         action=f"create server class '{name}'",
@@ -96,7 +89,8 @@ def serverclass_update(ctx, name, _set) -> None:
     """Update a server class (only the keys you pass). Gated write."""
     if not _set:
         raise UsageError("Nothing to update. Pass at least one --set KEY=VALUE.")
-    settings = _parse_sets(_set)
+    path_segment(name, label="server class name")
+    settings = parse_key_value_pairs(_set)
     result = do_write(
         ctx,
         action=f"update server class '{name}'",

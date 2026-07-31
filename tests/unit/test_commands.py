@@ -242,7 +242,7 @@ def test_server_settings_set_dry_run_previews(cli_env, patch_client):
 
 
 def test_app_install_requires_one_source(cli_env):
-    # Neither --file nor --url: usage error before any network call.
+    # Neither --server-file nor --url: usage error before any network call.
     result = CliRunner().invoke(cli, ["app", "install", "--output", "json"])
     assert result.exit_code == 2
     assert "usage_error" in result.output
