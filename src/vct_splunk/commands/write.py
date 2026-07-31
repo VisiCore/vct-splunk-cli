@@ -4,12 +4,10 @@ Every gated write -- hand-written or factory-generated -- runs through
 :func:`do_write`, so target resolution, the confirmation gate, and audit logging
 live in exactly one place.
 
-ponytail: this function is the seam for the larger write-safety framework (#12).
-The deferred pieces -- plan tokens, target fingerprinting, optimistic concurrency,
-risk-tier allowlists, blast-radius caps, a freeze-writes kill switch
-(``VCT_SPLUNK_READONLY``), and server-side validate -- all belong *inside* this
-one function. Add each only when a real second writer (e.g. the Lambda backend)
-needs it; today the call sites need exactly the gate + audit below.
+This function is also the seam for the larger write-safety framework (#12):
+deferred pieces such as plan tokens, optimistic concurrency, and a freeze-writes
+kill switch would all belong *inside* it. Add each only when a real second
+writer needs it; today the call sites need exactly the gate + audit below.
 """
 
 from __future__ import annotations
@@ -19,6 +17,7 @@ from typing import Any
 
 from ..core import audit
 from ..core.client import SplunkClient, config_from_env
+from ..core.errors import UnsupportedBackendError
 from . import output as out
 
 
@@ -47,6 +46,12 @@ def do_write(
     Returns:
         The operation result, ready for :func:`output.emit`.
     """
+    # Writes are Enterprise-only this release. On a deduced Cloud backend, stop
+    # cleanly before resolving credentials or prompting -- ACS-backed writes are a
+    # later release. audit_event["action"] is "<resource>.<verb>" (e.g. index.create).
+    if getattr(ctx, "backend", "enterprise") == "cloud":
+        resource, _, verb = str(audit_event.get("action", "")).partition(".")
+        raise UnsupportedBackendError(resource or "this resource", verb or "write", "cloud")
     target = target or config_from_env(ctx.base_url).base_url
     out.confirm_write(ctx, action, target)
     with ctx.client() as c:
