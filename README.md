@@ -178,8 +178,8 @@ pre-PR checks, and [AGENTS.md](./AGENTS.md) for the architecture and conventions
 
 ## License
 
-See [LICENSE](./LICENSE).
+[MIT](./LICENSE)
 
 ---
 
-More at [docs.dryvist.com](https://docs.dryvist.com).
+More at [docs.jacobpevans.com](https://docs.jacobpevans.com).
