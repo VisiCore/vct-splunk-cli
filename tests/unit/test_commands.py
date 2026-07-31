@@ -10,6 +10,7 @@ with command-specific behavior worth pinning.
 from __future__ import annotations
 
 import httpx
+import pytest
 from click.testing import CliRunner
 
 from vct_splunk.cli import cli
@@ -114,6 +115,27 @@ def test_health_check_exits_5_on_fail(cli_env, patch_client):
     # (API/transport error).
     assert result.exit_code == 5
     assert '"finding": "fail"' in result.output
+
+
+@pytest.mark.parametrize("status", [403, 404])
+def test_health_optional_checks_unavailable_exit_zero(cli_env, patch_client, status):
+    def handler(req: httpx.Request) -> httpx.Response:
+        if req.url.path == "/services/server/info":
+            return httpx.Response(
+                200,
+                json={"entry": [{"content": {"version": "9.4", "serverName": "sh"}}]},
+            )
+        return httpx.Response(status, json={"messages": []})
+
+    patch_client(handler)
+    result = CliRunner().invoke(cli, ["health", "check", "--output", "json"])
+
+    assert result.exit_code == 0
+    assert '"finding": "na"' in result.output
+    expected = "permission_denied" if status == 403 else "not_applicable"
+    assert f'"{expected}"' in result.output
+    assert '"health_checks_version": "1"' in result.output
+    assert '"check": "checks_version"' not in result.output
 
 
 def test_saved_search_create_requires_app(cli_env):

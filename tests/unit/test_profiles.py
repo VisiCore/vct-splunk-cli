@@ -6,6 +6,7 @@ import os
 
 import pytest
 
+from vct_splunk.core.client import config_from_env
 from vct_splunk.core.errors import UsageError
 from vct_splunk.core.profiles import config_path, load_profile
 
@@ -73,5 +74,34 @@ def test_secret_profile_rejects_group_or_world_access(tmp_path, monkeypatch):
     cfgfile.write_text("[prod]\ntoken = secret\n")
     cfgfile.chmod(0o644)
     monkeypatch.setenv("VCT_SPLUNK_CONFIG", str(cfgfile))
+    monkeypatch.setenv("SPLUNK_URL", "https://splunk.test:8089")
     with pytest.raises(UsageError, match="mode 0600"):
+        config_from_env(profile="prod")
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permission bits required")
+def test_insecure_profile_credential_is_ignored_when_env_token_wins(tmp_path, monkeypatch):
+    cfgfile = tmp_path / "config"
+    cfgfile.write_text("[prod]\nurl = https://profile:8089\ntoken = profile-secret\n")
+    cfgfile.chmod(0o644)
+    monkeypatch.setenv("VCT_SPLUNK_CONFIG", str(cfgfile))
+    monkeypatch.setenv("SPLUNK_URL", "https://env:8089")
+    monkeypatch.setenv("SPLUNK_TOKEN", "env-token")
+    cfg = config_from_env(profile="prod")
+    assert (cfg.base_url, cfg.token) == ("https://env:8089", "env-token")
+
+
+def test_non_utf8_profile_raises_usage_error(tmp_path, monkeypatch):
+    cfgfile = tmp_path / "config"
+    cfgfile.write_bytes(b"[prod]\nurl = \xff\n")
+    monkeypatch.setenv("VCT_SPLUNK_CONFIG", str(cfgfile))
+    with pytest.raises(UsageError, match="valid UTF-8"):
+        load_profile("prod")
+
+
+def test_malformed_profile_raises_usage_error(tmp_path, monkeypatch):
+    cfgfile = tmp_path / "config"
+    cfgfile.write_text("[prod\nurl = https://splunk.test:8089\n")
+    monkeypatch.setenv("VCT_SPLUNK_CONFIG", str(cfgfile))
+    with pytest.raises(UsageError, match="is malformed"):
         load_profile("prod")

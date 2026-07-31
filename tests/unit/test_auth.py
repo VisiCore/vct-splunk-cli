@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from types import SimpleNamespace
+
 import httpx
 import pytest
 from click.testing import CliRunner
@@ -82,6 +85,16 @@ def test_login_missing_session_key_raises_auth():
         )
 
 
+def test_login_malformed_json_raises_auth():
+    with pytest.raises(AuthError):
+        core.login(
+            "https://splunk.test:8089",
+            "admin",
+            "secret",
+            transport=httpx.MockTransport(lambda req: httpx.Response(200, content=b"{")),
+        )
+
+
 def test_login_500_raises_api():
     with pytest.raises(APIError):
         core.login(
@@ -117,6 +130,48 @@ def test_auth_login_refuses_without_password_noninteractive(monkeypatch):
     assert "usage_error" in result.output
 
 
+def test_auth_login_dry_run_sends_nothing_and_redacts_password(monkeypatch):
+    _clear_auth_env(monkeypatch)
+    monkeypatch.setenv("SPLUNK_URL", "https://splunk.test:8089")
+    monkeypatch.setenv("SPLUNK_USERNAME", "admin")
+    monkeypatch.setenv("SPLUNK_PASSWORD", "super-secret")
+    monkeypatch.setattr(
+        "vct_splunk.commands.auth.core.login",
+        lambda *a, **k: pytest.fail("dry-run must not log in"),
+    )
+    result = CliRunner().invoke(cli, ["auth", "login", "--dry-run", "--output", "json"])
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["data"]["dry_run"] is True
+    assert payload["data"]["request"] == {
+        "method": "POST",
+        "path": "/services/auth/login",
+        "body": {
+            "username": "admin",
+            "password": "<redacted>",
+            "output_mode": "json",
+        },
+    }
+    assert "super-secret" not in result.output
+
+
+def test_auth_prompt_requires_stdin_and_stderr_tty(monkeypatch):
+    _clear_auth_env(monkeypatch)
+    monkeypatch.setenv("SPLUNK_URL", "https://splunk.test:8089")
+    streams = SimpleNamespace(
+        stdin=SimpleNamespace(isatty=lambda: True),
+        stderr=SimpleNamespace(isatty=lambda: False),
+    )
+    monkeypatch.setattr("vct_splunk.commands.auth.sys", streams)
+    monkeypatch.setattr(
+        "vct_splunk.commands.auth.click.prompt",
+        lambda *a, **k: pytest.fail("must not prompt without stderr TTY"),
+    )
+    result = CliRunner().invoke(cli, ["auth", "login", "--output", "json"])
+    assert result.exit_code == 2
+    assert "usage_error" in result.output
+
+
 def test_auth_status_reports_bearer(monkeypatch):
     _clear_auth_env(monkeypatch)
     monkeypatch.setenv("SPLUNK_URL", "https://splunk.test:8089")
@@ -142,3 +197,39 @@ def test_auth_status_reports_none_when_unset(monkeypatch):
     result = CliRunner().invoke(cli, ["auth", "status", "--output", "json"])
     assert result.exit_code == 0
     assert '"auth_scheme": "none"' in result.output
+
+
+def test_auth_status_reports_username_password_without_logging_in(monkeypatch):
+    _clear_auth_env(monkeypatch)
+    monkeypatch.setenv("SPLUNK_URL", "https://splunk.test:8089")
+    monkeypatch.setenv("SPLUNK_USERNAME", "admin")
+    monkeypatch.setenv("SPLUNK_PASSWORD", "secret")
+    monkeypatch.setattr(
+        "vct_splunk.core.auth.login",
+        lambda *a, **k: pytest.fail("status must not log in"),
+    )
+    result = CliRunner().invoke(cli, ["auth", "status", "--output", "json"])
+    assert result.exit_code == 0
+    assert '"auth_scheme": "Splunk"' in result.output
+    assert "secret" not in result.output
+
+
+def test_inspect_does_not_select_insecure_profile_credentials(tmp_path, monkeypatch):
+    _clear_auth_env(monkeypatch)
+    cfgfile = tmp_path / "config"
+    cfgfile.write_text("[prod]\nurl = https://splunk.test:8089\ntoken = secret\n")
+    cfgfile.chmod(0o644)
+    monkeypatch.setenv("VCT_SPLUNK_CONFIG", str(cfgfile))
+    result = CliRunner().invoke(cli, ["inspect", "--profile", "prod", "--output", "json"])
+    assert result.exit_code == 0
+    assert "secret" not in result.output
+
+
+def test_non_utf8_profile_is_clean_cli_error(tmp_path, monkeypatch):
+    _clear_auth_env(monkeypatch)
+    cfgfile = tmp_path / "config"
+    cfgfile.write_bytes(b"[prod]\nurl = \xff\n")
+    monkeypatch.setenv("VCT_SPLUNK_CONFIG", str(cfgfile))
+    result = CliRunner().invoke(cli, ["inspect", "--profile", "prod", "--output", "json"])
+    assert result.exit_code == 2
+    assert json.loads(result.stderr)["error"]["code"] == "usage_error"
