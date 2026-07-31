@@ -10,7 +10,7 @@ from .commands.apps import app_install
 from .commands.auth import auth
 from .commands.cluster import cluster
 from .commands.datamodel import datamodel_accelerate
-from .commands.deploy import deploy
+from .commands.deploy import deploy_client, deploy_server
 from .commands.factory import build_group
 from .commands.health import health
 from .commands.hec import hec
@@ -43,7 +43,8 @@ for _group in (
     cluster,
     shcluster,
     license,
-    deploy,
+    deploy_server,
+    deploy_client,
     hec,
     lookup,
 ):
