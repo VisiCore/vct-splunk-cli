@@ -32,7 +32,7 @@ This is the 0.2.0 development line (version bumped from 0.0.1).
   whole HTTP Event Collector on or off. Both are gated writes (#6).
 - `tag` and `datamodel` join the generated CRUD groups for field-value tags and
   data models; large fields go through `--set`. `datamodel accelerate` toggles a
-  data model's acceleration, and `lookup upload --file PATH --app APP` adds a CSV
+  data model's acceleration, and `lookup upload --server-file PATH --app APP` adds a CSV
   lookup table file to an app. Both are gated, namespaced writes (#8).
 - `kvstore records` / `get` / `insert` / `update` / `delete` / `purge` manage KV
   Store data records as a namespaced JSON document store; writes require an app (#9).
