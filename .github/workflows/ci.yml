@@ -73,7 +73,9 @@ jobs:
         id: filter
         env:
           BASE_REF: ${{ github.base_ref }}
-        run: .github/scripts/detect-code-changes.sh
+        # Invoked through `bash` so the job does not depend on the executable
+        # bit surviving every checkout.
+        run: bash .github/scripts/detect-code-changes.sh
 
   enterprise:
     name: Enterprise / Full CLI

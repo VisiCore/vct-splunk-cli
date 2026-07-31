@@ -15,7 +15,10 @@ set -euo pipefail
 # Paths whose change requires a live Splunk run, anchored at the repo root.
 readonly COVERED='^(src/|tests/|\.github/scripts/|pyproject\.toml$|\.github/workflows/ci\.yml$)'
 
-git fetch --no-tags origin "$BASE_REF"
+# Fetch into an explicit remote-tracking ref. `git fetch origin <branch>` only
+# updates FETCH_HEAD unless the checkout happens to configure a matching
+# refspec, and `origin/<branch>` would then not resolve below.
+git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
 
 if git diff --name-only "origin/${BASE_REF}...HEAD" | grep -qE "$COVERED"; then
   echo "code=true" >>"$GITHUB_OUTPUT"
