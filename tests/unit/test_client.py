@@ -174,7 +174,15 @@ def test_session_key_scheme_sets_splunk_auth_header():
 
 
 def _clear_auth_env(monkeypatch):
-    for var in ("SPLUNK_URL", "SPLUNK_TOKEN", "SPLUNK_SESSION_KEY", "VCT_SPLUNK_CONFIG"):
+    for var in (
+        "SPLUNK_URL",
+        "SPLUNK_TOKEN",
+        "SPLUNK_SESSION_KEY",
+        "SPLUNK_USERNAME",
+        "SPLUNK_PASSWORD",
+        "SPLUNK_PROFILE",
+        "VCT_SPLUNK_CONFIG",
+    ):
         monkeypatch.delenv(var, raising=False)
 
 

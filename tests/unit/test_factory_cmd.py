@@ -6,6 +6,7 @@ passthrough, and the enable/disable control path.
 from __future__ import annotations
 
 import httpx
+import pytest
 from click.testing import CliRunner
 
 from vct_splunk.cli import cli
@@ -112,3 +113,57 @@ def test_control_verb_posts_control_endpoint(cli_env, patch_client, monkeypatch,
     assert result.exit_code == 0, result.output
     assert seen["method"] == "POST"
     assert seen["path"] == "/services/data/inputs/monitor/mon1/disable"
+
+
+@pytest.mark.parametrize(
+    "sets",
+    [
+        ["--set", "missing"],
+        ["--set", "=value"],
+        ["--set", "key=one", "--set", "key=two"],
+    ],
+)
+def test_generated_set_rejects_malformed_pairs_before_request(cli_env, patch_client, sets):
+    requests: list[httpx.Request] = []
+    patch_client(lambda req: requests.append(req) or httpx.Response(200, json={}))
+
+    result = CliRunner().invoke(
+        cli, ["user", "create", "alice", *sets, "--yes", "--output", "json"]
+    )
+
+    assert result.exit_code == 2
+    assert "usage_error" in result.output
+    assert requests == []
+
+
+def test_generated_set_preserves_explicit_empty_value(cli_env):
+    result = CliRunner().invoke(
+        cli,
+        [
+            "user",
+            "create",
+            "alice",
+            "--set",
+            "email=",
+            "--dry-run",
+            "--output",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert '"email": ""' in result.output
+
+
+@pytest.mark.parametrize("verb", ["get", "update", "delete", "disable"])
+def test_generated_dynamic_name_refuses_traversal_before_request(cli_env, patch_client, verb):
+    requests: list[httpx.Request] = []
+    patch_client(lambda req: requests.append(req) or httpx.Response(200, json={}))
+    extra = ["--set", "disabled=1", "--yes"] if verb == "update" else []
+    if verb in {"delete", "disable"}:
+        extra = ["--yes"]
+
+    result = CliRunner().invoke(cli, ["monitor-input", verb, "../etc", *extra, "--output", "json"])
+
+    assert result.exit_code == 2
+    assert requests == []
