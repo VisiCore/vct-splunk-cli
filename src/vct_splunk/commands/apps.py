@@ -37,7 +37,7 @@ def app_install(ctx, server_file, url, update) -> None:
         ctx,
         action=f"install app from '{safe_source}'" + (" (overwrite)" if update else ""),
         audit_event={"action": "app.install", "source": safe_source, "update": update},
-        run=lambda c: core.install_app(c, source, update=update),
+        run=lambda c: core.install_app(c, source, update=update, preview_source=safe_source),
     )
     out.emit(result, ctx.output_mode, ctx.meta())
 

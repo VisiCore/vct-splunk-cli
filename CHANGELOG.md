@@ -29,8 +29,9 @@ This is the 0.2.0 development line (version bumped from 0.0.1).
   schemas, system messages, and app lifecycle (#5, #6, #8, #9, #10).
 - `kvstore records` / `get` / `insert` / `update` / `delete` / `purge` manage KV
   Store data records as a namespaced JSON document store; writes require an app (#9).
-- `app install` adds an app from a local `--file` or a `--url`, with `--update` to
-  overwrite. It is a gated write, so it previews with `--dry-run` (#5).
+- `app install` adds an app from a splunkd-readable `--server-file` or `--url`,
+  with `--update` to overwrite. It is a gated write, so it previews with
+  `--dry-run` (#5).
 - `deploy` reads the deployment server: `deploy client list` and
   `deploy serverclass list` / `get`. The gated writes `deploy serverclass create` /
   `update` (each needs at least one `--set KEY=VALUE`) and `deploy reload` change

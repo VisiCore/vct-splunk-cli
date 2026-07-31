@@ -17,14 +17,24 @@ from .client import SplunkClient
 _PATH = "/services/apps/local"
 
 
-def install_app(client: SplunkClient, source: str, *, update: bool = False) -> dict[str, Any]:
+def install_app(
+    client: SplunkClient,
+    source: str,
+    *,
+    update: bool = False,
+    preview_source: str | None = None,
+) -> dict[str, Any]:
     """Install an app from a server-readable path or an http(s) URL.
 
     ``source`` is a server-side path (``.tar.gz``/``.spl``) or the URL;
-    Splunk reads it server-side. ``update=True`` allows overwriting an app that
+    Splunk reads it server-side. ``preview_source`` is a sanitized equivalent
+    used only in dry-run output. ``update=True`` allows overwriting an app that
     is already installed. This is a gated write (dry-run aware via the client).
     """
-    data: dict[str, Any] = {"name": source}
+    display_source = (
+        preview_source if client.config.dry_run and preview_source is not None else source
+    )
+    data: dict[str, Any] = {"name": display_source}
     if update:
         data["update"] = "true"
     return client.write("POST", _PATH, data)
