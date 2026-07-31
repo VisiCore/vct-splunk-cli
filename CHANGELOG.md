@@ -19,6 +19,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   catalogued read against a live stack, requires the ACS-backed reads to
   succeed, and requires every other read to fail with a typed error envelope
   rather than guessing at an endpoint the stack does not serve.
+- Rewrite the README for someone who has not used this tool or Splunk before,
+  with copy-and-paste setup and run steps for each of the five test groups.
 - Add catalog-driven live coverage for all 61 Enterprise reads and 93 writes,
   including cleanup, global-state restoration, restart/reconnect, a container
   CI gate on code pull requests and `main` merges, a manual Cloud read canary,
