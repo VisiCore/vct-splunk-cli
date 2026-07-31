@@ -52,7 +52,7 @@ def do_write(
     if getattr(ctx, "backend", "enterprise") == "cloud":
         resource, _, verb = str(audit_event.get("action", "")).partition(".")
         raise UnsupportedBackendError(resource or "this resource", verb or "write", "cloud")
-    target = target or config_from_env(ctx.base_url).base_url
+    target = target or config_from_env(ctx.base_url, profile=getattr(ctx, "profile", None)).base_url
     out.confirm_write(ctx, action, target)
     with ctx.client() as c:
         result = run(c)

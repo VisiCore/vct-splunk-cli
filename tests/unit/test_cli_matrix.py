@@ -26,6 +26,8 @@ from vct_splunk.commands.context import AliasedGroup
 # Non-CRUD leaves the generic verb rules below cannot infer. Writes include
 # --dry-run; reads run for real against the mock.
 _SPECIAL: dict[tuple[str, ...], list[str]] = {
+    ("auth", "login"): ["--username", "admin"],
+    ("auth", "status"): [],
     ("server", "info"): [],
     ("api", "get"): ["/services/server/info", "-q", "count=1"],
     ("search", "run"): ["--query", "index=_internal", "--earliest", "-1h", "--max-rows", "5"],
@@ -87,14 +89,21 @@ def _handler(req: httpx.Request) -> httpx.Response:
     if path.endswith("/dispatch"):
         return httpx.Response(201, json={"sid": "sid1"})
     if "/search/jobs" in path and req.method == "POST":
-        return httpx.Response(200, json={"results": []})
+        return httpx.Response(200, json={"results": [{"error_count": "0"}]})
+    content = {"version": "9.4", "health": "green", "features": {}}
+    if path.endswith("/resource-usage/hostwide"):
+        content.update(
+            {"cpu_system_pct": "5", "cpu_user_pct": "10", "mem": "100", "mem_used": "20"}
+        )
+    if path.endswith("/partitions-space"):
+        content.update({"mount_point": "/", "capacity": "100", "free": "80"})
     return httpx.Response(
         200,
         json={
             "entry": [
                 {
                     "name": "x",
-                    "content": {"version": "9.4", "health": "green", "features": {}},
+                    "content": content,
                     "acl": {"app": "a", "owner": "o", "sharing": "app"},
                 }
             ],
@@ -132,7 +141,10 @@ def test_every_leaf_has_representative_args():
 @pytest.mark.parametrize("path", [p for p, _ in _iter_leaves(cli)], ids=lambda p: " ".join(p))
 def test_every_leaf_runs_with_common_inputs(path, cli_env, patch_client, monkeypatch, tmp_path):
     monkeypatch.setenv("SPLUNK_APP", "my_app")  # satisfies namespaced writes
+    monkeypatch.setenv("SPLUNK_PASSWORD", "secret")
     monkeypatch.setenv("VCT_SPLUNK_AUDIT", str(tmp_path / "audit.log"))
+    if path == ("auth", "login"):
+        monkeypatch.setattr("vct_splunk.commands.auth.core.login", lambda *a, **k: "SK")
     patch_client(_handler)
     argv = [*path, *(_args_for(path) or []), "--output", "json"]
     result = CliRunner().invoke(cli, argv)

@@ -51,6 +51,10 @@ export SPLUNK_VERIFY="true"                  # TLS verification (default true)
 > off entirely (e.g. a self-signed lab cert), leave `SPLUNK_CA_BUNDLE` unset and
 > set `SPLUNK_VERIFY=false`.
 
+You can also authenticate with a **session key** instead of a token (`splunk auth login`
+mints one; set `SPLUNK_SESSION_KEY`), and keep per-target settings in a config-file
+**profile** chosen with `--profile` / `SPLUNK_PROFILE` (precedence: flag > env > profile).
+
 Commands (singular-noun → verb):
 
 ```bash

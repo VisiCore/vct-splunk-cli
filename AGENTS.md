@@ -16,7 +16,8 @@ uv pip install -e ".[dev]"   # editable install with dev tools
 splunk --help                # or: python -m vct_splunk --help
 ```
 
-Authentication is environment-only (never a CLI flag):
+Credentials come from the environment or a selected config profile; secret
+credentials are never accepted directly as CLI flags:
 
 ```bash
 export SPLUNK_URL="https://your-search-head:8089"   # REST mgmt port, not :8000
@@ -32,13 +33,14 @@ core, imperative shell" pattern):
 
 - `src/vct_splunk/core/` — plain functions and typed errors. **Never imports
   Click.** This is the reusable, unit-testable library: `client` (transport,
-  auth, retries, pagination, dry-run), `errors`, `audit`, `namespace`
+  auth, retries, pagination, dry-run), `auth` (session login), `profiles`
+  (INI profile loading), `errors`, `audit`, `namespace`
   (owner/app resolution), `resource` (the generic CRUD engine: `Spec`/`Field`/
   `CrudResource`), `backends` + `acs/` (Splunk Cloud ACS support), and one
   module per hand-written operation (`server`, `api`, `jobs`, `search`,
   `saved_searches` for dispatch, `health`).
 - `src/vct_splunk/commands/` — Click adapters, one module per hand-written
-  command group (`server`, `api`, `search`, `health`, `inspect`, plus
+  command group (`server`, `api`, `auth`, `search`, `health`, `inspect`, plus
   `saved_search`'s `run`), plus shared plumbing: `context` (the `command`
   decorator and `Ctx`), `output` (rendering, error envelope), `write` (the
   single gated write path), `dispatch` (routes a few reads to Cloud ACS), and

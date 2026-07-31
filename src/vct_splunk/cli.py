@@ -6,6 +6,7 @@ import click
 
 from . import __version__
 from .commands.api import api
+from .commands.auth import auth
 from .commands.factory import build_group
 from .commands.health import health
 from .commands.inspect import inspect
@@ -21,7 +22,7 @@ def cli() -> None:
     """Read, search, health-check, and safely administer Splunk Enterprise over its REST API."""
 
 
-for _group in (server, api, build_group(INDEX), search, saved_search, health):
+for _group in (server, api, build_group(INDEX), search, saved_search, health, auth):
     cli.add_command(_group)
 
 cli.add_command(inspect)

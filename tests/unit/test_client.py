@@ -3,7 +3,14 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from vct_splunk.core.errors import APIError, AuthError, NotFoundError, TransportError
+from vct_splunk.core.client import ClientConfig, SplunkClient, config_from_env
+from vct_splunk.core.errors import (
+    APIError,
+    AuthError,
+    NotFoundError,
+    TransportError,
+    UsageError,
+)
 
 
 def test_auth_header_and_json_mode(client_for):
@@ -152,3 +159,83 @@ def test_request_passes_explicit_timeout_else_config(client_for, monkeypatch):
     client.post("/services/search/jobs", {"q": "1"}, timeout=0)
     client.get("/services/server/info")
     assert seen == [0, 30.0]  # explicit 0 honored; None -> ClientConfig default
+
+
+def test_session_key_scheme_sets_splunk_auth_header():
+    seen: dict[str, str] = {}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen["auth"] = req.headers.get("authorization", "")
+        return httpx.Response(200, json={"entry": []})
+
+    cfg = ClientConfig(base_url="https://splunk.test:8089", token="SK", auth_scheme="Splunk")
+    SplunkClient(cfg, transport=httpx.MockTransport(handler)).get("/services/server/info")
+    assert seen["auth"] == "Splunk SK"
+
+
+def _clear_auth_env(monkeypatch):
+    for var in (
+        "SPLUNK_URL",
+        "SPLUNK_TOKEN",
+        "SPLUNK_SESSION_KEY",
+        "SPLUNK_USERNAME",
+        "SPLUNK_PASSWORD",
+        "SPLUNK_PROFILE",
+        "VCT_SPLUNK_CONFIG",
+    ):
+        monkeypatch.delenv(var, raising=False)
+
+
+def test_config_from_env_token_stays_bearer(monkeypatch):
+    _clear_auth_env(monkeypatch)
+    monkeypatch.setenv("SPLUNK_URL", "https://splunk.test:8089")
+    monkeypatch.setenv("SPLUNK_TOKEN", "T")
+    cfg = config_from_env()
+    assert (cfg.auth_scheme, cfg.token) == ("Bearer", "T")
+
+
+def test_config_from_env_session_key_uses_splunk_scheme(monkeypatch):
+    _clear_auth_env(monkeypatch)
+    monkeypatch.setenv("SPLUNK_URL", "https://splunk.test:8089")
+    monkeypatch.setenv("SPLUNK_SESSION_KEY", "SK")
+    cfg = config_from_env()
+    assert (cfg.auth_scheme, cfg.token) == ("Splunk", "SK")
+
+
+def test_config_from_env_no_credential_raises_usage(monkeypatch):
+    _clear_auth_env(monkeypatch)
+    monkeypatch.setenv("SPLUNK_URL", "https://splunk.test:8089")
+    with pytest.raises(UsageError):
+        config_from_env()
+
+
+def test_config_from_env_profile_fills_url_when_env_unset(monkeypatch, tmp_path):
+    # With SPLUNK_URL unset, the profile's url is used; env still supplies the token.
+    _clear_auth_env(monkeypatch)
+    cfgfile = tmp_path / "config"
+    cfgfile.write_text("[prod]\nurl = https://from-profile:8089\n")
+    monkeypatch.setenv("VCT_SPLUNK_CONFIG", str(cfgfile))
+    monkeypatch.setenv("SPLUNK_TOKEN", "T")
+    cfg = config_from_env(profile="prod")
+    assert cfg.base_url == "https://from-profile:8089"
+
+
+def test_config_from_env_env_url_wins_over_profile(monkeypatch, tmp_path):
+    _clear_auth_env(monkeypatch)
+    cfgfile = tmp_path / "config"
+    cfgfile.write_text("[prod]\nurl = https://from-profile:8089\n")
+    monkeypatch.setenv("VCT_SPLUNK_CONFIG", str(cfgfile))
+    monkeypatch.setenv("SPLUNK_URL", "https://from-env:8089")
+    monkeypatch.setenv("SPLUNK_TOKEN", "T")
+    cfg = config_from_env(profile="prod")
+    assert cfg.base_url == "https://from-env:8089"
+
+
+def test_config_from_env_profile_only_resolves_url_and_token(monkeypatch, tmp_path):
+    _clear_auth_env(monkeypatch)
+    cfgfile = tmp_path / "config"
+    cfgfile.write_text("[prod]\nurl = https://from-profile:8089\ntoken = T%PROFILE\n")
+    cfgfile.chmod(0o600)
+    monkeypatch.setenv("VCT_SPLUNK_CONFIG", str(cfgfile))
+    cfg = config_from_env(profile="prod")
+    assert (cfg.base_url, cfg.token) == ("https://from-profile:8089", "T%PROFILE")
