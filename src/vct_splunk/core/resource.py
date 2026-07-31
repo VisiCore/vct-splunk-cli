@@ -19,6 +19,7 @@ from typing import Any, Literal
 from .client import SplunkClient
 from .errors import NotFoundError
 from .namespace import ns_path
+from .path import path_segment
 
 Verb = Literal["list", "get", "create", "update", "delete", "enable", "disable"]
 FieldType = Literal["str", "int", "float", "bool"]
@@ -91,7 +92,8 @@ class CrudResource:
     def get(
         self, client: SplunkClient, name: str, *, owner: str | None = None, app: str | None = None
     ) -> dict[str, Any]:
-        entries = client.get(f"{self._base(owner, app)}/{name}").get("entry") or []
+        encoded = path_segment(name, label=f"{self.spec.name} name")
+        entries = client.get(f"{self._base(owner, app)}/{encoded}").get("entry") or []
         if not entries:
             raise NotFoundError(f"{self.spec.name.capitalize()} {name!r} not found.")
         return self._out(entries[0])
@@ -102,7 +104,7 @@ class CrudResource:
         name: str,
         *,
         fields: dict[str, Any],
-        sets: tuple[str, ...] = (),
+        sets: dict[str, str] | None = None,
         owner: str | None = None,
         app: str | None = None,
     ) -> dict[str, Any]:
@@ -116,20 +118,22 @@ class CrudResource:
         name: str,
         *,
         fields: dict[str, Any],
-        sets: tuple[str, ...] = (),
+        sets: dict[str, str] | None = None,
         owner: str | None = None,
         app: str | None = None,
     ) -> dict[str, Any]:
         # Splunk's POST to the named object merges server-side, so only the
         # provided settings are sent (no read-modify-write).
+        encoded = path_segment(name, label=f"{self.spec.name} name")
         return self._unwrap(
-            client.write("POST", f"{self._base(owner, app)}/{name}", self._body(fields, sets))
+            client.write("POST", f"{self._base(owner, app)}/{encoded}", self._body(fields, sets))
         )
 
     def delete(
         self, client: SplunkClient, name: str, *, owner: str | None = None, app: str | None = None
     ) -> dict[str, Any]:
-        return client.write("DELETE", f"{self._base(owner, app)}/{name}", {})
+        encoded = path_segment(name, label=f"{self.spec.name} name")
+        return client.write("DELETE", f"{self._base(owner, app)}/{encoded}", {})
 
     def control(
         self,
@@ -141,7 +145,10 @@ class CrudResource:
         app: str | None = None,
     ) -> dict[str, Any]:
         """Run a control action (``enable`` / ``disable``) on one object."""
-        return self._unwrap(client.write("POST", f"{self._base(owner, app)}/{name}/{action}", {}))
+        encoded = path_segment(name, label=f"{self.spec.name} name")
+        return self._unwrap(
+            client.write("POST", f"{self._base(owner, app)}/{encoded}/{action}", {})
+        )
 
     def _base(self, owner: str | None, app: str | None) -> str:
         if self.spec.namespaced:
@@ -149,7 +156,7 @@ class CrudResource:
             return ns_path(self.spec.path, owner=owner or "-", app=app or "-")
         return self.spec.path
 
-    def _body(self, fields: dict[str, Any], sets: tuple[str, ...]) -> dict[str, Any]:
+    def _body(self, fields: dict[str, Any], sets: dict[str, str] | None) -> dict[str, Any]:
         """Map provided options to Splunk form keys, then merge raw --set pairs."""
         by_opt = {f.opt: f for f in self.spec.fields}
         data: dict[str, Any] = {}
@@ -163,9 +170,7 @@ class CrudResource:
                 data[f.key] = int(bool(value))
             else:
                 data[f.key] = value
-        for pair in sets:
-            key, _, val = pair.partition("=")
-            data[key] = val
+        data.update(sets or {})
         return data
 
     def _unwrap(self, result: dict[str, Any]) -> dict[str, Any]:

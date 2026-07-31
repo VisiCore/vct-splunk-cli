@@ -27,7 +27,16 @@ def cli_env(monkeypatch):
     """Point the CLI at a test Splunk and clear ambient vars that change behavior."""
     monkeypatch.setenv("SPLUNK_URL", _TEST_URL)
     monkeypatch.setenv("SPLUNK_TOKEN", "T")
-    for var in ("SPLUNK_APP", "SPLUNK_OWNER", "SPLUNK_USER_PASSWORD"):
+    for var in (
+        "SPLUNK_APP",
+        "SPLUNK_OWNER",
+        "SPLUNK_USER_PASSWORD",
+        "SPLUNK_SESSION_KEY",
+        "SPLUNK_USERNAME",
+        "SPLUNK_PASSWORD",
+        "SPLUNK_PROFILE",
+        "VCT_SPLUNK_CONFIG",
+    ):
         monkeypatch.delenv(var, raising=False)
 
 

@@ -18,6 +18,8 @@ def _clean_env(monkeypatch):
         "SPLUNK_PASSWORD",
         "SPLUNK_CA_BUNDLE",
         "SPLUNK_VERIFY",
+        "SPLUNK_PROFILE",
+        "VCT_SPLUNK_CONFIG",
     ):
         monkeypatch.delenv(var, raising=False)
 
@@ -55,18 +57,17 @@ def test_username_password_login(monkeypatch):
 
     seen: dict[str, object] = {}
 
-    def fake_post(url, *, data, verify, timeout):
-        seen["url"] = url
-        seen["data"] = data
-        return httpx.Response(200, json={"sessionKey": "LOGGEDIN"})
+    def fake_login(url, username, password, *, verify):
+        seen.update({"url": url, "username": username, "password": password, "verify": verify})
+        return "LOGGEDIN"
 
-    monkeypatch.setattr("vct_splunk.core.client.httpx.post", fake_post)
+    monkeypatch.setattr("vct_splunk.core.client.auth.login", fake_login)
 
     cfg = config_from_env()
     assert cfg.auth_scheme == "Splunk"
     assert cfg.token == "LOGGEDIN"
-    assert str(seen["url"]).endswith("/services/auth/login")
-    assert seen["data"]["username"] == "admin"  # type: ignore[index]
+    assert seen["url"] == "https://splunk.test:8089"
+    assert seen["username"] == "admin"
 
 
 def _login_env(monkeypatch):
@@ -86,7 +87,11 @@ def _login_env(monkeypatch):
 )
 def test_login_error_responses_map_typed(_clean_env, monkeypatch, response, expected):
     _login_env(monkeypatch)
-    monkeypatch.setattr("vct_splunk.core.client.httpx.post", lambda *a, **k: response)
+
+    def fail_login(*args, **kwargs):
+        raise expected("login failed")
+
+    monkeypatch.setattr("vct_splunk.core.client.auth.login", fail_login)
     with pytest.raises(expected):
         config_from_env()
 
@@ -95,9 +100,9 @@ def test_login_unreachable_raises_transport_error(_clean_env, monkeypatch):
     _login_env(monkeypatch)
 
     def raise_connect(*a, **k):
-        raise httpx.ConnectError("connection refused")
+        raise TransportError("connection refused")
 
-    monkeypatch.setattr("vct_splunk.core.client.httpx.post", raise_connect)
+    monkeypatch.setattr("vct_splunk.core.client.auth.login", raise_connect)
     with pytest.raises(TransportError):
         config_from_env()
 
