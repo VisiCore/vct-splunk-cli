@@ -1,130 +1,20 @@
-"""Exhaustive wiring test: every command in the tree works with common inputs.
-
-Two guarantees, kept automatically as commands are added:
-
-1. ``--help`` succeeds for the root, every group, every leaf command, and every
-   registered alias — a broken decorator, bad option declaration, or import slip
-   anywhere in the tree fails here.
-2. Every leaf command runs once with representative arguments against the mocked
-   transport: reads must exit 0 with the ``{data, meta}`` envelope; writes run
-   under ``--dry-run`` and must preview. A new command that this table cannot
-   infer arguments for fails the completeness check until it gets an entry.
-"""
+"""Exhaustive execution and completeness checks for the canonical CLI catalog."""
 
 from __future__ import annotations
 
 import json
+from collections import Counter
 
-import click
 import httpx
 import pytest
 from click.testing import CliRunner
 
+from cli_catalog import CATALOG, help_invocations, iter_leaves
 from vct_splunk.cli import cli
-from vct_splunk.commands.context import AliasedGroup
-
-# Non-CRUD leaves the generic verb rules below cannot infer. Writes include
-# --dry-run; reads run for real against the mock.
-_SPECIAL: dict[tuple[str, ...], list[str]] = {
-    ("app", "install"): ["--server-file", "/tmp/app.spl", "--dry-run"],
-    ("auth", "login"): ["--username", "admin"],
-    ("auth", "status"): [],
-    ("cluster", "status"): [],
-    ("deploy", "client", "list"): [],
-    ("deploy", "reload"): ["--dry-run"],
-    ("deploy", "serverclass", "list"): [],
-    ("deploy", "serverclass", "get"): ["class"],
-    ("deploy", "serverclass", "create"): [
-        "class",
-        "--set",
-        "whitelist.0=*",
-        "--dry-run",
-    ],
-    ("deploy", "serverclass", "update"): [
-        "class",
-        "--set",
-        "whitelist.0=*",
-        "--dry-run",
-    ],
-    ("server", "info"): [],
-    ("api", "get"): ["/services/server/info", "-q", "count=1"],
-    ("search", "run"): ["--query", "index=_internal", "--earliest", "-1h", "--max-rows", "5"],
-    ("search", "list"): [],
-    ("search", "get"): ["sid1"],
-    ("search", "cancel"): ["sid1", "--dry-run"],
-    ("saved-search", "run"): ["nightly", "--app", "my_app", "--earliest", "-1h"],
-    ("health", "check"): [],
-    ("hec", "rotate"): ["token", "--dry-run"],
-    ("hec", "global-enable"): ["--dry-run"],
-    ("hec", "global-disable"): ["--dry-run"],
-    ("inspect",): [],
-    ("kvstore", "records"): ["records"],
-    ("kvstore", "get"): ["records", "key"],
-    ("kvstore", "insert"): ["records", "--data", '{"value":"x"}', "--dry-run"],
-    ("kvstore", "update"): [
-        "records",
-        "key",
-        "--data",
-        '{"value":"x"}',
-        "--dry-run",
-    ],
-    ("kvstore", "delete"): ["records", "key", "--dry-run"],
-    ("kvstore", "purge"): ["records", "--dry-run"],
-    ("license", "usage"): [],
-    ("lookup", "upload"): ["--server-file", "/var/tmp/table.csv", "--app", "my_app", "--dry-run"],
-    ("datamodel", "accelerate"): ["model", "--app", "my_app", "--dry-run"],
-    ("server", "restart"): ["--dry-run"],
-    ("server", "settings", "get"): [],
-    ("server", "settings", "set"): ["--set", "host=x", "--dry-run"],
-    ("shcluster", "status"): [],
-}
-
-# Generic argument rules by CRUD verb (factory-generated and factory-shaped groups).
-_BY_VERB: dict[str, list[str]] = {
-    "list": [],
-    "get": ["x"],
-    "create": ["x", "--dry-run"],
-    "update": ["x", "--set", "k=v", "--dry-run"],
-    "delete": ["x", "--dry-run"],
-    "enable": ["x", "--dry-run"],
-    "disable": ["x", "--dry-run"],
-}
-
-# Required create options the verb rule must add, per group.
-_REQUIRED_CREATE: dict[str, list[str]] = {
-    "saved-search": ["--search", "index=x"],
-}
-
-
-def _iter_leaves(group: click.Group, path: tuple[str, ...] = ()):
-    for name, cmd in sorted(group.commands.items()):
-        if isinstance(cmd, click.Group):
-            yield from _iter_leaves(cmd, (*path, name))
-        else:
-            yield (*path, name), cmd
-
-
-def _iter_groups(group: click.Group, path: tuple[str, ...] = ()):
-    yield path, group
-    for name, cmd in sorted(group.commands.items()):
-        if isinstance(cmd, click.Group):
-            yield from _iter_groups(cmd, (*path, name))
-
-
-def _args_for(path: tuple[str, ...]) -> list[str] | None:
-    if path in _SPECIAL:
-        return list(_SPECIAL[path])
-    if len(path) == 2 and path[1] in _BY_VERB:
-        args = list(_BY_VERB[path[1]])
-        extra = _REQUIRED_CREATE.get(path[0])
-        if path[1] == "create" and extra:
-            args += extra
-        return args
-    return None
 
 
 def _handler(req: httpx.Request) -> httpx.Response:
-    """One canned Splunk that satisfies every read the tree performs."""
+    """One request recorder response set that satisfies every read leaf."""
     path = req.url.path
     if path.endswith("/dispatch"):
         return httpx.Response(201, json={"sid": "sid1"})
@@ -142,7 +32,7 @@ def _handler(req: httpx.Request) -> httpx.Response:
         json={
             "entry": [
                 {
-                    "name": "x",
+                    "name": "example",
                     "content": content,
                     "acl": {"app": "a", "owner": "o", "sharing": "app"},
                 }
@@ -152,51 +42,70 @@ def _handler(req: httpx.Request) -> httpx.Response:
     )
 
 
-def _all_help_invocations() -> list[list[str]]:
-    argvs: list[list[str]] = [["--help"]]
-    for path, group in _iter_groups(cli):
-        if path:
-            argvs.append([*path, "--help"])
-        # Aliases resolve through AliasedGroup.get_command; --help must work there too.
-        if isinstance(group, AliasedGroup):
-            argvs.extend([*path, alias, "--help"] for alias in group._aliases)
-    argvs.extend([*path, "--help"] for path, _ in _iter_leaves(cli))
-    return argvs
-
-
-@pytest.mark.parametrize("argv", _all_help_invocations(), ids=" ".join)
+@pytest.mark.parametrize("argv", help_invocations(cli), ids=" ".join)
 def test_every_help_screen_renders(argv):
     result = CliRunner().invoke(cli, argv)
     assert result.exit_code == 0, f"{argv}: {result.output}"
     assert "Usage:" in result.output
 
 
-def test_every_leaf_has_representative_args():
-    # Completeness gate: a newly added command must be covered by a verb rule or
-    # get a _SPECIAL entry — otherwise this test names it and fails.
-    uncovered = [" ".join(path) for path, _ in _iter_leaves(cli) if _args_for(path) is None]
-    assert not uncovered, f"add matrix args for: {uncovered}"
+def test_catalog_is_exactly_complete_and_unique():
+    live = {path for path, _ in iter_leaves(cli)}
+    counts = Counter(case.path for case in CATALOG)
+    duplicates = sorted(" ".join(path) for path, count in counts.items() if count != 1)
+    catalogued = set(counts)
+
+    assert duplicates == [], f"duplicate catalog commands: {duplicates}"
+    assert sorted(" ".join(path) for path in live - catalogued) == [], "missing catalog commands"
+    assert sorted(" ".join(path) for path in catalogued - live) == [], "stale catalog commands"
+    assert len(CATALOG) == 153
+    assert sum(case.kind == "read" for case in CATALOG) == 61
+    assert sum(case.kind == "write" for case in CATALOG) == 92
+    assert all(1 <= len(case.argvs) <= 2 for case in CATALOG)
 
 
-@pytest.mark.parametrize("path", [p for p, _ in _iter_leaves(cli)], ids=lambda p: " ".join(p))
-def test_every_leaf_runs_with_common_inputs(path, cli_env, patch_client, monkeypatch, tmp_path):
-    monkeypatch.setenv("SPLUNK_APP", "my_app")  # satisfies namespaced writes
+@pytest.mark.parametrize("case", CATALOG, ids=lambda case: " ".join(case.path))
+def test_every_leaf_executes(case, cli_env, patch_client, monkeypatch, tmp_path):
+    monkeypatch.setenv("SPLUNK_APP", "my_app")
     monkeypatch.setenv("SPLUNK_PASSWORD", "secret")
     monkeypatch.setenv("VCT_SPLUNK_AUDIT", str(tmp_path / "audit.log"))
-    if path == ("auth", "login"):
-        monkeypatch.setattr("vct_splunk.commands.auth.core.login", lambda *a, **k: "SK")
-    patch_client(_handler)
-    argv = [*path, *(_args_for(path) or []), "--output", "json"]
-    result = CliRunner().invoke(cli, argv)
-    assert result.exit_code == 0, f"{argv}: {result.output}"
-    payload = json.loads(result.output)
-    assert "data" in payload  # the success envelope, for reads and previews alike
-    if "--dry-run" in argv:
-        assert payload["data"]["dry_run"] is True  # writes never hit the wire here
+    requests: list[httpx.Request] = []
+
+    def record(req: httpx.Request) -> httpx.Response:
+        requests.append(req)
+        return _handler(req)
+
+    patch_client(record)
+    if case.path == ("auth", "login"):
+        monkeypatch.setattr("vct_splunk.commands.auth.core.login", lambda *args, **kwargs: "SK")
+
+    for args in case.argvs:
+        argv = [*case.path, *args, "--output", "json"]
+        result = CliRunner().invoke(cli, argv)
+        assert result.exit_code == 0, f"{argv}: {result.output}"
+        assert "secret" not in result.output
+        payload = json.loads(result.output)
+        assert set(payload) == {"data", "meta"}
+        if case.kind == "write":
+            preview = payload["data"]
+            assert preview["dry_run"] is True
+            assert preview["request"]["method"] in {"POST", "DELETE"}
+            assert preview["request"]["path"].startswith("/")
+            assert "body" in preview["request"]
+        else:
+            assert isinstance(payload["data"], (dict, list))
+
+    offline = {("auth", "login"), ("auth", "status"), ("inspect",)}
+    if case.kind == "read" and case.path not in offline:
+        assert requests, f"{' '.join(case.path)} did not exercise its transport"
 
 
-def test_every_write_leaf_refuses_cloud_before_client_creation(cli_env, monkeypatch, tmp_path):
-    """Every catalogued write stops at the shared Cloud guard before any client."""
+@pytest.mark.parametrize(
+    "case",
+    [case for case in CATALOG if case.kind == "write"],
+    ids=lambda case: " ".join(case.path),
+)
+def test_every_write_refuses_cloud_before_client_creation(case, cli_env, monkeypatch, tmp_path):
     monkeypatch.setenv("SPLUNK_URL", "https://acme.splunkcloud.com")
     monkeypatch.setenv("SPLUNK_APP", "my_app")
     monkeypatch.setenv("SPLUNK_PASSWORD", "secret")
@@ -207,14 +116,7 @@ def test_every_write_leaf_refuses_cloud_before_client_creation(cli_env, monkeypa
 
     monkeypatch.setattr("vct_splunk.commands.context.Ctx.client", unexpected_client)
     monkeypatch.setattr("vct_splunk.commands.context.Ctx.acs_client", unexpected_client)
-
-    writes = [
-        (path, _args_for(path) or [])
-        for path, _ in _iter_leaves(cli)
-        if "--dry-run" in (_args_for(path) or [])
-    ]
-    assert writes
-    for path, args in writes:
-        result = CliRunner().invoke(cli, [*path, *args, "--output", "json"])
-        assert result.exit_code == 4, f"{' '.join(path)}: {result.output}"
+    for args in case.argvs:
+        result = CliRunner().invoke(cli, [*case.path, *args, "--output", "json"])
+        assert result.exit_code == 4, f"{' '.join(case.path)}: {result.output}"
         assert "unsupported_backend" in result.output
