@@ -14,8 +14,9 @@ from typing import Any
 
 import httpx
 
+from . import auth
 from .errors import APIError, AuthError, NotFoundError, TransportError, UsageError
-from .profiles import load_profile
+from .profiles import load_profile, require_private_profile
 
 _RETRY_STATUS = {429, 503}
 _MAX_RETRIES = 3
@@ -33,30 +34,12 @@ class ClientConfig:
     auth_scheme: str = "Bearer"
 
 
-def _login(base_url: str, username: str, password: str, verify: bool | str) -> str:
-    """Exchange a username and password for a Splunk session key.
+@dataclass(frozen=True)
+class AuthStatus:
+    """Resolved target and authentication scheme without performing login."""
 
-    POSTs to ``/services/auth/login`` and returns the ``sessionKey``. This is a
-    last-resort path (mainly for CI); username/password is not the encouraged way
-    to authenticate. The password lives only in this request body, never logged.
-    """
-    try:
-        resp = httpx.post(
-            f"{base_url}/services/auth/login",
-            data={"username": username, "password": password, "output_mode": "json"},
-            verify=verify,
-            timeout=30.0,
-        )
-    except httpx.HTTPError as exc:
-        raise TransportError(f"Could not reach Splunk at {base_url}: {exc}") from exc
-    if resp.status_code in {401, 403}:
-        raise AuthError("Splunk rejected the username and password.")
-    if resp.status_code >= 400:
-        raise APIError(f"Splunk login failed ({resp.status_code}).", details=resp.text)
-    key = resp.json().get("sessionKey")
-    if not key:
-        raise AuthError("Splunk login returned no session key.")
-    return key
+    base_url: str
+    auth_scheme: str
 
 
 def config_from_env(base_url: str | None = None, *, profile: str | None = None) -> ClientConfig:
@@ -81,35 +64,69 @@ def config_from_env(base_url: str | None = None, *, profile: str | None = None) 
     Raises:
         UsageError: If no URL or no credential can be resolved.
     """
-    prof = load_profile(profile)
-    url = base_url or os.environ.get("SPLUNK_URL") or prof.get("url")
-    if not url:
-        raise UsageError("No Splunk URL. Set SPLUNK_URL or pass --base-url.")
-    url = url.rstrip("/")
-    ca = os.environ.get("SPLUNK_CA_BUNDLE")
-    verify = ca or (
-        os.environ.get("SPLUNK_VERIFY", "true").strip().lower() not in {"0", "false", "no"}
-    )
+    status, prof, verify = _resolve_auth(base_url, profile)
+    url = status.base_url
     # A JWT (SPLUNK_TOKEN) is the primary path; a session key (SPLUNK_SESSION_KEY) is the
     # simple alternative; both fall back to the active profile. As a last resort the client
     # logs in with SPLUNK_USERNAME/SPLUNK_PASSWORD to get a session key itself -- handy for
     # CI, but not a documented or encouraged way to authenticate.
-    token = os.environ.get("SPLUNK_TOKEN") or prof.get("token")
-    session_key = os.environ.get("SPLUNK_SESSION_KEY") or prof.get("session_key")
+    env_token = os.environ.get("SPLUNK_TOKEN")
+    env_session_key = os.environ.get("SPLUNK_SESSION_KEY")
+    token = env_token or prof.get("token")
+    session_key = env_session_key or prof.get("session_key")
     if token:
+        if not env_token:
+            require_private_profile()
         scheme, credential = "Bearer", token
     elif session_key:
+        if not env_session_key:
+            require_private_profile()
         scheme, credential = "Splunk", session_key
     elif (username := os.environ.get("SPLUNK_USERNAME")) and (
         password := os.environ.get("SPLUNK_PASSWORD")
     ):
-        scheme, credential = "Splunk", _login(url, username, password, verify)
+        scheme, credential = "Splunk", auth.login(url, username, password, verify=verify)
     else:
         raise UsageError(
             "No auth. Set SPLUNK_TOKEN (a JWT) or SPLUNK_SESSION_KEY "
             "(a session key from /services/auth/login)."
         )
     return ClientConfig(base_url=url, token=credential, verify=verify, auth_scheme=scheme)
+
+
+def auth_status_from_env(base_url: str | None = None, *, profile: str | None = None) -> AuthStatus:
+    """Resolve the active auth scheme without exchanging username/password."""
+    status, prof, _verify = _resolve_auth(base_url, profile)
+    env_token = os.environ.get("SPLUNK_TOKEN")
+    env_session_key = os.environ.get("SPLUNK_SESSION_KEY")
+    if env_token or prof.get("token"):
+        if not env_token:
+            require_private_profile()
+        scheme = "Bearer"
+    elif env_session_key or prof.get("session_key"):
+        if not env_session_key:
+            require_private_profile()
+        scheme = "Splunk"
+    elif os.environ.get("SPLUNK_USERNAME") and os.environ.get("SPLUNK_PASSWORD"):
+        scheme = "Splunk"
+    else:
+        scheme = "none"
+    return AuthStatus(status.base_url, scheme)
+
+
+def _resolve_auth(
+    base_url: str | None, profile: str | None
+) -> tuple[AuthStatus, dict[str, str], bool | str]:
+    """Resolve shared URL, profile, and TLS inputs without authenticating."""
+    prof = load_profile(profile)
+    url = base_url or os.environ.get("SPLUNK_URL") or prof.get("url")
+    if not url:
+        raise UsageError("No Splunk URL. Set SPLUNK_URL or pass --base-url.")
+    ca = os.environ.get("SPLUNK_CA_BUNDLE")
+    verify = ca or (
+        os.environ.get("SPLUNK_VERIFY", "true").strip().lower() not in {"0", "false", "no"}
+    )
+    return AuthStatus(url.rstrip("/"), "none"), prof, verify
 
 
 class SplunkClient:

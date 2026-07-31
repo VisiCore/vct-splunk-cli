@@ -152,7 +152,7 @@ def command(fn: Callable) -> Callable:
         # in **kwargs and are forwarded straight through to fn.
         try:
             profile = profile or os.environ.get("SPLUNK_PROFILE")
-            prof = load_profile(profile)
+            prof = load_profile(profile, credentials=False)
             target = base_url or os.environ.get("SPLUNK_URL") or prof.get("url")
             ctx = Ctx(
                 out.resolve_mode(output, table),
