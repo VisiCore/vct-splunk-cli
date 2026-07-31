@@ -193,3 +193,28 @@ def test_every_leaf_runs_with_common_inputs(path, cli_env, patch_client, monkeyp
     assert "data" in payload  # the success envelope, for reads and previews alike
     if "--dry-run" in argv:
         assert payload["data"]["dry_run"] is True  # writes never hit the wire here
+
+
+def test_every_write_leaf_refuses_cloud_before_client_creation(cli_env, monkeypatch, tmp_path):
+    """Every catalogued write stops at the shared Cloud guard before any client."""
+    monkeypatch.setenv("SPLUNK_URL", "https://acme.splunkcloud.com")
+    monkeypatch.setenv("SPLUNK_APP", "my_app")
+    monkeypatch.setenv("SPLUNK_PASSWORD", "secret")
+    monkeypatch.setenv("VCT_SPLUNK_AUDIT", str(tmp_path / "audit.log"))
+
+    def unexpected_client(*args, **kwargs):
+        raise AssertionError("Cloud write must not construct an ACS or splunkd client")
+
+    monkeypatch.setattr("vct_splunk.commands.context.Ctx.client", unexpected_client)
+    monkeypatch.setattr("vct_splunk.commands.context.Ctx.acs_client", unexpected_client)
+
+    writes = [
+        (path, _args_for(path) or [])
+        for path, _ in _iter_leaves(cli)
+        if "--dry-run" in (_args_for(path) or [])
+    ]
+    assert writes
+    for path, args in writes:
+        result = CliRunner().invoke(cli, [*path, *args, "--output", "json"])
+        assert result.exit_code == 4, f"{' '.join(path)}: {result.output}"
+        assert "unsupported_backend" in result.output

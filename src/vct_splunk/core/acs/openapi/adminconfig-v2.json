@@ -1,14 +1,79 @@
 {
   "openapi": "3.0.0",
   "info": {
-    "title": "Splunk Cloud Admin Config Service (ACS) adminconfig/v2",
-    "version": "v2-pinned-subset"
+    "title": "Splunk Cloud ACS implemented contract snapshot",
+    "version": "2026-07-30"
   },
-  "x-note": "Hand-pinned subset of the read-only ACS paths this CLI uses. The full spec lives at https://docs.splunk.com/Documentation/SplunkCloud/latest/Config/ACSIntro -- this file pins the exact paths our client calls so a contract test fails if the two drift.",
-  "servers": [{ "url": "https://admin.splunk.com/{stack}/adminconfig/v2" }],
+  "x-source-url": "https://admin.splunk.com/service/info/specs/v2/openapi.json",
+  "x-retrieved": "2026-07-30",
+  "x-snapshot": "Exact GET path, pagination parameter, and success-envelope fragments implemented by this CLI.",
   "paths": {
-    "/indexes": { "get": { "summary": "List indexes." } },
-    "/inputs/http-event-collectors": { "get": { "summary": "List HEC tokens." } },
-    "/roles": { "get": { "summary": "List roles." } }
+    "/{stack}/adminconfig/v2/indexes": {
+      "get": {
+        "operationId": "ListIndexes",
+        "parameters": ["stack", "count", "offset"],
+        "response": {
+          "indexes": {
+            "type": "array",
+            "items": "IndexResponse"
+          }
+        }
+      }
+    },
+    "/{stack}/adminconfig/v2/inputs/http-event-collectors": {
+      "get": {
+        "operationId": "ListHECs",
+        "parameters": ["stack", "count", "offset"],
+        "response": {
+          "http_event_collectors": {
+            "type": "array",
+            "items": "HecInfo"
+          }
+        }
+      }
+    },
+    "/{stack}/adminconfig/v2/roles": {
+      "get": {
+        "operationId": "ListRoles",
+        "parameters": ["stack", "count", "offset"],
+        "response": {
+          "roles": {
+            "type": "array",
+            "items": "RolesResponse"
+          }
+        }
+      }
+    }
+  },
+  "parameters": {
+    "count": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "default": 30
+    },
+    "offset": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0
+    },
+    "stack": {
+      "type": "string",
+      "required": true
+    }
+  },
+  "schemas": {
+    "HecInfo": {
+      "properties": {
+        "spec": "HecSpec",
+        "token": "string"
+      }
+    },
+    "IndexResponse": {
+      "required": ["name", "datatype", "searchableDays", "maxDataSizeMB"]
+    },
+    "RolesResponse": {
+      "required": ["name"]
+    }
   }
 }
