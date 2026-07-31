@@ -7,7 +7,7 @@ table file itself.
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import PurePath
 
 import click
 
@@ -24,17 +24,20 @@ def lookup() -> None:
 
 
 @lookup.command("upload")
-@click.option("--file", "file", required=True, type=click.Path(exists=True), help="Local CSV path.")
+@click.option(
+    "--server-file",
+    required=True,
+    help="CSV staging path readable by splunkd on the Splunk server.",
+)
 @command
-def upload(ctx, file) -> None:
-    """Upload a CSV lookup table file into an app. Namespaced; gated write; requires an app."""
+def upload(ctx, server_file) -> None:
+    """Install a staged CSV lookup table into an app. Namespaced, gated, and app-required."""
     owner, app = resolve_ns(ctx.owner, ctx.app, for_write=True)
-    filename = Path(file).name
-    contents = Path(file).read_text(encoding="utf-8")
+    filename = PurePath(server_file).name
     result = do_write(
         ctx,
         action=f"upload lookup file '{filename}' into app '{app}'",
         audit_event={"action": "lookup.upload", "filename": filename, "app": app},
-        run=lambda c: core.upload_lookup(c, filename, contents, owner=owner, app=app),
+        run=lambda c: core.upload_lookup(c, filename, server_file, owner=owner, app=app),
     )
     out.emit(result, ctx.output_mode, ctx.meta())

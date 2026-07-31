@@ -16,18 +16,12 @@ _FILES = "data/lookup-table-files"
 
 
 def upload_lookup(
-    client: SplunkClient, filename: str, contents: str, *, owner: str, app: str
+    client: SplunkClient, filename: str, server_file: str, *, owner: str, app: str
 ) -> dict[str, Any]:
-    """Create a lookup-table file entry, sending the CSV bytes as ``eai:data``.
+    """Create a lookup-table file entry from a path readable by splunkd.
 
-    Splunk's lookup-table-files endpoint accepts the file name plus the file
-    body as the ``eai:data`` form field, which avoids a true multipart upload.
-    ``filename`` is the name the table file will have in the app; ``contents``
-    is the raw CSV text read from the local path by the command layer.
-
-    ponytail: this sends the whole CSV inline as a form field, which is fine for
-    typical lookup tables. Streaming a multi-hundred-MB file would need a real
-    multipart helper on the client -- not built until a large file appears.
+    ``filename`` is the name the table file will have in the app.
+    ``server_file`` is the staging path on the Splunk server.
     """
-    body: dict[str, Any] = {"name": filename, "eai:data": contents}
+    body: dict[str, Any] = {"name": filename, "eai:data": server_file}
     return client.write("POST", ns_path(_FILES, owner=owner, app=app), body)

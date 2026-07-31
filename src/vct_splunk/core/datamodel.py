@@ -10,6 +10,7 @@ from typing import Any
 
 from .client import SplunkClient
 from .namespace import ns_path
+from .path import path_segment
 
 _MODEL = "datamodel/model"
 
@@ -30,4 +31,5 @@ def accelerate(
     """
     flag = "true" if enabled else "false"
     body = {"acceleration": f'{{"enabled": {flag}}}'}
-    return client.write("POST", ns_path(f"{_MODEL}/{name}", owner=owner, app=app), body)
+    encoded = path_segment(name, label="data model name")
+    return client.write("POST", ns_path(f"{_MODEL}/{encoded}", owner=owner, app=app), body)

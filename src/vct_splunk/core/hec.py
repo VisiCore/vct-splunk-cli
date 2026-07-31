@@ -14,6 +14,8 @@ from __future__ import annotations
 from typing import Any
 
 from .client import SplunkClient
+from .errors import APIError
+from .path import path_segment
 
 _HTTP = "/services/data/inputs/http"
 
@@ -21,22 +23,19 @@ _HTTP = "/services/data/inputs/http"
 def rotate_token(client: SplunkClient, name: str) -> dict[str, Any]:
     """Regenerate the secret of an existing HEC token, returning the new value.
 
-    Splunk has no first-class "rotate" endpoint. The reliable single call is a
-    POST to the token stanza with ``rotate=true``; Splunk mints a fresh secret
-    and returns the updated entry (its ``content.token`` is the new value).
-
-    ponytail: this assumes the running Splunk honors ``rotate=true`` on the HEC
-    stanza (supported on current Splunk Enterprise). If a target version ignores
-    it, the fallback is delete + re-create with the same settings -- not built
-    until a real version gap appears. The new token is returned to the caller but
-    must never be written to the audit log.
+    The new token is returned to the caller but must never be written to the
+    audit log.
     """
-    result = client.write("POST", f"{_HTTP}/{name}", {"rotate": "true"})
+    encoded = path_segment(name, label="HEC token name")
+    result = client.write("POST", f"{_HTTP}/{encoded}/rotate", {})
     if result.get("dry_run"):
         return result
     entries = result.get("entry") or []
     content = entries[0].get("content") if entries else {}
-    return {"name": name, "token": (content or {}).get("token")}
+    token = (content or {}).get("token")
+    if not token:
+        raise APIError("Splunk's HEC rotation response did not contain a new token.")
+    return {"name": name, "token": token}
 
 
 def set_global(client: SplunkClient, *, enabled: bool) -> dict[str, Any]:

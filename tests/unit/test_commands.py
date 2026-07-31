@@ -400,27 +400,34 @@ def test_datamodel_accelerate_dry_run_previews(cli_env, patch_client):
     assert '"dry_run": true' in result.output
 
 
-def test_lookup_upload_requires_app(cli_env, monkeypatch, tmp_path):
+def test_lookup_upload_requires_app(cli_env, monkeypatch):
     monkeypatch.delenv("SPLUNK_APP", raising=False)
-    csv = tmp_path / "t.csv"
-    csv.write_text("a,b\n1,2\n", encoding="utf-8")
     # No --app and no SPLUNK_APP -> the namespaced write must refuse (exit 2).
-    result = CliRunner().invoke(cli, ["lookup", "upload", "--file", str(csv), "--output", "json"])
+    result = CliRunner().invoke(
+        cli, ["lookup", "upload", "--server-file", "/var/tmp/t.csv", "--output", "json"]
+    )
     assert result.exit_code == 2
     assert "usage_error" in result.output
 
 
-def test_lookup_upload_dry_run_previews_namespace(cli_env, patch_client, tmp_path):
-    csv = tmp_path / "t.csv"
-    csv.write_text("a,b\n1,2\n", encoding="utf-8")
-
+def test_lookup_upload_dry_run_previews_namespace(cli_env, patch_client):
     def handler(req: httpx.Request) -> httpx.Response:
         raise AssertionError("dry-run must not send a request")
 
     patch_client(handler)
     result = CliRunner().invoke(
         cli,
-        ["lookup", "upload", "--file", str(csv), "--app", "a", "--dry-run", "--output", "json"],
+        [
+            "lookup",
+            "upload",
+            "--server-file",
+            "/var/tmp/t.csv",
+            "--app",
+            "a",
+            "--dry-run",
+            "--output",
+            "json",
+        ],
     )
     assert result.exit_code == 0
     assert '"dry_run": true' in result.output

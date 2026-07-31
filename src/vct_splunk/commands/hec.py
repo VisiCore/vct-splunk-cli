@@ -10,6 +10,7 @@ from __future__ import annotations
 import click
 
 from ..core import hec as core
+from ..core.path import path_segment
 from . import output as out
 from .context import command
 from .write import do_write
@@ -29,6 +30,7 @@ def rotate(ctx, name) -> None:
     The new token value is printed (that is the point of rotation) but is never
     written to the audit log, which records only the action and token name.
     """
+    path_segment(name, label="HEC token name")
     result = do_write(
         ctx,
         action=f"rotate HEC token '{name}' (mints a new secret)",
