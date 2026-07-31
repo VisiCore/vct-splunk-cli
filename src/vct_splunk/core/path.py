@@ -27,6 +27,26 @@ def path_segment(value: str, *, label: str = "path segment") -> str:
     return quote(value, safe="")
 
 
+def absolute_path_segment(value: str, *, label: str) -> str:
+    """Encode an absolute-path stanza name after strict traversal validation."""
+    candidate = value
+    while True:
+        if any(ord(char) < 32 or ord(char) == 127 for char in candidate):
+            raise UsageError(f"{label.capitalize()} cannot contain control characters.")
+        if "\\" in candidate:
+            raise UsageError(f"{label.capitalize()} cannot contain backslashes.")
+        decoded = unquote(candidate)
+        if decoded == candidate:
+            break
+        candidate = decoded
+
+    if not candidate.startswith("/"):
+        raise UsageError(f"{label.capitalize()} must contain an absolute path.")
+    if any(part in {".", ".."} for part in candidate.split("/")):
+        raise UsageError(f"{label.capitalize()} cannot contain dot segments.")
+    return quote(value, safe="")
+
+
 def _reject_unsafe(value: str, label: str) -> None:
     if value in {".", ".."}:
         raise UsageError(f"{label.capitalize()} cannot be a dot segment.")

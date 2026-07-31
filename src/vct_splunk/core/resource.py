@@ -19,7 +19,7 @@ from typing import Any, Literal
 from .client import SplunkClient
 from .errors import NotFoundError
 from .namespace import ns_path
-from .path import path_segment
+from .path import absolute_path_segment, path_segment
 
 Verb = Literal["list", "get", "create", "update", "delete", "enable", "disable"]
 FieldType = Literal["str", "int", "float", "bool"]
@@ -63,6 +63,8 @@ class Spec:
         fields: The create/update settings.
         out_map: Splunk-content-key -> output-key. Empty means pass content through.
         namespaced: True for objects under ``/servicesNS/<owner>/<app>/``.
+        absolute_name: True when Splunk identifies the resource by an absolute
+            server path, as monitor inputs do.
     """
 
     name: str
@@ -72,6 +74,7 @@ class Spec:
     fields: tuple[Field, ...] = ()
     out_map: dict[str, str] = field(default_factory=dict)
     namespaced: bool = False
+    absolute_name: bool = False
 
 
 class CrudResource:
@@ -92,7 +95,7 @@ class CrudResource:
     def get(
         self, client: SplunkClient, name: str, *, owner: str | None = None, app: str | None = None
     ) -> dict[str, Any]:
-        encoded = path_segment(name, label=f"{self.spec.name} name")
+        encoded = self.validate_name(name)
         entries = client.get(f"{self._base(owner, app)}/{encoded}").get("entry") or []
         if not entries:
             raise NotFoundError(f"{self.spec.name.capitalize()} {name!r} not found.")
@@ -109,6 +112,7 @@ class CrudResource:
         app: str | None = None,
     ) -> dict[str, Any]:
         data = self._body(fields, sets)
+        self.validate_name(name)
         data["name"] = name
         return self._unwrap(client.write("POST", self._base(owner, app), data))
 
@@ -124,7 +128,7 @@ class CrudResource:
     ) -> dict[str, Any]:
         # Splunk's POST to the named object merges server-side, so only the
         # provided settings are sent (no read-modify-write).
-        encoded = path_segment(name, label=f"{self.spec.name} name")
+        encoded = self.validate_name(name)
         return self._unwrap(
             client.write("POST", f"{self._base(owner, app)}/{encoded}", self._body(fields, sets))
         )
@@ -132,7 +136,7 @@ class CrudResource:
     def delete(
         self, client: SplunkClient, name: str, *, owner: str | None = None, app: str | None = None
     ) -> dict[str, Any]:
-        encoded = path_segment(name, label=f"{self.spec.name} name")
+        encoded = self.validate_name(name)
         return client.write("DELETE", f"{self._base(owner, app)}/{encoded}", {})
 
     def control(
@@ -145,7 +149,7 @@ class CrudResource:
         app: str | None = None,
     ) -> dict[str, Any]:
         """Run a control action (``enable`` / ``disable``) on one object."""
-        encoded = path_segment(name, label=f"{self.spec.name} name")
+        encoded = self.validate_name(name)
         return self._unwrap(
             client.write("POST", f"{self._base(owner, app)}/{encoded}/{action}", {})
         )
@@ -155,6 +159,12 @@ class CrudResource:
             # The command layer always resolves owner/app for namespaced specs.
             return ns_path(self.spec.path, owner=owner or "-", app=app or "-")
         return self.spec.path
+
+    def validate_name(self, name: str) -> str:
+        """Validate and encode the spec's supported identifier shape."""
+        if self.spec.absolute_name:
+            return absolute_path_segment(name, label=f"{self.spec.name} name")
+        return path_segment(name, label=f"{self.spec.name} name")
 
     def _body(self, fields: dict[str, Any], sets: dict[str, str] | None) -> dict[str, Any]:
         """Map provided options to Splunk form keys, then merge raw --set pairs."""

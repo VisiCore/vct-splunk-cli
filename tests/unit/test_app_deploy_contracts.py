@@ -36,7 +36,7 @@ def test_app_install_uses_apps_local_contract(cli_env, patch_client, option, sou
     assert seen == {
         "method": "POST",
         "path": "/services/apps/local",
-        "form": {"name": [source], "update": ["true"]},
+        "form": {"name": [source], "filename": ["true"], "update": ["true"]},
     }
 
 
@@ -57,7 +57,7 @@ def test_app_install_audit_uses_sanitized_url(cli_env, patch_client, monkeypatch
     )
 
     assert result.exit_code == 0
-    assert seen == {"name": [source]}
+    assert seen == {"name": [source], "filename": ["true"]}
     record = json.loads(audit.read_text())
     assert record["source"] == "https://example.test:8443/apps/example.spl"
     assert "user" not in audit.read_text()
@@ -80,7 +80,10 @@ def test_app_install_dry_run_uses_sanitized_url(cli_env, patch_client):
 
     assert result.exit_code == 0
     body = json.loads(result.output)
-    assert body["data"]["request"]["body"] == {"name": "https://example.test:8443/apps/example.spl"}
+    assert body["data"]["request"]["body"] == {
+        "name": "https://example.test:8443/apps/example.spl",
+        "filename": "true",
+    }
     for secret in ("user", "password", "token", "secret", "fragment"):
         assert secret not in result.output
 
@@ -164,6 +167,27 @@ def test_deploy_serverclass_write_exact_contract(cli_env, patch_client, verb):
     assert seen == {"method": "POST", "path": expected_path, "form": expected_form}
 
 
+def test_deploy_serverclass_delete_exact_contract(cli_env, patch_client):
+    seen: dict[str, str] = {}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen["method"] = req.method
+        seen["path"] = req.url.raw_path.decode().partition("?")[0]
+        return httpx.Response(200, json={"entry": []})
+
+    patch_client(handler)
+    result = CliRunner().invoke(
+        cli,
+        ["deploy-server", "serverclass", "delete", "east west", "--yes", "--output", "json"],
+    )
+
+    assert result.exit_code == 0
+    assert seen == {
+        "method": "DELETE",
+        "path": "/services/deployment/server/serverclasses/east%20west",
+    }
+
+
 @pytest.mark.parametrize("verb", ["create", "update"])
 @pytest.mark.parametrize("setting", ["broken", "=value", "x=1"])
 def test_deploy_serverclass_rejects_malformed_settings(cli_env, patch_client, verb, setting):
@@ -179,7 +203,7 @@ def test_deploy_serverclass_rejects_malformed_settings(cli_env, patch_client, ve
     assert result.exit_code == 2
 
 
-@pytest.mark.parametrize("verb", ["get", "create", "update"])
+@pytest.mark.parametrize("verb", ["get", "create", "update", "delete"])
 @pytest.mark.parametrize("name", ["..", "../other", r"..\\other", "%2e%2e%2fother"])
 def test_deploy_serverclass_rejects_traversal_before_request(cli_env, patch_client, verb, name):
     def handler(req: httpx.Request) -> httpx.Response:
@@ -187,8 +211,10 @@ def test_deploy_serverclass_rejects_traversal_before_request(cli_env, patch_clie
 
     patch_client(handler)
     args = ["deploy-server", "serverclass", verb, name]
+    if verb in {"create", "update"}:
+        args.extend(["--set", "x=1"])
     if verb != "get":
-        args.extend(["--set", "x=1", "--yes"])
+        args.append("--yes")
     result = CliRunner().invoke(cli, [*args, "--output", "json"])
 
     assert result.exit_code == 2

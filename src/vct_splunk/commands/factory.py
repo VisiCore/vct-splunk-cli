@@ -19,7 +19,6 @@ import click
 from ..core.errors import UsageError
 from ..core.namespace import resolve_ns
 from ..core.parsing import parse_key_value_pairs
-from ..core.path import path_segment
 from ..core.resource import CrudResource, Field, Spec
 from . import output as out
 from .context import AliasedGroup, command
@@ -95,7 +94,7 @@ def build_group(spec: Spec) -> click.Group:
         @click.argument("name")
         @command
         def _get(ctx, name) -> None:
-            path_segment(name, label=f"{spec.name} name")
+            res.validate_name(name)
             owner, app = _ns(ctx, spec, for_write=False)
             with ctx.client() as c:
                 out.emit(res.get(c, name, owner=owner, app=app), ctx.output_mode, ctx.meta())
@@ -107,6 +106,7 @@ def build_group(spec: Spec) -> click.Group:
         @_field_options(spec, for_create=True)
         @command
         def _create(ctx, name, **opts) -> None:
+            res.validate_name(name)
             owner, app = _ns(ctx, spec, for_write=True)
             fields, sets = _collect_fields(spec, opts)
             action, event = _gate_args(spec, "create", name, owner, app)
@@ -125,7 +125,7 @@ def build_group(spec: Spec) -> click.Group:
         @_field_options(spec)
         @command
         def _update(ctx, name, **opts) -> None:
-            path_segment(name, label=f"{spec.name} name")
+            res.validate_name(name)
             owner, app = _ns(ctx, spec, for_write=True)
             fields, sets = _collect_fields(spec, opts)
             if not sets and all(v in (None, ()) for v in fields.values()):
@@ -145,7 +145,7 @@ def build_group(spec: Spec) -> click.Group:
         @click.argument("name")
         @command
         def _delete(ctx, name) -> None:
-            path_segment(name, label=f"{spec.name} name")
+            res.validate_name(name)
             owner, app = _ns(ctx, spec, for_write=True)
             action, event = _gate_args(spec, "delete", name, owner, app)
             result = do_write(
@@ -170,7 +170,7 @@ def _add_control(grp: click.Group, spec: Spec, res: CrudResource, verb: str) -> 
     @click.argument("name")
     @command
     def _control(ctx, name) -> None:
-        path_segment(name, label=f"{spec.name} name")
+        res.validate_name(name)
         owner, app = _ns(ctx, spec, for_write=True)
         action, event = _gate_args(spec, verb, name, owner, app)
         result = do_write(

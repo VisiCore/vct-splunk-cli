@@ -56,6 +56,12 @@ class APIError(SplunkError):
     exit_code = 1
     code = "api_error"
 
+    def __init__(
+        self, message: str, *, status: int | None = None, details: object | None = None
+    ) -> None:
+        super().__init__(message, details=details)
+        self.status = status
+
 
 class TransportError(SplunkError):
     exit_code = 1

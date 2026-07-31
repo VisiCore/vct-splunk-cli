@@ -105,14 +105,14 @@ def test_control_verb_posts_control_endpoint(cli_env, patch_client, monkeypatch,
 
     def handler(req: httpx.Request) -> httpx.Response:
         seen["method"] = req.method
-        seen["path"] = req.url.path
+        seen["path"] = req.url.raw_path.decode().partition("?")[0]
         return httpx.Response(200, json={})
 
     patch_client(handler)
-    result = CliRunner().invoke(cli, ["monitor-input", "disable", "mon1", "--yes"])
+    result = CliRunner().invoke(cli, ["monitor-input", "disable", "/var/tmp/mon1", "--yes"])
     assert result.exit_code == 0, result.output
     assert seen["method"] == "POST"
-    assert seen["path"] == "/services/data/inputs/monitor/mon1/disable"
+    assert seen["path"] == "/services/data/inputs/monitor/%2Fvar%2Ftmp%2Fmon1/disable"
 
 
 @pytest.mark.parametrize(

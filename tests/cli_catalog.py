@@ -34,13 +34,23 @@ _VERB_ARGS: dict[str, tuple[str, ...]] = {
     "disable": ("example", "--dry-run"),
 }
 
-_LIVE_GET_NAMES = {
+# Names that really exist on a live instance (get exits 0). Path-shaped resources
+# that need a well-formed but absent name (get exits 4) live in _LIVE_MISSING_NAMES.
+_LIVE_REAL_NAMES = {
     "app": "search",
     "index": "_internal",
     "role": "admin",
     "user": "admin",
 }
+_LIVE_MISSING_NAMES = {
+    "monitor-input": "/var/tmp/vct_ci_missing.log",
+    "script-input": "/opt/splunk/etc/apps/search/bin/vct_ci_missing.sh",
+}
 _LIVE_MISSING_NAME = "vct_ci_missing"
+_EXAMPLE_NAMES = {
+    "monitor-input": "/var/tmp/example.log",
+    "script-input": "/opt/splunk/etc/apps/search/bin/example.sh",
+}
 
 _SPECIAL: tuple[Case, ...] = (
     Case(("api", "get"), "read", (("/services/server/info", "-q", "count=1"),)),
@@ -69,6 +79,7 @@ _SPECIAL: tuple[Case, ...] = (
         "write",
         (("class", "--set", "whitelist.0=*", "--dry-run"),),
     ),
+    Case(("deploy-server", "serverclass", "delete"), "write", (("class", "--dry-run"),)),
     Case(("health", "check"), "read", ((),), live_exit_codes=(0, 5)),
     Case(("hec", "global-disable"), "write", (("--dry-run",),)),
     Case(("hec", "global-enable"), "write", (("--dry-run",),)),
@@ -146,6 +157,8 @@ def _generated_cases() -> tuple[Case, ...]:
     for spec in (INDEX, SAVED_SEARCH, *REGISTRY):
         for verb in spec.verbs:
             args = _VERB_ARGS[verb]
+            if args and args[0] == "example" and spec.name in _EXAMPLE_NAMES:
+                args = (_EXAMPLE_NAMES[spec.name], *args[1:])
             if spec is SAVED_SEARCH and verb == "create":
                 args = (*args, "--search", "index=x")
             kind: Kind = "read" if verb in {"list", "get"} else "write"
@@ -154,12 +167,13 @@ def _generated_cases() -> tuple[Case, ...]:
             if verb == "list":
                 live_argv = ()
             elif verb == "get":
-                name = _LIVE_GET_NAMES.get(spec.name, _LIVE_MISSING_NAME)
+                name = _LIVE_REAL_NAMES.get(spec.name)
+                if name is None:
+                    name = _LIVE_MISSING_NAMES.get(spec.name, _LIVE_MISSING_NAME)
+                    live_exit_codes = (4,)
                 live_argv = (name,)
                 if spec.namespaced:
                     live_argv = (*live_argv, "--app", "search", "--owner", "nobody")
-                if name == _LIVE_MISSING_NAME:
-                    live_exit_codes = (4,)
             cases.append(
                 Case(
                     (spec.name, verb),

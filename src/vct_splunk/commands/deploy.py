@@ -100,6 +100,21 @@ def serverclass_update(ctx, name, _set) -> None:
     out.emit(result, ctx.output_mode, ctx.meta())
 
 
+@serverclass_grp.command("delete")
+@click.argument("name")
+@command
+def serverclass_delete(ctx, name) -> None:
+    """Delete a server class by name. Gated write."""
+    path_segment(name, label="server class name")
+    result = do_write(
+        ctx,
+        action=f"delete server class '{name}'",
+        audit_event={"action": "deploy.serverclass.delete", "name": name},
+        run=lambda c: core.delete_serverclass(c, name),
+    )
+    out.emit(result, ctx.output_mode, ctx.meta())
+
+
 @deploy_server.command("reload")
 @command
 def reload(ctx) -> None:

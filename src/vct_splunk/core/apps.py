@@ -34,7 +34,7 @@ def install_app(
     display_source = (
         preview_source if client.config.dry_run and preview_source is not None else source
     )
-    data: dict[str, Any] = {"name": display_source}
+    data: dict[str, Any] = {"name": display_source, "filename": "true"}
     if update:
         data["update"] = "true"
     return client.write("POST", _PATH, data)
