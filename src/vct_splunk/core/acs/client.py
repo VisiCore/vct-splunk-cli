@@ -54,7 +54,7 @@ def acs_config_from_env(stack: str | None = None) -> AcsConfig:
             "Invalid ACS stack name. Use only letters, numbers, and hyphens, "
             "starting with a letter or number."
         )
-    base_url = os.environ.get("SPLUNK_ACS_BASE_URL", ACS_BASE_URL).rstrip("/")
+    base_url = (os.environ.get("SPLUNK_ACS_BASE_URL") or ACS_BASE_URL).rstrip("/")
     return AcsConfig(stack=stack, token=token, base_url=base_url)
 
 

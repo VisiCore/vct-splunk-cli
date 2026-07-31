@@ -195,6 +195,15 @@ def test_acs_config_supports_base_url_override(monkeypatch):
     assert config.base_url == "https://admin.splunkcloudgc.com"
 
 
+def test_acs_config_uses_default_for_an_empty_base_url(monkeypatch):
+    monkeypatch.setenv("SPLUNK_ACS_TOKEN", "T")
+    monkeypatch.setenv("SPLUNK_ACS_BASE_URL", "")
+
+    config = acs_config_from_env("commercial-stack")
+
+    assert config.base_url == "https://admin.splunk.com"
+
+
 # --- Backend deduction from the URL ------------------------------------------
 
 

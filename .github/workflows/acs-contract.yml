@@ -1,0 +1,39 @@
+name: ACS Public Contract
+
+on:
+  schedule:
+    - cron: "17 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-contract:
+    name: ACS / Public OpenAPI
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SPLUNK_ACS_SPEC_TEST: "true"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          python-version: "3.14"
+
+      - name: Install project
+        run: |
+          uv venv --python 3.14
+          uv pip install -e ".[dev]"
+
+      - name: Check current public ACS contract
+        run: >-
+          .venv/bin/pytest tests/integration/test_acs_public_spec.py
+          -vv --tb=short --junitxml=acs-contract.xml
+
+      - name: Publish test summary
+        if: always()
+        uses: test-summary/action@37b508cfee6d4d080eedd00b5bb240a6a784a6a5 # v2
+        with:
+          paths: acs-contract.xml

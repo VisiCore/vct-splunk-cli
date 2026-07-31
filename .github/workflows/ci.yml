@@ -39,7 +39,7 @@ jobs:
     if: >-
       ${{
         !cancelled() &&
-        (github.event_name == 'push' ||
+        (github.event_name != 'pull_request' ||
           (needs.dependency-review.result == 'success' &&
             needs.workflow-security.result == 'success'))
       }}
@@ -47,67 +47,157 @@ jobs:
     with:
       python_versions: >-
         ${{
-          github.event_name == 'pull_request' &&
-          '["3.14"]' ||
-          '["3.10", "3.11", "3.12", "3.13", "3.14"]'
+          github.event_name == 'push' &&
+          '["3.10", "3.11", "3.12", "3.13", "3.14"]' ||
+          '["3.14"]'
         }}
       gate_python_version: "3.14"
       runner_label: ubuntu-latest
 
-  # Real create -> verify -> cleanup against a Dockerized Splunk Enterprise 10.x.
-  # COST CONTROL: this is expensive (boots a Splunk container, several minutes), so
-  # it runs ONLY on manual dispatch -- never on push or pull_request -- and is
-  # hard-capped by timeout-minutes. It is informational; the `gate` job is the gate.
-  # Run it on demand from the Actions tab ("Run workflow") when you want a live check.
-  integration:
-    if: github.event_name == 'workflow_dispatch'
+  # Cost gate for the Enterprise container job: only PRs that touch code or
+  # this workflow pay for a live Splunk boot. Docs-only PRs skip it, and the
+  # skipped required check still satisfies branch protection.
+  changes:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        id: filter
+        with:
+          filters: |
+            code:
+              - "src/**"
+              - "tests/**"
+              - "pyproject.toml"
+              - ".github/workflows/ci.yml"
+
+  enterprise:
+    name: Enterprise / Full CLI
+    needs: [python, changes]
+    if: >-
+      ${{
+        !cancelled() && needs.python.result == 'success' &&
+        (github.event_name != 'pull_request' ||
+          needs.changes.outputs.code == 'true')
+      }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        # We only support Splunk 10.x; `latest` tracks the current 10.x release.
-        # Splunk 10 requires accepting the general terms (SPLUNK_GENERAL_TERMS below).
-        splunk-version: ["latest"]
     env:
-      # A throwaway admin password for the ephemeral container. Override with the
-      # SPLUNK_TEST_PASSWORD secret if org policy requires it.
-      SPLUNK_PASSWORD: ${{ secrets.SPLUNK_TEST_PASSWORD || 'Ch4ng3d-CI-Pass!' }}
+      SPLUNK_INTEGRATION_TEST: "true"
+      SPLUNK_WRITE_TEST: "true"
+      SPLUNK_URL: https://localhost:8089
+      SPLUNK_USERNAME: admin
+      SPLUNK_PASSWORD: Ch4ng3d-CI-Pass!
+      SPLUNK_VERIFY: "false"
+      SPLUNK_TEST_SERVER_FIXTURE_DIR: /opt/splunk/var/run/splunk/lookup_tmp
+      VCT_SPLUNK_AUDIT: /tmp/vct-splunk-audit.log
+    services:
+      splunk:
+        image: splunk/splunk:latest # zizmor: ignore[unpinned-images] Required current-version canary.
+        env:
+          SPLUNK_GENERAL_TERMS: --accept-sgt-current-at-splunk-com
+          SPLUNK_START_ARGS: --accept-license
+          SPLUNK_PASSWORD: Ch4ng3d-CI-Pass!
+        ports:
+          - 8089:8089
+        # Splunk 10 first boot takes several minutes; GitHub waits for this
+        # health check before running any step against the container.
+        options: >-
+          --health-cmd "curl -ksf -u admin:Ch4ng3d-CI-Pass! https://localhost:8089/services/server/info"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 60
+          --health-start-period 120s
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
         with:
-          python-version: "3.13"
+          python-version: "3.14"
+          enable-cache: true
 
       - name: Install project
         run: |
-          uv venv
+          uv venv --python 3.14
           uv pip install -e ".[dev]"
 
-      - name: Start Splunk
-        run: |
-          docker run -d --name splunk -p 8089:8089 \
-            -e SPLUNK_GENERAL_TERMS=--accept-sgt-current-at-splunk-com \
-            -e SPLUNK_START_ARGS=--accept-license \
-            -e SPLUNK_PASSWORD="$SPLUNK_PASSWORD" \
-            splunk/splunk:${{ matrix.splunk-version }}
-
-      - name: Wait for splunkd
-        run: bash .github/scripts/wait-for-splunk.sh
-
-      # No auth script: the CLI exchanges SPLUNK_USERNAME/SPLUNK_PASSWORD for a
-      # session key itself (via /services/auth/login) when no token is set.
-      - name: Integration tests
+      - name: Stage server fixtures
         env:
-          SPLUNK_INTEGRATION_TEST: "true"
-          SPLUNK_URL: https://localhost:8089
-          SPLUNK_USERNAME: admin
-          SPLUNK_PASSWORD: ${{ env.SPLUNK_PASSWORD }}
-          SPLUNK_VERIFY: "false"
-        run: .venv/bin/pytest -m integration -v
+          SPLUNK_CONTAINER_ID: ${{ job.services.splunk.id }}
+        run: |
+          docker exec -u root "$SPLUNK_CONTAINER_ID" \
+            mkdir -p "$SPLUNK_TEST_SERVER_FIXTURE_DIR"
+          docker cp tests/data/server/. \
+            "$SPLUNK_CONTAINER_ID:$SPLUNK_TEST_SERVER_FIXTURE_DIR/"
+          docker exec -u root "$SPLUNK_CONTAINER_ID" \
+            tar -czf "$SPLUNK_TEST_SERVER_FIXTURE_DIR/vct_ci_app.spl" \
+            -C "$SPLUNK_TEST_SERVER_FIXTURE_DIR" vct_ci_app
+          docker cp tests/data/server/vct_test_input.sh \
+            "$SPLUNK_CONTAINER_ID:/opt/splunk/etc/apps/search/bin/vct_test_input.sh"
+          docker exec -u root "$SPLUNK_CONTAINER_ID" \
+            chown -R splunk:splunk "$SPLUNK_TEST_SERVER_FIXTURE_DIR" \
+            /opt/splunk/etc/apps/search/bin/vct_test_input.sh
+          docker exec -u root "$SPLUNK_CONTAINER_ID" \
+            chmod 755 /opt/splunk/etc/apps/search/bin/vct_test_input.sh
 
-      - name: Splunk logs on failure
+      - name: Enterprise reads (61 commands)
+        run: >-
+          .venv/bin/pytest tests/integration/enterprise/read
+          -m "integration and enterprise and read"
+          -vv --color=yes --tb=short --junitxml=enterprise-read.xml
+
+      - name: Enterprise writes (92 commands)
+        run: >-
+          .venv/bin/pytest tests/integration/enterprise/write
+          -m "integration and enterprise and write"
+          -k test_write_leaf
+          -vv --color=yes --tb=short --junitxml=enterprise-write.xml
+
+      - name: Enterprise restart and reconnect (1 command)
+        run: >-
+          .venv/bin/pytest tests/integration/enterprise/write/test_write_catalog.py
+          -m "integration and enterprise and write"
+          -k test_restart_reconnect
+          -vv --color=yes --tb=short --junitxml=enterprise-restart.xml
+
+      - name: Enterprise cleanup verification
+        run: >-
+          .venv/bin/pytest tests/integration/enterprise/write/test_cleanup.py
+          -m "integration and enterprise and read"
+          -vv --color=yes --tb=short --junitxml=enterprise-cleanup.xml
+
+      - name: Publish test summary
+        if: always()
+        uses: test-summary/action@37b508cfee6d4d080eedd00b5bb240a6a784a6a5 # v2
+        with:
+          paths: enterprise-*.xml
+
+      - name: Capture failure diagnostics
         if: failure()
-        run: docker logs splunk
+        env:
+          SPLUNK_CONTAINER_ID: ${{ job.services.splunk.id }}
+        run: |
+          mkdir -p artifacts
+          docker logs "$SPLUNK_CONTAINER_ID" > artifacts/splunk.log 2>&1 || true
+          docker inspect "$SPLUNK_CONTAINER_ID" > artifacts/container.json 2>&1 || true
+          docker stats --no-stream "$SPLUNK_CONTAINER_ID" \
+            > artifacts/resources.txt 2>&1 || true
+          cp "$VCT_SPLUNK_AUDIT" artifacts/audit.log 2>&1 || true
+          docker exec "$SPLUNK_CONTAINER_ID" \
+            find /opt/splunk/etc/apps -maxdepth 2 -mindepth 1 -type d \
+            > artifacts/apps.txt 2>&1 || true
+
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: enterprise-failure-${{ github.run_id }}
+          path: |
+            artifacts/
+            enterprise-*.xml
+          if-no-files-found: ignore

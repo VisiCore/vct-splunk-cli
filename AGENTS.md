@@ -90,13 +90,16 @@ Two cross-cutting ideas to know about:
 
 ```bash
 pytest                                                # unit tests (mocked HTTP)
-SPLUNK_INTEGRATION_TEST=true pytest -m integration    # against a live Splunk
+SPLUNK_INTEGRATION_TEST=true pytest -m "integration and enterprise and read"
+SPLUNK_INTEGRATION_TEST=true SPLUNK_WRITE_TEST=true \
+  pytest -m "integration and enterprise and write"   # disposable Splunk only
+SPLUNK_ACS_LIVE_TEST=true pytest -m "integration and cloud and read"
 ```
 
-Unit tests live in `tests/unit/` and mock the transport; the gated end-to-end
-tests in `tests/integration/` need `SPLUNK_URL`, credentials (`SPLUNK_TOKEN`,
-or the `SPLUNK_USERNAME` / `SPLUNK_PASSWORD` fallback CI uses), and a reachable
-instance.
+Unit tests live in `tests/unit/` and mock the transport. The Enterprise read
+catalog invokes all 61 read leaves; the write catalog invokes all 92 mutations
+with cleanup and requires both live-test opt-ins. Cloud and ACS tests use only
+Python and outbound HTTPS.
 
 ## Checks before a PR
 
