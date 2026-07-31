@@ -28,6 +28,7 @@ from vct_splunk.commands.context import AliasedGroup
 _SPECIAL: dict[tuple[str, ...], list[str]] = {
     ("auth", "login"): ["--username", "admin"],
     ("auth", "status"): [],
+    ("cluster", "status"): [],
     ("server", "info"): [],
     ("api", "get"): ["/services/server/info", "-q", "count=1"],
     ("search", "run"): ["--query", "index=_internal", "--earliest", "-1h", "--max-rows", "5"],
@@ -37,6 +38,23 @@ _SPECIAL: dict[tuple[str, ...], list[str]] = {
     ("saved-search", "run"): ["nightly", "--app", "my_app", "--earliest", "-1h"],
     ("health", "check"): [],
     ("inspect",): [],
+    ("kvstore", "records"): ["records"],
+    ("kvstore", "get"): ["records", "key"],
+    ("kvstore", "insert"): ["records", "--data", '{"value":"x"}', "--dry-run"],
+    ("kvstore", "update"): [
+        "records",
+        "key",
+        "--data",
+        '{"value":"x"}',
+        "--dry-run",
+    ],
+    ("kvstore", "delete"): ["records", "key", "--dry-run"],
+    ("kvstore", "purge"): ["records", "--dry-run"],
+    ("license", "usage"): [],
+    ("server", "restart"): ["--dry-run"],
+    ("server", "settings", "get"): [],
+    ("server", "settings", "set"): ["--set", "host=x", "--dry-run"],
+    ("shcluster", "status"): [],
 }
 
 # Generic argument rules by CRUD verb (factory-generated and factory-shaped groups).

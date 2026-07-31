@@ -6,6 +6,7 @@ import click
 
 from ..core import server as core
 from ..core.errors import UsageError
+from ..core.parsing import parse_key_value_pairs
 from . import output as out
 from .context import command
 from .write import do_write
@@ -61,10 +62,7 @@ def settings_set(ctx, _set) -> None:
     """Change server settings (only the keys you pass). Gated write."""
     if not _set:
         raise UsageError("Nothing to set. Pass at least one --set KEY=VALUE.")
-    changes: dict[str, str] = {}
-    for pair in _set:
-        key, _, val = pair.partition("=")
-        changes[key] = val
+    changes = parse_key_value_pairs(_set)
     result = do_write(
         ctx,
         action=f"change server settings: {', '.join(sorted(changes))}",

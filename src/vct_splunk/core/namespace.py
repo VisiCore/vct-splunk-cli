@@ -18,6 +18,7 @@ by default.
 from __future__ import annotations
 
 from .errors import UsageError
+from .path import path_segment
 
 #: Splunk wildcard for owner or app — matches across every namespace.
 WILDCARD = "-"
@@ -42,7 +43,10 @@ def ns_path(suffix: str, *, owner: str, app: str) -> str:
     """
     if not owner or not app:
         raise UsageError("A namespace needs both an owner and an app.")
-    return f"/servicesNS/{owner}/{app}/{suffix.lstrip('/')}"
+    return (
+        f"/servicesNS/{path_segment(owner, label='owner')}/"
+        f"{path_segment(app, label='app')}/{suffix.lstrip('/')}"
+    )
 
 
 def resolve_ns(owner: str | None, app: str | None, *, for_write: bool) -> tuple[str, str]:

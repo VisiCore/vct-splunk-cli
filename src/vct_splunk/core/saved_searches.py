@@ -15,6 +15,7 @@ from typing import Any
 
 from .client import SplunkClient
 from .namespace import ns_path
+from .path import path_segment
 
 _SUFFIX = "saved/searches"
 
@@ -56,7 +57,14 @@ def dispatch_saved_search(
     ``search get``.
     """
     data = build_dispatch_payload(trigger_actions=trigger_actions, earliest=earliest, latest=latest)
-    body = client.post(ns_path(f"{_SUFFIX}/{name}/dispatch", owner=owner, app=app), data)
+    body = client.post(
+        ns_path(
+            f"{_SUFFIX}/{path_segment(name, label='saved search name')}/dispatch",
+            owner=owner,
+            app=app,
+        ),
+        data,
+    )
     sid = body.get("sid") if isinstance(body, dict) else None
     if not sid and isinstance(body, dict):
         entries = body.get("entry") or []

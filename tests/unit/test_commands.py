@@ -158,14 +158,16 @@ def test_saved_search_create_dry_run_previews_app_namespace(cli_env):
 
 def test_cluster_status_renders(cli_env, patch_client):
     def handler(req: httpx.Request) -> httpx.Response:
-        if req.url.path == "/services/cluster/config":
-            return httpx.Response(200, json={"entry": [{"content": {"mode": "manager"}}]})
-        return httpx.Response(200, json={"entry": [{"content": {"indexing_ready_flag": True}}]})
+        assert req.url.path == "/services/cluster/manager/info"
+        return httpx.Response(
+            200,
+            json={"entry": [{"content": {"label": "cluster-one", "indexing_ready_flag": True}}]},
+        )
 
     patch_client(handler)
     result = CliRunner().invoke(cli, ["cluster", "status", "--output", "json"])
     assert result.exit_code == 0
-    assert '"mode": "manager"' in result.output
+    assert '"label": "cluster-one"' in result.output
 
 
 def test_license_list_renders(cli_env, patch_client):

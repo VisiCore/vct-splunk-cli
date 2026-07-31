@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 from .client import SplunkClient
-from .errors import UsageError
+from .errors import APIError, UsageError
+
+_REDACTED = "<redacted>"
 
 
 def get_server_info(client: SplunkClient) -> dict[str, Any]:
@@ -39,13 +41,37 @@ def get_settings(client: SplunkClient) -> dict[str, Any]:
     """Show the server's general settings."""
     body = client.get("/services/server/settings/settings")
     entries = body.get("entry") or []
-    return entries[0].get("content") or {} if entries else {}
+    content = entries[0].get("content") or {} if entries else {}
+    return _redact_settings(content)
 
 
 def set_settings(client: SplunkClient, settings: dict[str, Any]) -> dict[str, Any]:
     """Apply changed server settings (form keys); a gated write."""
-    result = client.write("POST", "/services/server/settings/settings", settings)
+    try:
+        result = client.write("POST", "/services/server/settings/settings", settings)
+    except APIError as exc:
+        raise APIError(exc.message, details=_redact_settings(exc.details)) from exc
     if result.get("dry_run"):
-        return result
+        return _redact_settings(result)
     entries = result.get("entry") or []
-    return entries[0].get("content") or {} if entries else result
+    content = entries[0].get("content") or {} if entries else result
+    return _redact_settings(content)
+
+
+def _redact_settings(value: Any) -> Any:
+    """Recursively replace secret-bearing server-setting values."""
+    if isinstance(value, dict):
+        return {
+            key: _REDACTED if _secret_setting(key) else _redact_settings(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_settings(item) for item in value]
+    return value
+
+
+def _secret_setting(key: object) -> bool:
+    normalized = str(key).casefold().replace("_", "").replace("-", "")
+    return any(
+        marker in normalized for marker in ("pass4symmkey", "password", "passwd", "secret", "token")
+    )

@@ -4,9 +4,8 @@ This group operates on the records *inside* a KV Store collection -- a JSON
 document store. The collection *schema* (creating the collection and its fields)
 is a separate group, ``kvstore-collection``.
 
-Records are namespaced: reads default to the ``-`` wildcard (all owners/apps);
-writes require an explicit ``--app`` (or ``$SPLUNK_APP``) so a record is never
-written into the default ``search`` app by accident.
+Every operation requires an explicit ``--app`` (or ``$SPLUNK_APP``) and defaults
+to owner ``nobody`` because Splunk does not support wildcard KV data namespaces.
 """
 
 from __future__ import annotations
@@ -19,6 +18,7 @@ import click
 from ..core import kvstore as core
 from ..core.errors import UsageError
 from ..core.namespace import resolve_ns
+from ..core.path import path_segment
 from . import output as out
 from .context import command
 from .write import do_write
@@ -47,7 +47,8 @@ def _parse_doc(data: str) -> dict[str, Any]:
 @command
 def records(ctx, collection, query, limit) -> None:
     """List records in a collection (use --query/--limit to narrow)."""
-    owner, app = resolve_ns(ctx.owner, ctx.app, for_write=False)
+    path_segment(collection, label="collection")
+    owner, app = resolve_ns(ctx.owner, ctx.app, for_write=True)
     with ctx.client() as c:
         data = core.list_records(c, collection, owner=owner, app=app, query=query, limit=limit)
     out.emit(data, ctx.output_mode, ctx.meta())
@@ -59,7 +60,9 @@ def records(ctx, collection, query, limit) -> None:
 @command
 def get(ctx, collection, key) -> None:
     """Show one record by its _key."""
-    owner, app = resolve_ns(ctx.owner, ctx.app, for_write=False)
+    path_segment(collection, label="collection")
+    path_segment(key, label="record key")
+    owner, app = resolve_ns(ctx.owner, ctx.app, for_write=True)
     with ctx.client() as c:
         data = core.get_record(c, collection, key, owner=owner, app=app)
     out.emit(data, ctx.output_mode, ctx.meta())
@@ -71,6 +74,7 @@ def get(ctx, collection, key) -> None:
 @command
 def insert(ctx, collection, data) -> None:
     """Insert a record (JSON document). Gated write; requires an app."""
+    path_segment(collection, label="collection")
     owner, app = resolve_ns(ctx.owner, ctx.app, for_write=True)
     document = _parse_doc(data)
     result = do_write(
@@ -89,6 +93,8 @@ def insert(ctx, collection, data) -> None:
 @command
 def update(ctx, collection, key, data) -> None:
     """Replace a record by its _key (JSON document). Gated write; requires an app."""
+    path_segment(collection, label="collection")
+    path_segment(key, label="record key")
     owner, app = resolve_ns(ctx.owner, ctx.app, for_write=True)
     document = _parse_doc(data)
     result = do_write(
@@ -111,6 +117,8 @@ def update(ctx, collection, key, data) -> None:
 @command
 def delete(ctx, collection, key) -> None:
     """Delete one record by its _key. Gated write; requires an app."""
+    path_segment(collection, label="collection")
+    path_segment(key, label="record key")
     owner, app = resolve_ns(ctx.owner, ctx.app, for_write=True)
     result = do_write(
         ctx,
@@ -131,6 +139,7 @@ def delete(ctx, collection, key) -> None:
 @command
 def purge(ctx, collection) -> None:
     """Delete ALL records in a collection (the schema is kept). Gated write; requires an app."""
+    path_segment(collection, label="collection")
     owner, app = resolve_ns(ctx.owner, ctx.app, for_write=True)
     result = do_write(
         ctx,
