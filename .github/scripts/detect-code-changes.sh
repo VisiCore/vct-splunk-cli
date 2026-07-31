@@ -9,7 +9,10 @@
 # Requires: BASE_REF (the pull request's target branch), GITHUB_OUTPUT (Actions).
 set -euo pipefail
 
-: "${BASE_REF:?BASE_REF must be set to the pull request's base branch}"
+# No apostrophes in these messages: bash treats a single quote inside
+# ${VAR:?word} as an opening quote even within double quotes, which makes the
+# rest of the file a syntax error.
+: "${BASE_REF:?BASE_REF must be set to the base branch of the pull request}"
 : "${GITHUB_OUTPUT:?GITHUB_OUTPUT must be set by GitHub Actions}"
 
 # Paths whose change requires a live Splunk run, anchored at the repo root.

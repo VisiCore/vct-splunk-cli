@@ -10,11 +10,29 @@ source of truth and this test fails if the two ever drift apart.
 from __future__ import annotations
 
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
 
 _SCRIPT = Path(__file__).resolve().parents[2] / ".github/scripts/detect-code-changes.sh"
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="bash is not installed")
+def test_script_is_valid_bash() -> None:
+    """The script must parse.
+
+    A syntax error here only shows up as a failed CI job, and the reported line
+    can be far from the real mistake — an apostrophe inside `${VAR:?...}` opens
+    a quote that bash never closes, and it blames a later line.
+    """
+    result = subprocess.run(  # noqa: S603
+        ["bash", "-n", str(_SCRIPT)],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, f"detect-code-changes.sh has a syntax error:\n{result.stderr}"
 
 
 def _covered_pattern() -> re.Pattern[str]:
