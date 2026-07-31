@@ -263,6 +263,85 @@ def test_server_settings_set_dry_run_previews(cli_env, patch_client):
     assert '"dry_run": true' in result.output
 
 
+def test_app_install_requires_one_source(cli_env):
+    # Neither --server-file nor --url: usage error before any network call.
+    result = CliRunner().invoke(cli, ["app", "install", "--output", "json"])
+    assert result.exit_code == 2
+    assert "usage_error" in result.output
+
+
+def test_app_install_url_dry_run_previews(cli_env, patch_client):
+    def handler(req: httpx.Request) -> httpx.Response:
+        raise AssertionError("dry-run must not send a request")
+
+    patch_client(handler)
+    result = CliRunner().invoke(
+        cli, ["app", "install", "--url", "https://x/app.spl", "--dry-run", "--output", "json"]
+    )
+    assert result.exit_code == 0
+    assert '"dry_run": true' in result.output
+
+
+def test_deploy_client_list_renders(cli_env, patch_client):
+    patch_client(
+        lambda req: httpx.Response(
+            200,
+            json={
+                "entry": [{"name": "client1", "content": {"hostname": "fwd1"}}],
+                "paging": {"total": 1},
+            },
+        ),
+    )
+    result = CliRunner().invoke(cli, ["deploy", "client", "list", "--output", "json"])
+    assert result.exit_code == 0
+    assert '"name": "client1"' in result.output
+
+
+def test_deploy_serverclass_list_renders(cli_env, patch_client):
+    patch_client(
+        lambda req: httpx.Response(
+            200,
+            json={
+                "entry": [{"name": "sc1", "content": {"whitelist.0": "*"}}],
+                "paging": {"total": 1},
+            },
+        ),
+    )
+    result = CliRunner().invoke(cli, ["deploy", "serverclass", "list", "--output", "json"])
+    assert result.exit_code == 0
+    assert '"name": "sc1"' in result.output
+
+
+def test_deploy_reload_refuses_without_yes_noninteractive(cli_env):
+    # Must refuse before any network call, so no client patch is needed.
+    result = CliRunner().invoke(cli, ["deploy", "reload", "--output", "json"])
+    assert result.exit_code == 2
+    assert "usage_error" in result.output
+
+
+def test_deploy_reload_dry_run_previews(cli_env, patch_client):
+    def handler(req: httpx.Request) -> httpx.Response:
+        raise AssertionError("dry-run must not send a request")
+
+    patch_client(handler)
+    result = CliRunner().invoke(cli, ["deploy", "reload", "--dry-run", "--output", "json"])
+    assert result.exit_code == 0
+    assert '"dry_run": true' in result.output
+
+
+def test_deploy_serverclass_create_dry_run_previews(cli_env, patch_client):
+    def handler(req: httpx.Request) -> httpx.Response:
+        raise AssertionError("dry-run must not send a request")
+
+    patch_client(handler)
+    result = CliRunner().invoke(
+        cli,
+        ["deploy", "serverclass", "create", "foo", "--set", "x=1", "--dry-run", "--output", "json"],
+    )
+    assert result.exit_code == 0
+    assert '"dry_run": true' in result.output
+
+
 def test_saved_search_scheduled_flag_coerces_to_int(cli_env):
     # The bool Field must reach the wire as is_scheduled=0/1, not False/True.
     result = CliRunner().invoke(

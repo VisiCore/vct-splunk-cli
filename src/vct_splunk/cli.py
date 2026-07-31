@@ -6,8 +6,10 @@ import click
 
 from . import __version__
 from .commands.api import api
+from .commands.apps import app_install
 from .commands.auth import auth
 from .commands.cluster import cluster
+from .commands.deploy import deploy
 from .commands.factory import build_group
 from .commands.health import health
 from .commands.inspect import inspect
@@ -38,14 +40,20 @@ for _group in (
     cluster,
     shcluster,
     license,
+    deploy,
 ):
     cli.add_command(_group)
 
 cli.add_command(inspect)
 
 # Factory-generated CRUD resources (users, roles, ...): each spec becomes a group.
+# The 'app' group's install-from-file/URL command does not fit the CRUD shape, so
+# it is hand-written and attached to the generated group here.
 for _spec in REGISTRY:
-    cli.add_command(build_group(_spec))
+    _grp = build_group(_spec)
+    if _spec.name == "app":
+        _grp.add_command(app_install)
+    cli.add_command(_grp)
 
 
 def main() -> None:

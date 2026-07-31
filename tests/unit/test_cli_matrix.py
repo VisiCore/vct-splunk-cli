@@ -26,9 +26,26 @@ from vct_splunk.commands.context import AliasedGroup
 # Non-CRUD leaves the generic verb rules below cannot infer. Writes include
 # --dry-run; reads run for real against the mock.
 _SPECIAL: dict[tuple[str, ...], list[str]] = {
+    ("app", "install"): ["--server-file", "/tmp/app.spl", "--dry-run"],
     ("auth", "login"): ["--username", "admin"],
     ("auth", "status"): [],
     ("cluster", "status"): [],
+    ("deploy", "client", "list"): [],
+    ("deploy", "reload"): ["--dry-run"],
+    ("deploy", "serverclass", "list"): [],
+    ("deploy", "serverclass", "get"): ["class"],
+    ("deploy", "serverclass", "create"): [
+        "class",
+        "--set",
+        "whitelist.0=*",
+        "--dry-run",
+    ],
+    ("deploy", "serverclass", "update"): [
+        "class",
+        "--set",
+        "whitelist.0=*",
+        "--dry-run",
+    ],
     ("server", "info"): [],
     ("api", "get"): ["/services/server/info", "-q", "count=1"],
     ("search", "run"): ["--query", "index=_internal", "--earliest", "-1h", "--max-rows", "5"],
