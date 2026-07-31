@@ -20,6 +20,8 @@ class Case:
     path: tuple[str, ...]
     kind: Kind
     argvs: tuple[tuple[str, ...], ...]
+    live_argv: tuple[str, ...] | None = None
+    live_exit_codes: tuple[int, ...] = (0,)
 
 
 _VERB_ARGS: dict[str, tuple[str, ...]] = {
@@ -32,6 +34,14 @@ _VERB_ARGS: dict[str, tuple[str, ...]] = {
     "disable": ("example", "--dry-run"),
 }
 
+_LIVE_GET_NAMES = {
+    "app": "search",
+    "index": "_internal",
+    "role": "admin",
+    "user": "admin",
+}
+_LIVE_MISSING_NAME = "vct_ci_missing"
+
 _SPECIAL: tuple[Case, ...] = (
     Case(("api", "get"), "read", (("/services/server/info", "-q", "count=1"),)),
     Case(("app", "install"), "write", (("--server-file", "/tmp/app.spl", "--dry-run"),)),
@@ -42,7 +52,13 @@ _SPECIAL: tuple[Case, ...] = (
     Case(("deploy-client", "list"), "read", ((),)),
     Case(("deploy-server", "reload"), "write", (("--dry-run",),)),
     Case(("deploy-server", "serverclass", "list"), "read", ((),)),
-    Case(("deploy-server", "serverclass", "get"), "read", (("class",),)),
+    Case(
+        ("deploy-server", "serverclass", "get"),
+        "read",
+        (("class",),),
+        live_argv=("vct_ci_missing",),
+        live_exit_codes=(4,),
+    ),
     Case(
         ("deploy-server", "serverclass", "create"),
         "write",
@@ -53,13 +69,25 @@ _SPECIAL: tuple[Case, ...] = (
         "write",
         (("class", "--set", "whitelist.0=*", "--dry-run"),),
     ),
-    Case(("health", "check"), "read", ((),)),
+    Case(("health", "check"), "read", ((),), live_exit_codes=(0, 5)),
     Case(("hec", "global-disable"), "write", (("--dry-run",),)),
     Case(("hec", "global-enable"), "write", (("--dry-run",),)),
     Case(("hec", "rotate"), "write", (("token", "--dry-run"),)),
     Case(("inspect",), "read", ((),)),
-    Case(("kvstore", "records"), "read", (("records",),)),
-    Case(("kvstore", "get"), "read", (("records", "key"),)),
+    Case(
+        ("kvstore", "records"),
+        "read",
+        (("records",),),
+        live_argv=("vct_ci_missing", "--app", "search"),
+        live_exit_codes=(4,),
+    ),
+    Case(
+        ("kvstore", "get"),
+        "read",
+        (("records", "key"),),
+        live_argv=("vct_ci_missing", "key", "--app", "search"),
+        live_exit_codes=(4,),
+    ),
     Case(
         ("kvstore", "insert"),
         "write",
@@ -73,7 +101,13 @@ _SPECIAL: tuple[Case, ...] = (
     Case(("kvstore", "delete"), "write", (("records", "key", "--dry-run"),)),
     Case(("kvstore", "purge"), "write", (("records", "--dry-run"),)),
     Case(("license", "usage"), "read", ((),)),
-    Case(("license", "get"), "read", (("license",),)),
+    Case(
+        ("license", "get"),
+        "read",
+        (("license",),),
+        live_argv=("vct_ci_missing",),
+        live_exit_codes=(4,),
+    ),
     Case(("license", "list"), "read", ((),)),
     Case(
         ("lookup", "upload"),
@@ -86,7 +120,13 @@ _SPECIAL: tuple[Case, ...] = (
         (("nightly", "--app", "my_app", "--earliest", "-1h", "--dry-run"),),
     ),
     Case(("search", "cancel"), "write", (("sid1", "--dry-run"),)),
-    Case(("search", "get"), "read", (("sid1",),)),
+    Case(
+        ("search", "get"),
+        "read",
+        (("sid1",),),
+        live_argv=("vct_ci_missing",),
+        live_exit_codes=(4,),
+    ),
     Case(("search", "list"), "read", ((),)),
     Case(
         ("search", "run"),
@@ -108,11 +148,25 @@ def _generated_cases() -> tuple[Case, ...]:
             args = _VERB_ARGS[verb]
             if spec is SAVED_SEARCH and verb == "create":
                 args = (*args, "--search", "index=x")
+            kind: Kind = "read" if verb in {"list", "get"} else "write"
+            live_argv = None
+            live_exit_codes = (0,)
+            if verb == "list":
+                live_argv = ()
+            elif verb == "get":
+                name = _LIVE_GET_NAMES.get(spec.name, _LIVE_MISSING_NAME)
+                live_argv = (name,)
+                if spec.namespaced:
+                    live_argv = (*live_argv, "--app", "search", "--owner", "nobody")
+                if name == _LIVE_MISSING_NAME:
+                    live_exit_codes = (4,)
             cases.append(
                 Case(
                     (spec.name, verb),
-                    "read" if verb in {"list", "get"} else "write",
+                    kind,
                     (args,),
+                    live_argv=live_argv,
+                    live_exit_codes=live_exit_codes,
                 )
             )
     return tuple(cases)

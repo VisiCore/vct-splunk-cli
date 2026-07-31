@@ -66,6 +66,11 @@ testpaths = ["tests"]
 addopts = "-ra --strict-markers"
 markers = [
     "integration: end-to-end test needing a live Splunk (set SPLUNK_INTEGRATION_TEST=true)",
+    "enterprise: tests against Splunk Enterprise",
+    "cloud: tests against Splunk Cloud",
+    "acs: tests against the Admin Config Service",
+    "read: read-only tests",
+    "write: tests that mutate a disposable target",
 ]
 
 [tool.ruff]

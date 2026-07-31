@@ -10,7 +10,12 @@ from vct_splunk.core.acs import operations
 from vct_splunk.core.acs.client import AcsClient, acs_config_from_env
 from vct_splunk.core.backends import cloud_stack_from_url
 
-pytestmark = pytest.mark.integration
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.cloud,
+    pytest.mark.acs,
+    pytest.mark.read,
+]
 
 
 @pytest.fixture

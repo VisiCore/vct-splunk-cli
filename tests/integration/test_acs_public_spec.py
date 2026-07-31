@@ -9,7 +9,12 @@ import pytest
 
 from vct_splunk.core.acs.operations import LIST_ENVELOPES
 
-pytestmark = pytest.mark.integration
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.cloud,
+    pytest.mark.acs,
+    pytest.mark.read,
+]
 
 _SOURCE = "https://admin.splunk.com/service/info/specs/v2/openapi.json"
 
