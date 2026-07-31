@@ -75,7 +75,7 @@ jobs:
       VCT_SPLUNK_AUDIT: /tmp/vct-splunk-audit.log
     services:
       splunk:
-        image: splunk/splunk:latest
+        image: splunk/splunk:latest # zizmor: ignore[unpinned-images] Required current-version canary.
         env:
           SPLUNK_GENERAL_TERMS: --accept-sgt-current-at-splunk-com
           SPLUNK_START_ARGS: --accept-license
