@@ -342,6 +342,120 @@ def test_deploy_serverclass_create_dry_run_previews(cli_env, patch_client):
     assert '"dry_run": true' in result.output
 
 
+def test_hec_global_enable_refuses_without_yes_noninteractive(cli_env):
+    # Must refuse before any network call, so no client patch is needed.
+    result = CliRunner().invoke(cli, ["hec", "global-enable", "--output", "json"])
+    assert result.exit_code == 2
+    assert "usage_error" in result.output
+
+
+def test_hec_global_enable_dry_run_previews(cli_env, patch_client):
+    def handler(req: httpx.Request) -> httpx.Response:
+        raise AssertionError("dry-run must not send a request")
+
+    patch_client(handler)
+    result = CliRunner().invoke(cli, ["hec", "global-enable", "--dry-run", "--output", "json"])
+    assert result.exit_code == 0
+    assert '"dry_run": true' in result.output
+
+
+def test_hec_rotate_dry_run_previews(cli_env, patch_client):
+    def handler(req: httpx.Request) -> httpx.Response:
+        raise AssertionError("dry-run must not send a request")
+
+    patch_client(handler)
+    result = CliRunner().invoke(cli, ["hec", "rotate", "tok1", "--dry-run", "--output", "json"])
+    assert result.exit_code == 0
+    assert '"dry_run": true' in result.output
+
+
+def test_datamodel_list_renders(cli_env, patch_client):
+    patch_client(
+        lambda req: httpx.Response(
+            200,
+            json={
+                "entry": [{"name": "Authentication", "content": {}, "acl": {}}],
+                "paging": {"total": 1},
+            },
+        ),
+    )
+    result = CliRunner().invoke(cli, ["datamodel", "list", "--output", "json"])
+    assert result.exit_code == 0
+    assert '"name": "Authentication"' in result.output
+
+
+def test_tag_list_renders(cli_env, patch_client):
+    patch_client(
+        lambda req: httpx.Response(
+            200,
+            json={
+                "entry": [{"name": "important", "content": {}, "acl": {}}],
+                "paging": {"total": 1},
+            },
+        ),
+    )
+    result = CliRunner().invoke(cli, ["tag", "list", "--output", "json"])
+    assert result.exit_code == 0
+    assert '"name": "important"' in result.output
+
+
+def test_datamodel_accelerate_dry_run_previews(cli_env, patch_client):
+    def handler(req: httpx.Request) -> httpx.Response:
+        raise AssertionError("dry-run must not send a request")
+
+    patch_client(handler)
+    result = CliRunner().invoke(
+        cli,
+        [
+            "datamodel",
+            "accelerate",
+            "Authentication",
+            "--enable",
+            "--app",
+            "a",
+            "--dry-run",
+            "--output",
+            "json",
+        ],
+    )
+    assert result.exit_code == 0
+    assert '"dry_run": true' in result.output
+
+
+def test_lookup_upload_requires_app(cli_env, monkeypatch):
+    monkeypatch.delenv("SPLUNK_APP", raising=False)
+    # No --app and no SPLUNK_APP -> the namespaced write must refuse (exit 2).
+    result = CliRunner().invoke(
+        cli, ["lookup", "upload", "--server-file", "/var/tmp/t.csv", "--output", "json"]
+    )
+    assert result.exit_code == 2
+    assert "usage_error" in result.output
+
+
+def test_lookup_upload_dry_run_previews_namespace(cli_env, patch_client):
+    def handler(req: httpx.Request) -> httpx.Response:
+        raise AssertionError("dry-run must not send a request")
+
+    patch_client(handler)
+    result = CliRunner().invoke(
+        cli,
+        [
+            "lookup",
+            "upload",
+            "--server-file",
+            "/var/tmp/t.csv",
+            "--app",
+            "a",
+            "--dry-run",
+            "--output",
+            "json",
+        ],
+    )
+    assert result.exit_code == 0
+    assert '"dry_run": true' in result.output
+    assert "/servicesNS/nobody/a/data/lookup-table-files" in result.output
+
+
 def test_saved_search_scheduled_flag_coerces_to_int(cli_env):
     # The bool Field must reach the wire as is_scheduled=0/1, not False/True.
     result = CliRunner().invoke(

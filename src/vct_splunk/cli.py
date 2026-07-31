@@ -9,12 +9,15 @@ from .commands.api import api
 from .commands.apps import app_install
 from .commands.auth import auth
 from .commands.cluster import cluster
+from .commands.datamodel import datamodel_accelerate
 from .commands.deploy import deploy
 from .commands.factory import build_group
 from .commands.health import health
+from .commands.hec import hec
 from .commands.inspect import inspect
 from .commands.kvstore import kvstore
 from .commands.license import license
+from .commands.lookup import lookup
 from .commands.registry import INDEX, REGISTRY
 from .commands.saved_search import saved_search
 from .commands.search import search
@@ -41,6 +44,8 @@ for _group in (
     shcluster,
     license,
     deploy,
+    hec,
+    lookup,
 ):
     cli.add_command(_group)
 
@@ -53,6 +58,8 @@ for _spec in REGISTRY:
     _grp = build_group(_spec)
     if _spec.name == "app":
         _grp.add_command(app_install)
+    elif _spec.name == "datamodel":
+        _grp.add_command(datamodel_accelerate)
     cli.add_command(_grp)
 
 

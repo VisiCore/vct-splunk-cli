@@ -189,6 +189,21 @@ LOOKUP_DEFINITION = Spec(
     namespaced=True,
 )
 
+TAG = Spec(
+    name="tag",
+    path="saved/fvtags",
+    help="Field-value tags (settings via --set).",
+    namespaced=True,
+    verbs=("list", "get", "create", "update", "delete"),
+)
+
+DATAMODEL = Spec(
+    name="datamodel",
+    path="datamodel/model",
+    help="Data models (settings via --set). Acceleration is a separate command.",
+    namespaced=True,
+)
+
 # --- KV Store (#9) -----------------------------------------------------------
 # Only the collection schema is CRUD-shaped. Schema fields are dynamic
 # (field.<name>=<type>), so they go through --set. Data records are a document
@@ -238,6 +253,8 @@ REGISTRY: list[Spec] = [
     EVENTTYPE,
     EXTRACTION,
     LOOKUP_DEFINITION,
+    TAG,
+    DATAMODEL,
     KVSTORE_COLLECTION,
     MESSAGE,
     APP,
