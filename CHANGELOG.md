@@ -6,6 +6,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+- Add a single **Merge Gate** check that aggregates every CI job, so branch
+  protection needs exactly one required status check and adding a job later
+  never needs a protection change.
 - Add catalog-driven live coverage for all 61 Enterprise reads and 93 writes,
   including cleanup, global-state restoration, restart/reconnect, a container
   CI gate on code pull requests and `main` merges, a manual Cloud read canary,
