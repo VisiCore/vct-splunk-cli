@@ -11,6 +11,7 @@ from dataclasses import dataclass
 import pytest
 
 from cli_catalog import CATALOG, Case
+from vct_splunk.cli import cli
 from vct_splunk.commands.registry import INDEX, REGISTRY, SAVED_SEARCH
 
 pytestmark = [pytest.mark.integration, pytest.mark.enterprise, pytest.mark.write]
@@ -337,20 +338,19 @@ def _special(case: Case, harness) -> None:
         harness.write(*path, "--set", f"serverName={_name('server')}")
     elif path == ("server", "restart"):
         harness.write(*path)
+        # A fast restart can complete inside one poll window, so a missed
+        # disconnect is not a failure; only never reconnecting is.
+        deadline = time.monotonic() + 180
+        grace = time.monotonic() + 10
         saw_disconnect = False
-        for _ in range(90):
+        while time.monotonic() < deadline:
             time.sleep(2)
-            result = harness.runner.invoke(
-                __import__("vct_splunk.cli", fromlist=["cli"]).cli,
-                ["server", "info", "--output", "json"],
-            )
+            result = harness.runner.invoke(cli, ["server", "info", "--output", "json"])
             if result.exit_code != 0:
                 saw_disconnect = True
-            elif saw_disconnect:
+            elif saw_disconnect or time.monotonic() >= grace:
                 return
-        if not saw_disconnect:
-            pytest.fail("splunkd did not disconnect after restart", pytrace=False)
-        pytest.fail("splunkd did not reconnect within 180 seconds", pytrace=False)
+        pytest.fail("splunkd did not reconnect within 180 seconds of restart", pytrace=False)
     else:
         raise AssertionError(f"missing live write handler for {' '.join(path)}")
 

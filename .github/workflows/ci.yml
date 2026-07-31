@@ -54,19 +54,41 @@ jobs:
       gate_python_version: "3.14"
       runner_label: ubuntu-latest
 
+  # Cost gate for the Enterprise container job: only PRs that touch code or
+  # this workflow pay for a live Splunk boot. Docs-only PRs skip it, and the
+  # skipped required check still satisfies branch protection.
+  changes:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        id: filter
+        with:
+          filters: |
+            code:
+              - "src/**"
+              - "tests/**"
+              - "pyproject.toml"
+              - ".github/workflows/ci.yml"
+
   enterprise:
     name: Enterprise / Full CLI
-    needs: python
+    needs: [python, changes]
     if: >-
       ${{
-        always() && !cancelled() && needs.python.result == 'success' &&
-        ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-          github.event_name == 'workflow_dispatch')
+        !cancelled() && needs.python.result == 'success' &&
+        (github.event_name != 'pull_request' ||
+          needs.changes.outputs.code == 'true')
       }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
       SPLUNK_INTEGRATION_TEST: "true"
+      SPLUNK_WRITE_TEST: "true"
       SPLUNK_URL: https://localhost:8089
       SPLUNK_USERNAME: admin
       SPLUNK_PASSWORD: Ch4ng3d-CI-Pass!
@@ -82,6 +104,14 @@ jobs:
           SPLUNK_PASSWORD: Ch4ng3d-CI-Pass!
         ports:
           - 8089:8089
+        # Splunk 10 first boot takes several minutes; GitHub waits for this
+        # health check before running any step against the container.
+        options: >-
+          --health-cmd "curl -ksf -u admin:Ch4ng3d-CI-Pass! https://localhost:8089/services/server/info"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 60
+          --health-start-period 120s
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -89,6 +119,7 @@ jobs:
         uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
         with:
           python-version: "3.14"
+          enable-cache: true
 
       - name: Install project
         run: |
@@ -120,9 +151,7 @@ jobs:
           -m "integration and enterprise and read"
           -vv --color=yes --tb=short --junitxml=enterprise-read.xml
 
-      - name: Enterprise writes (91 commands)
-        env:
-          SPLUNK_WRITE_TEST: "true"
+      - name: Enterprise writes (92 commands)
         run: >-
           .venv/bin/pytest tests/integration/enterprise/write
           -m "integration and enterprise and write"
@@ -130,8 +159,6 @@ jobs:
           -vv --color=yes --tb=short --junitxml=enterprise-write.xml
 
       - name: Enterprise restart and reconnect (1 command)
-        env:
-          SPLUNK_WRITE_TEST: "true"
         run: >-
           .venv/bin/pytest tests/integration/enterprise/write/test_write_catalog.py
           -m "integration and enterprise and write"
@@ -139,8 +166,6 @@ jobs:
           -vv --color=yes --tb=short --junitxml=enterprise-restart.xml
 
       - name: Enterprise cleanup verification
-        env:
-          SPLUNK_WRITE_TEST: "true"
         run: >-
           .venv/bin/pytest tests/integration/enterprise/write/test_cleanup.py
           -m "integration and enterprise and read"

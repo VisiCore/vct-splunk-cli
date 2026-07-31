@@ -14,10 +14,7 @@ _WRITE_AREAS = {case.path[0] for case in CATALOG if case.kind == "write"}
 _CLEANUP_LISTS = tuple(
     case
     for case in CATALOG
-    if case.kind == "read"
-    and case.path[-1] == "list"
-    and case.path[0] in _WRITE_AREAS
-    and case.path[:2] != ("deploy-server", "serverclass")
+    if case.kind == "read" and case.path[-1] == "list" and case.path[0] in _WRITE_AREAS
 )
 
 

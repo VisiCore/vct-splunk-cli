@@ -202,10 +202,12 @@ python -m pytest -m "integration and cloud and read" -vv --tb=short `
   Tee-Object -FilePath cloud-read.log
 ```
 
-On every merge to `main`, CI first runs the Python 3.10–3.14 unit matrix, then
-boots `splunk/splunk:latest`, publishes a named 61-read test summary, applies
-all 92 write lifecycles with reverse cleanup, restarts splunkd last, and proves
-the CLI reconnects. Pull requests run the credential-free gate on Python 3.14.
+Every code pull request and every merge to `main` runs the full Enterprise
+gate: the credential-free unit suite (Python 3.14 on PRs, the 3.10–3.14 matrix
+on `main`), then a `splunk/splunk:latest` container that publishes a named
+61-read test summary, applies all 93 write lifecycles with reverse cleanup,
+restarts splunkd last, and proves the CLI reconnects. Docs-only pull requests
+skip the container job.
 The manual **Splunk Cloud Read Canary** workflow uses Python and outbound HTTPS
 only; the scheduled **ACS Public Contract** workflow detects upstream OpenAPI
 drift without credentials.
