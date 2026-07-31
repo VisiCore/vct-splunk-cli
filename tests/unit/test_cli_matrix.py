@@ -58,9 +58,9 @@ def test_catalog_is_exactly_complete_and_unique():
     assert duplicates == [], f"duplicate catalog commands: {duplicates}"
     assert sorted(" ".join(path) for path in live - catalogued) == [], "missing catalog commands"
     assert sorted(" ".join(path) for path in catalogued - live) == [], "stale catalog commands"
-    assert len(CATALOG) == 153
+    assert len(CATALOG) == 154
     assert sum(case.kind == "read" for case in CATALOG) == 61
-    assert sum(case.kind == "write" for case in CATALOG) == 92
+    assert sum(case.kind == "write" for case in CATALOG) == 93
     assert all(1 <= len(case.argvs) <= 2 for case in CATALOG)
 
 

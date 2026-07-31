@@ -50,7 +50,9 @@ def set_settings(client: SplunkClient, settings: dict[str, Any]) -> dict[str, An
     try:
         result = client.write("POST", "/services/server/settings/settings", settings)
     except APIError as exc:
-        raise APIError(exc.message, details=_redact_settings(exc.details)) from exc
+        raise APIError(
+            exc.message, status=exc.status, details=_redact_settings(exc.details)
+        ) from exc
     if result.get("dry_run"):
         return _redact_settings(result)
     entries = result.get("entry") or []

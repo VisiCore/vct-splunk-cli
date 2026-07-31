@@ -248,7 +248,9 @@ def _handle(resp: httpx.Response, method: str, url: str) -> Any:
         raise NotFoundError(f"Not found: {url}")
     if resp.status_code >= 400:
         raise APIError(
-            f"Splunk returned {resp.status_code} for {method} {url}", details=_safe_body(resp)
+            f"Splunk returned {resp.status_code} for {method} {url}",
+            status=resp.status_code,
+            details=_safe_body(resp),
         )
     if not resp.content:
         return {}

@@ -72,6 +72,19 @@ def test_cluster_status_normalizes_standalone(cli_env, patch_client, status):
     assert json.loads(result.output)["data"] == {"configured": False}
 
 
+def test_cluster_status_reraises_non_503_errors(cli_env, patch_client):
+    """A "not enabled" phrase in a non-503 body is not proof of a standalone node."""
+    patch_client(
+        lambda req: httpx.Response(
+            500,
+            json={"messages": [{"type": "ERROR", "text": "Cluster manager is not enabled"}]},
+        )
+    )
+    result = CliRunner().invoke(cli, ["cluster", "status", "--output", "json"])
+
+    assert result.exit_code == 1
+
+
 def test_shcluster_status_uses_status_endpoint(cli_env, patch_client):
     seen: list[str] = []
 
