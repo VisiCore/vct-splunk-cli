@@ -12,6 +12,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Move CI off actions that still run on the deprecated Node 20 runtime, and
   replace the third-party paths-filter action with a small `git diff` script
   covered by a unit test.
+- Install and test with only the standard library's `venv` and `pip`. Setup no
+  longer needs a separate package manager, and the documented commands are the
+  same ones CI runs on macOS, Linux, and Windows.
 - Add catalog-driven live coverage for all 61 Enterprise reads and 93 writes,
   including cleanup, global-state restoration, restart/reconnect, a container
   CI gate on code pull requests and `main` merges, a manual Cloud read canary,

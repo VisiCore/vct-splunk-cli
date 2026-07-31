@@ -11,10 +11,13 @@ own credentials. It does not bundle or proxy any Splunk-distributed app.
 ## Quick start
 
 ```bash
-uv venv
-uv pip install -e ".[dev]"   # editable install with dev tools
-splunk --help                # or: python -m vct_splunk --help
+python3 -m venv .venv                            # `venv` is in the standard library
+.venv/bin/python -m pip install -e ".[dev]"      # editable install with dev tools
+.venv/bin/splunk --help                          # or: .venv/bin/python -m vct_splunk --help
 ```
+
+Setup uses only `venv` and `pip`, which ship with Python. There is no separate
+package manager to install; on Windows the paths are `.venv\Scripts\` instead.
 
 Credentials come from the environment or a selected config profile; secret
 credentials are never accepted directly as CLI flags:
@@ -104,8 +107,7 @@ Python and outbound HTTPS.
 ## Checks before a PR
 
 Run the gate through the project venv (`.venv/bin/...`) — the same binaries CI
-calls — or via pre-commit. Do **not** route these through `uv run`: it executes
-arbitrary code and is deliberately permission-gated, so it prompts on every call.
+calls — or via pre-commit.
 
 ```bash
 .venv/bin/ruff check .      # lint (never silence a rule — fix it)
@@ -114,8 +116,8 @@ arbitrary code and is deliberately permission-gated, so it prompts on every call
 .venv/bin/pytest            # tests
 ```
 
-Or let pre-commit run the whole hook set (installed via `pre-commit install
---install-hooks` after `uv pip install -e ".[dev]"`):
+Or let pre-commit run the whole hook set (installed via `.venv/bin/pre-commit
+install --install-hooks` after the editable install above):
 
 ```bash
 .venv/bin/pre-commit run --all-files                      # commit-stage gate
