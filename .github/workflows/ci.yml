@@ -10,11 +10,8 @@ permissions:
   contents: read
 
 jobs:
-  # Lint / format / type / test via the org-wide reusable gate. Every `run:`
-  # step and the zizmor policy live ONCE in dryvist/.github — this repo carries
-  # neither. `python_ci` runs _python-ci.yml: `uv run --extra dev pre-commit run
-  # --all-files` (ruff + ruff-format + pyright + hygiene + markdownlint) +
-  # central zizmor + pytest across the matrix. Gated by the `python` filter.
+  # Run the shared non-Python gate first. The Python job below depends on this
+  # result, so tests do not start when an earlier CI check has failed.
   gate:
     permissions:
       contents: read
@@ -22,9 +19,7 @@ jobs:
       actions: write # required: _ci-gate.yml's queue watchdog cancels stuck jobs
     uses: dryvist/.github/.github/workflows/_ci-gate.yml@main
     with:
-      python_ci: true
-      # This repo narrows to min + latest; the org default is all non-EOL.
-      python_ci_versions: '["3.10", "3.14"]'
+      python_ci: false
       filters: |
         python:
           - '**/*.py'
@@ -33,6 +28,27 @@ jobs:
           - '.pre-commit-config.yaml'
           - '.markdownlint-cli2.yaml'
           - '.github/workflows/**'
+
+  # Run only the latest supported Python on PRs. A push to main (which occurs
+  # after a merge) runs the supported min/latest matrix. This is deliberately
+  # downstream of the shared non-Python gate above.
+  python:
+    needs: gate
+    if: >-
+      ${{
+        needs.gate.result == 'success' &&
+        (github.event_name == 'pull_request' || github.event_name == 'push')
+      }}
+    uses: dryvist/.github/.github/workflows/_python-ci.yml@main
+    with:
+      python_versions: >-
+        ${{
+          github.event_name == 'pull_request' &&
+          '["3.14"]' ||
+          '["3.10", "3.14"]'
+        }}
+      gate_python_version: "3.14"
+      runner_label: ubuntu-latest
 
   # Real create -> verify -> cleanup against a Dockerized Splunk Enterprise 10.x.
   # COST CONTROL: this is expensive (boots a Splunk container, several minutes), so
