@@ -1,7 +1,7 @@
 """`splunk auth` commands: session login and auth status. Shell layer (imports Click).
 
 ``auth login`` exchanges a username/password for a Splunk session key and prints
-it (a secret hint goes to stderr; nothing is written to disk). ``auth status``
+it as command data. ``auth status``
 reports the resolved target and which auth scheme is active, without revealing
 any secret value.
 """
@@ -18,14 +18,6 @@ from ..core.errors import UsageError
 from ..core.profiles import load_profile
 from . import output as out
 from .context import command
-
-
-def _resolve_url(base_url: str | None, profile: str | None) -> str:
-    """Resolve the management URL by flag > env > profile (no credential needed)."""
-    url = base_url or os.environ.get("SPLUNK_URL") or load_profile(profile).get("url")
-    if not url:
-        raise UsageError("No Splunk URL. Set SPLUNK_URL or pass --base-url.")
-    return url.rstrip("/")
 
 
 def _verify() -> bool | str:
@@ -74,10 +66,10 @@ def login(ctx, username: str | None) -> None:
     flag. The session key is printed as data; export it as ``SPLUNK_SESSION_KEY``
     to use it (this command does not persist it).
     """
-    url = _resolve_url(ctx.base_url, ctx.profile)
+    url = ctx.base_url
+    if not url:
+        raise UsageError("No Splunk URL. Set SPLUNK_URL, select a profile, or pass --base-url.")
     key = core.login(url, _resolve_username(username), _resolve_password(), verify=_verify())
-    # The key itself is data on stdout; the usage hint is a diagnostic on stderr.
-    click.echo(f"export SPLUNK_SESSION_KEY={key}", err=True)
     out.emit({"session_key": key}, ctx.output_mode, ctx.meta())
 
 

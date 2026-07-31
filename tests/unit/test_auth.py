@@ -62,6 +62,16 @@ def test_login_401_raises_auth():
         )
 
 
+def test_login_403_raises_auth():
+    with pytest.raises(AuthError):
+        core.login(
+            "https://splunk.test:8089",
+            "admin",
+            "forbidden",
+            transport=httpx.MockTransport(lambda req: httpx.Response(403, json={})),
+        )
+
+
 def test_login_missing_session_key_raises_auth():
     with pytest.raises(AuthError):
         core.login(
@@ -94,6 +104,7 @@ def test_auth_login_echoes_session_key(monkeypatch):
     result = CliRunner().invoke(cli, ["auth", "login", "--output", "json"])
     assert result.exit_code == 0
     assert '"session_key": "SK-FROM-LOGIN"' in result.output
+    assert "export SPLUNK_SESSION_KEY" not in result.stderr
 
 
 def test_auth_login_refuses_without_password_noninteractive(monkeypatch):

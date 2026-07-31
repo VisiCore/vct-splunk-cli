@@ -1,19 +1,27 @@
-"""Backend capability map and selection. Click-free core.
+"""Backend deduction + capability report. Click-free core (pure data).
 
-The CLI targets two backends: Splunk Enterprise (splunkd REST, the default and
-the certified path) and Splunk Cloud (ACS, read-only and not yet certified). This
-module reports which resource classes each backend supports so a caller can ask
-"what can I do here?" without trial and error -- unsupported operations are named
-explicitly rather than failing through to an unofficial endpoint.
+The CLI targets two backends transparently: Splunk Enterprise (splunkd REST) and
+Splunk Cloud (ACS adminconfig/v2). The backend is **deduced from SPLUNK_URL**,
+never chosen by the user -- a host containing ``splunkcloud`` is Splunk Cloud
+(-> ACS), anything else is Enterprise (-> splunkd REST). The user sees one flat
+command surface; this module just answers "which backend is this URL, and what
+can it do?" without importing Click or any client.
 """
 
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import Any, Literal
+from urllib.parse import urlsplit
 
-#: What each backend supports. Values are either True (full support) or a short
-#: string describing the limit (read-only, not supported, and why).
+Backend = Literal["enterprise", "cloud"]
+
+_CLOUD_HOST_MARKER = "splunkcloud"
+
+#: What each backend supports, for the `splunk inspect` report. Values are True
+#: (full support) or a short string naming the limit. Cloud is read-only this
+#: release. This is informational only -- routing is decided per command, and an
+#: unavailable operation stops with a typed error, never a silent fallthrough.
 CAPABILITIES: dict[str, dict[str, Any]] = {
     "enterprise": {
         "search": True,
@@ -30,26 +38,54 @@ CAPABILITIES: dict[str, dict[str, Any]] = {
         "indexes": "read-only (ACS)",
         "hec_tokens": "read-only (ACS)",
         "roles": "read-only (ACS)",
-        "search": "not supported via ACS (run against the search head directly)",
-        "knowledge_objects": "not supported via ACS",
+        "search": "via the search head REST (your SPLUNK_URL), where the stack permits",
         "writes": "not supported this release (read-only)",
     },
 }
 
-_DEFAULT = "enterprise"
+
+def _host(url: str | None) -> str:
+    """Return the lowercase hostname of *url* (handles a missing scheme), or ''."""
+    if not url:
+        return ""
+    return (urlsplit(url if "://" in url else f"//{url}").hostname or "").lower()
 
 
-def active_backend(backend: str | None = None) -> str:
-    """Resolve the active backend: the argument, else ``$SPLUNK_BACKEND``, else enterprise."""
-    chosen = (backend or os.environ.get("SPLUNK_BACKEND") or _DEFAULT).strip().lower()
-    return chosen if chosen in CAPABILITIES else _DEFAULT
+def deduce_backend(url: str | None = None) -> Backend:
+    """Deduce the backend from a Splunk URL (``$SPLUNK_URL`` when not passed).
+
+    A host containing ``splunkcloud`` (e.g. ``acme.splunkcloud.com``) is Splunk
+    Cloud -> ACS; anything else -- including an empty or unparseable URL -- is
+    Enterprise -> splunkd REST (the certified default).
+    """
+    raw = url if url is not None else os.environ.get("SPLUNK_URL")
+    return "cloud" if _CLOUD_HOST_MARKER in _host(raw) else "enterprise"
 
 
-def inspect_backend(backend: str | None = None) -> dict[str, Any]:
-    """Report the active backend and the operations it supports."""
-    resolved = active_backend(backend)
-    report: dict[str, Any] = {"backend": resolved, "capabilities": CAPABILITIES[resolved]}
-    if resolved == "cloud":
+def cloud_stack_from_url(url: str | None = None) -> str | None:
+    """Derive the ACS stack from a cloud host: ``<stack>.splunkcloud.com`` -> ``<stack>``.
+
+    Returns None for a non-cloud host. ``SPLUNK_ACS_STACK`` (if set) overrides this
+    in :func:`vct_splunk.core.acs.client.acs_config_from_env`, not here.
+    """
+    raw = url if url is not None else os.environ.get("SPLUNK_URL")
+    host = _host(raw)
+    if _CLOUD_HOST_MARKER not in host:
+        return None
+    return host.split(".", 1)[0] or None
+
+
+def inspect_report(url: str | None = None) -> dict[str, Any]:
+    """Report the deduced backend and what it supports -- the ``splunk inspect`` body.
+
+    Static and offline: it reads no live instance. The backend is deduced from the
+    URL, never chosen, so a caller who explicitly asks can see which backend a
+    given ``SPLUNK_URL`` resolves to and which operations exist there.
+    """
+    backend = deduce_backend(url)
+    report: dict[str, Any] = {"backend": backend, "capabilities": CAPABILITIES[backend]}
+    if backend == "cloud":
+        report["stack"] = cloud_stack_from_url(url)
         report["note"] = (
             "Cloud/ACS coverage is read-only and not yet certified against a live stack; "
             "confidence is capped until a real canary exists."

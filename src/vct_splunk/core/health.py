@@ -9,6 +9,7 @@ as "healthy":
 
 from __future__ import annotations
 
+import math
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -111,26 +112,38 @@ def _resource_usage(client: SplunkClient) -> list[Verdict]:
     except SplunkError as exc:
         return [Verdict("resource_usage", "unknown", "error", "fail", exc.message)]
 
-    cpu_pct = _to_float(content.get("cpu_system_pct")) + _to_float(content.get("cpu_user_pct"))
+    cpu_system = _to_float(content.get("cpu_system_pct"))
+    cpu_user = _to_float(content.get("cpu_user_pct"))
     load = _to_float(content.get("normalized_load_avg_1min"))
-    cpu = Verdict(
-        "resource_cpu",
-        "applicable",
-        "completed",
-        "warn" if cpu_pct > _CPU_WARN_PCT else "pass",
-        f"cpu={cpu_pct:.1f}% (warn>{_CPU_WARN_PCT:g}%), load_1min={load:.2f}",
-    )
+    if cpu_system is None or cpu_user is None:
+        cpu = _unknown("resource_cpu", "missing or malformed CPU usage data")
+    else:
+        cpu_pct = cpu_system + cpu_user
+        load_evidence = f", load_1min={load:.2f}" if load is not None else ""
+        cpu = Verdict(
+            "resource_cpu",
+            "applicable",
+            "completed",
+            "warn" if cpu_pct > _CPU_WARN_PCT else "pass",
+            f"cpu={cpu_pct:.1f}% (warn>{_CPU_WARN_PCT:g}%){load_evidence}",
+        )
 
     mem_total = _to_float(content.get("mem"))
     mem_used = _to_float(content.get("mem_used"))
-    mem_pct = (mem_used / mem_total * 100.0) if mem_total > 0 else 0.0
-    mem = Verdict(
-        "resource_memory",
-        "applicable",
-        "completed",
-        "warn" if mem_pct > _MEM_WARN_PCT else "pass",
-        f"mem={mem_pct:.1f}% used ({mem_used:.0f}/{mem_total:.0f} MB, warn>{_MEM_WARN_PCT:g}%)",
-    )
+    if mem_total is None or mem_used is None or mem_total <= 0:
+        mem = _unknown("resource_memory", "missing, malformed, or zero-total memory data")
+    else:
+        mem_pct = mem_used / mem_total * 100.0
+        mem = Verdict(
+            "resource_memory",
+            "applicable",
+            "completed",
+            "warn" if mem_pct > _MEM_WARN_PCT else "pass",
+            (
+                f"mem={mem_pct:.1f}% used "
+                f"({mem_used:.0f}/{mem_total:.0f} MB, warn>{_MEM_WARN_PCT:g}%)"
+            ),
+        )
     return [cpu, mem]
 
 
@@ -146,13 +159,24 @@ def _disk_space(client: SplunkClient) -> list[Verdict]:
     except SplunkError as exc:
         return [Verdict("disk_space", "unknown", "error", "fail", exc.message)]
 
+    if not entries:
+        return [_unknown("disk_space", "partition endpoint returned no data")]
+
     out: list[Verdict] = []
     for entry in entries:
         content = (entry or {}).get("content", {})
         mount = content.get("mount_point") or (entry or {}).get("name") or "?"
         capacity = _to_float(content.get("capacity"))
         free = _to_float(content.get("free"))
-        free_pct = (free / capacity * 100.0) if capacity > 0 else 0.0
+        if capacity is None or free is None or capacity <= 0:
+            out.append(
+                _unknown(
+                    f"disk:{mount}",
+                    "missing, malformed, or zero-capacity partition data",
+                )
+            )
+            continue
+        free_pct = free / capacity * 100.0
         evidence = (
             f"free={free_pct:.1f}% ({free:.0f}/{capacity:.0f} MB, warn<{_DISK_WARN_FREE_PCT:g}%)"
         )
@@ -189,7 +213,12 @@ def _internal_errors(client: SplunkClient) -> list[Verdict]:
         return [Verdict("internal_errors", "unknown", "error", "fail", exc.message)]
 
     results = body.get("results") or []
-    count = int(_to_float(results[0].get("error_count"))) if results else 0
+    if not results or not isinstance(results[0], dict):
+        return [_unknown("internal_errors", "internal-error search returned no data")]
+    count_value = _to_float(results[0].get("error_count"))
+    if count_value is None or count_value < 0:
+        return [_unknown("internal_errors", "internal-error count is missing or malformed")]
+    count = int(count_value)
     return [
         Verdict(
             "internal_errors",
@@ -201,13 +230,20 @@ def _internal_errors(client: SplunkClient) -> list[Verdict]:
     ]
 
 
-def _to_float(value: Any) -> float:
-    """Coerce a Splunk field to float, treating missing/garbage as 0.0.
+def _unknown(check: str, evidence: str) -> Verdict:
+    """Return a failed verdict for data whose health cannot be determined."""
+    return Verdict(check, "unknown", "error", "fail", evidence)
+
+
+def _to_float(value: Any) -> float | None:
+    """Coerce a Splunk numeric field, preserving missing or malformed input.
 
     Splunk returns numeric introspection fields as JSON strings (e.g. ``"42.5"``),
     so every threshold comparison routes through this instead of assuming a type.
+    ``None`` distinguishes unknown data from a valid numeric zero.
     """
     try:
-        return float(value)
+        number = float(value)
     except (TypeError, ValueError):
-        return 0.0
+        return None
+    return number if math.isfinite(number) else None

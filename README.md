@@ -3,7 +3,22 @@
 A small, scriptable CLI to read, search, health-check, and safely administer
 **Splunk Enterprise** over its documented REST API — built for AI CLI agents and humans alike.
 
-[![License](https://img.shields.io/badge/license-see%20LICENSE-blue.svg)](./LICENSE)
+[![CI](https://github.com/VisiCore/vct-splunk-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/VisiCore/vct-splunk-cli/actions/workflows/ci.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
+[![Python](https://img.shields.io/badge/python-3.10%E2%80%933.14-blue.svg)](https://www.python.org/)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![Checked with pyright](https://microsoft.github.io/pyright/img/pyright_badge.svg)](https://microsoft.github.io/pyright/)
+[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
+
+## What is this?
+
+Splunk is a platform that collects and searches machine data (logs, metrics,
+events). Administering it usually means clicking through its web UI or calling
+its REST API by hand. This tool wraps that API in one predictable command,
+`splunk`, so a person — or an AI agent — can inspect a Splunk server, run
+searches, and make carefully guarded changes from a terminal or a script. Reads
+are always safe; anything that changes the server previews first, asks before
+acting, and leaves an audit trail.
 
 ## Installation
 
@@ -24,6 +39,8 @@ Authenticate with environment variables (the token is never passed as a flag):
 export SPLUNK_URL="https://your-search-head:8089"
 export SPLUNK_TOKEN="<a Splunk authentication token>"   # a JWT; the primary path
 # optional: a Splunk session key is accepted instead, as SPLUNK_SESSION_KEY
+# fallback: SPLUNK_USERNAME + SPLUNK_PASSWORD log in for a session key
+#           (discouraged — prefer a token; used by CI against Docker Splunk)
 # optional:
 export SPLUNK_CA_BUNDLE="/path/to/ca.pem"   # custom CA for on-prem
 export SPLUNK_VERIFY="true"                  # TLS verification (default true)
@@ -52,7 +69,7 @@ splunk search get <sid>                         # one job by SID
 splunk search cancel <sid>                      # cancel a job (gated write)
 splunk saved-search list --app my_app           # saved searches in an app
 splunk saved-search create nightly --search 'index=main | stats count' --app my_app --cron '0 2 * * *'
-splunk health check                             # native health; exits non-zero if warn/fail
+splunk health check                             # native health; exits 5 if warn/fail
 splunk index create payments --max-gb 50 --frozen-secs 7776000   # gated write
 ```
 
@@ -84,8 +101,8 @@ never created somewhere you did not intend.
 
 ### Writes are gated
 
-Writes (`index create`, `saved-search create`/`update`/`delete`, `search cancel`)
-are safe by default:
+Every write — the index lifecycle, `saved-search create`/`update`/`delete`,
+`search cancel`, and all generated-group mutations — is safe by default:
 
 ```bash
 splunk index create payments --dry-run         # preview the request; sends nothing
@@ -94,8 +111,9 @@ splunk index create payments --yes              # --yes is required when non-int
 ```
 
 A non-interactive write without `--yes` fails fast (exit 2) rather than hanging.
-Each applied write is appended to a local audit log (`$VCT_SPLUNK_AUDIT`, else
-`~/.local/state/vct-splunk/audit.log`).
+Each applied write is appended to a local audit log: `$VCT_SPLUNK_AUDIT` if
+set, else `$XDG_STATE_HOME/vct-splunk/audit.log`, else
+`~/.local/state/vct-splunk/audit.log`.
 
 ### Exit codes
 
@@ -106,7 +124,7 @@ Each applied write is appended to a local audit log (`$VCT_SPLUNK_AUDIT`, else
 | 2 | usage or config error (e.g. write refused without `--yes`) |
 | 3 | authentication error (401/403) |
 | 4 | not found (404) |
-| non-zero | `health check` when any finding is `warn`/`fail` |
+| 5 | `health check` succeeded but some finding is `warn`/`fail` |
 
 ### Contract stability
 
@@ -121,10 +139,14 @@ text is treated as data only and never drives a write.
 The primary, certified target is **Splunk Enterprise on-prem**, using your own credentials
 against the documented REST API. It does not use, bundle, or proxy any Splunk-distributed app.
 
-A minimal, **read-only Splunk Cloud (ACS)** slice is included: `splunk cloud indexes` /
-`hec-tokens` / `roles` (set `SPLUNK_ACS_STACK` / `SPLUNK_ACS_TOKEN`), and `splunk inspect` reports
-which operations each backend supports. Cloud coverage is not yet certified against a live stack,
-so confidence there is capped. An MCP wrapper is a planned follow-up.
+**Splunk Cloud is supported transparently.** When `SPLUNK_URL` is a
+`*.splunkcloud.com` host, the CLI deduces the Cloud backend and the *same flat
+commands* read via the Cloud ACS API instead of splunkd — you never pick a
+backend. ACS reads need a `SPLUNK_ACS_TOKEN` (the stack is derived from the URL).
+Cloud coverage is **read-only** and not yet certified against a live stack, so an
+operation it can't serve stops with a clean `unsupported_backend` error (exit 4)
+rather than guessing. `splunk inspect` reports the deduced backend and what it
+supports for anyone who wants to know. An MCP wrapper is a planned follow-up.
 
 ## Testing
 

@@ -42,9 +42,11 @@ This is the 0.2.0 development line (version bumped from 0.0.1).
   and require `--yes` when run non-interactively (#10).
 - An explicit additive-only output-contract statement plus a contract test pinning
   the JSON envelopes, the documented exit codes, and prompt-injection safety (#16).
-- A minimal, read-only Splunk Cloud (ACS) slice: `cloud indexes` / `hec-tokens` /
-  `roles`, plus `inspect` reporting each backend's supported operations. Cloud
-  coverage is not yet certified (no live canary); confidence is capped (#27).
+- A minimal, read-only Splunk Cloud (ACS) slice. The backend is deduced from
+  `SPLUNK_URL` (no flag): on a `*.splunkcloud.com` URL, `index list`,
+  `role list`, and `hec-token list` route through ACS and writes are refused;
+  `splunk inspect` reports the deduced backend's supported operations offline.
+  Cloud coverage is not yet certified (no live canary); confidence is capped (#27).
 - A Dockerized `splunk/splunk` CI integration job (current plus an older release)
   running real create -> verify -> cleanup, with integration coverage for the
   namespaced saved-search and factory user lifecycles (#14).
@@ -64,6 +66,20 @@ This is the 0.2.0 development line (version bumped from 0.0.1).
 
 ### Changed
 
+- `index` and `saved-search` CRUD now ride the same declarative engine as every
+  other resource group (specs in the registry), instead of hand-written
+  near-duplicates of it; only `saved-search run` (dispatch) stays hand-written.
+  Flags, aliases, request payloads, and output keys are unchanged, and both
+  groups gain the generic `--set KEY=VALUE` escape hatch. Namespaced
+  factory writes now record the resolved app/owner in the audit log and name
+  the app in the confirmation prompt.
+- `health check` now exits **5** when the check succeeded but a finding is
+  warn/fail (it previously exited 1, which collided with "API/transport
+  error"). Exit 5 is a new dedicated code; `health check` only ever promised
+  "non-zero", so scripts keying on that keep working.
+- Factory-generated commands (`user`, `role`, `macro`, the inputs/outputs, …)
+  now carry help text matching the hand-written commands' style.
+- `api get --query` advertises `KEY=VALUE` (was `K=V`), matching `--set`.
 - Factory resource specs are now thin: each one carries just its REST path, so
   you set fields with the generic `--set KEY=VALUE` and Splunk checks them on the
   server. This drops the hand-kept field lists that used to copy Splunk's spec
@@ -71,6 +87,18 @@ This is the 0.2.0 development line (version bumped from 0.0.1).
 
 ### Fixed
 
+- `saved-search run` now dispatches to a concrete namespace (explicit `--app`,
+  owner defaulting to `nobody`). It previously used the read-style `-` wildcard
+  owner, which Splunk rejects with a 400 ("Cannot edit/create a saved search
+  for wildcarded users or applications") — found in a live end-to-end run
+  against Splunk 10.2.
+- `.env.example` no longer documents a `SPLUNK_BACKEND` variable (never read;
+  the backend is deduced from `SPLUNK_URL`) or a `splunk cloud …` command (does
+  not exist), and now documents the `SPLUNK_USERNAME`/`SPLUNK_PASSWORD` login
+  fallback and `SPLUNK_USER_PASSWORD`.
+- `saved-search run --dry-run` now previews the exact request body, including
+  `dispatch.earliest_time` / `dispatch.latest_time` — the preview and the real
+  request are built by the same function, so they can no longer disagree.
 - `server info` now exits with a clear error (exit 2) when `SPLUNK_URL` points at a
   non-REST endpoint (for example the web UI), instead of returning all-null fields
   with exit 0 (#18).
