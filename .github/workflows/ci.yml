@@ -201,3 +201,27 @@ jobs:
             artifacts/
             enterprise-*.xml
           if-no-files-found: ignore
+
+  # ============================================================================
+  # MERGE GATE — the only check branch protection requires.
+  # `name:` MUST stay "Merge Gate": required_status_checks matches the context
+  # string exactly, and this is the org-wide convention (dryvist/.github
+  # `_ci-gate.yml`). Because every other job feeds this one, adding a job later
+  # never needs a branch-protection edit.
+  # ============================================================================
+  merge-gate:
+    name: Merge Gate
+    needs: [dependency-review, workflow-security, python, changes, enterprise]
+    if: ${{ always() && !cancelled() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Aggregate results
+        uses: re-actors/alls-green@05ac9388f0aebcb5727afa17fcccfecd6f8ec5fe # release/v1
+        with:
+          # These jobs are conditional (pull-request-only, or paths-filtered), so
+          # a skip is a legitimate outcome and must not fail the gate. `python`
+          # is deliberately absent: it runs on every event and must succeed.
+          allowed-skips: dependency-review, workflow-security, changes, enterprise
+          jobs: ${{ toJSON(needs) }}
