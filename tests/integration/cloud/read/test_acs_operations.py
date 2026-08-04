@@ -1,8 +1,12 @@
-"""Credential-gated read-only ACS canary."""
+"""Read-only ACS operations against a live Cloud stack, below the CLI layer.
+
+The catalog suite next door drives the same reads through the public CLI. This
+module exercises the ACS client and operations directly, so a shape change in
+the upstream API surfaces here rather than only as a CLI symptom. Credentials
+are gated once, in this package's conftest.
+"""
 
 from __future__ import annotations
-
-import os
 
 import pytest
 
@@ -20,8 +24,7 @@ pytestmark = [
 
 @pytest.fixture
 def acs_client():
-    if os.environ.get("SPLUNK_ACS_LIVE_TEST") != "true":
-        pytest.skip("set SPLUNK_ACS_LIVE_TEST=true with ACS credentials")
+    """Open an ACS client from the environment for one test."""
     with AcsClient(acs_config_from_env(cloud_stack_from_url())) as client:
         yield client
 
