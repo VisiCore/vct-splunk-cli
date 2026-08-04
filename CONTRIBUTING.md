@@ -5,10 +5,13 @@ checks every change must pass, and how review is assigned.
 
 ## Development setup
 
+Setup needs nothing beyond Python 3.10 or newer — `venv` and `pip` are part of
+the standard library.
+
 ```bash
-uv venv
-uv pip install -e ".[dev]"
-splunk --help        # or: python -m vct_splunk --help
+python3 -m venv .venv                          # Windows: py -m venv .venv
+.venv/bin/python -m pip install -e ".[dev]"    # Windows: .venv\Scripts\python -m pip ...
+.venv/bin/splunk --help
 ```
 
 ## Before you open a PR
@@ -16,10 +19,10 @@ splunk --help        # or: python -m vct_splunk --help
 Run the full check suite locally — all four must pass (CI runs the same):
 
 ```bash
-ruff check .       # lint — never silence a rule, fix it
-ruff format .      # format
-pyright            # types
-pytest             # unit tests (mocked; no network)
+.venv/bin/ruff check .    # lint — never silence a rule, fix it
+.venv/bin/ruff format .   # format
+.venv/bin/pyright         # types
+.venv/bin/pytest          # unit tests (mocked; no network)
 ```
 
 The live suites are independently gated and need a reachable Splunk Enterprise:

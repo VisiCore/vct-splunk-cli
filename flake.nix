@@ -16,17 +16,17 @@
     in
     {
       devShells = forAllSystems (pkgs: {
-        # Dev shell: Python plus uv and the lint/type tooling. The project itself is
-        # installed with `uv pip install -e ".[dev]"` (see the shellHook), matching
-        # the workflow documented in AGENTS.md and CI.
+        # Dev shell: Python plus ruff. Setup uses only `venv` and `pip` from the
+        # standard library, so the commands here are the same ones in the README
+        # and CI — a contributor without Nix runs exactly the same thing.
         default = pkgs.mkShell {
           packages = [
             pkgs.python313
-            pkgs.uv
             pkgs.ruff
           ];
           shellHook = ''
-            echo "vct-splunk-cli dev shell. First run:  uv venv && uv pip install -e \".[dev]\""
+            echo "vct-splunk-cli dev shell. First run:"
+            echo "  python -m venv .venv && .venv/bin/python -m pip install -e \".[dev]\""
           '';
         };
       });

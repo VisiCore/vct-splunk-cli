@@ -23,13 +23,14 @@ acting, and leaves an audit trail.
 ## Installation
 
 ```bash
-uv venv
-uv pip install -e ".[dev]"      # editable install with test deps
-splunk --help
+python3 -m venv .venv                          # Windows: py -m venv .venv
+.venv/bin/python -m pip install -e ".[dev]"    # Windows: .venv\Scripts\python -m pip ...
+.venv/bin/splunk --help
 ```
 
-Requires Python 3.10+. A Nix dev shell is also provided: `nix develop` (or `direnv
-allow`) gives you a shell with Python, `uv`, and `ruff` ready.
+Requires Python 3.10 or newer and nothing else — `venv` and `pip` are part of
+the standard library, so there is no package manager to install first. A Nix dev
+shell is also available: `nix develop` (or `direnv allow`).
 
 ## Usage
 
