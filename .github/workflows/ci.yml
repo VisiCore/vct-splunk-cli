@@ -98,12 +98,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: >-
-          ${{ fromJSON(
-            github.event_name == 'push' &&
-            '["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]' ||
-            '["3.9", "3.14"]'
-          ) }}
+        # Kept on one line: the documented form for a matrix built from an
+        # expression that evaluates to an array.
+        python-version: ${{ fromJSON(github.event_name == 'push' && '["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]' || '["3.9", "3.14"]') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -149,10 +146,11 @@ jobs:
 
   enterprise:
     name: Enterprise / Full CLI
-    needs: [python, changes]
+    needs: [gate, test, changes]
     if: >-
       ${{
-        !cancelled() && needs.python.result == 'success' &&
+        !cancelled() && needs.gate.result == 'success' &&
+        needs.test.result == 'success' &&
         (github.event_name != 'pull_request' ||
           needs.changes.outputs.code == 'true')
       }}
