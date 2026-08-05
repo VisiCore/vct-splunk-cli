@@ -104,6 +104,22 @@ def test_creating_a_credential_returns_it_once(splunk) -> None:
     assert SECRET in result.output
 
 
+def test_creating_a_non_minting_resource_redacts_an_echoed_secret(splunk) -> None:
+    """A create that does not mint a credential must not echo one back.
+
+    `user` accepts a password; it does not produce one. Whether Splunk happens
+    to echo an input secret is the server's choice, so the spec declares which
+    resources may reveal and everything else redacts. Without this test the
+    `mints_secret` flag can be declared and never read, which is exactly how it
+    first shipped.
+    """
+    result = _run("user", "create", "u1", "--yes")
+
+    assert result.exit_code == 0, result.output
+    assert SECRET not in result.output
+    assert redact.REDACTED in result.output
+
+
 def test_server_settings_redact_the_symmetric_key(splunk) -> None:
     """The same rule covers server settings, which carry `pass4SymmKey`."""
     payload = json.loads(_run("server", "settings", "get").output)

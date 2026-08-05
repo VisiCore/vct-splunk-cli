@@ -120,9 +120,13 @@ class CrudResource:
         data = self._body(fields, sets)
         self.validate_name(name)
         data["name"] = name
-        # A create can mint a credential (an HEC token), and the caller needs the
-        # value exactly once. Every other path redacts.
-        return self._unwrap(client.write("POST", self._base(owner, app), data), reveal_secrets=True)
+        # Only a spec that mints a credential may show one, and only here: the
+        # value exists nowhere else afterwards. A spec that merely accepts a
+        # secret, as `user` does with a password, must not have it echoed back.
+        return self._unwrap(
+            client.write("POST", self._base(owner, app), data),
+            reveal_secrets=self.spec.mints_secret,
+        )
 
     def update(
         self,
