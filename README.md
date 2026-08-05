@@ -238,11 +238,18 @@ Reading can never change your server. Everything that can is gated: `--dry-run`
 shows the request, a terminal asks first, a script must pass `--yes`, and every
 applied change is recorded in the audit log.
 
-Your credentials are read from the environment or a profile and are never
-accepted as a command-line flag, because flags are saved in shell history and
-are visible to anyone who can list processes. The tool writes no credential to
-disk, and it removes secret fields — Event Collector tokens, for example —
-before any data reaches your screen.
+Your secrets — passwords, tokens, and session keys — are read from the
+environment or a profile. None of them can be passed as a command-line option,
+because options are saved in shell history and are visible to anyone who can
+list processes. (`auth login` takes `--username`, which is not a secret; it
+reads the password from the environment or a no-echo prompt.) The tool writes
+no credential to disk.
+
+Secret values in a server's reply are removed before you see them — Event
+Collector tokens in a listing, for example. Two commands are deliberate
+exceptions, because handing you a new secret is the whole point of running
+them: `auth login` prints the session key it just created, and `hec rotate`
+prints the token it just minted. Neither value is written to the audit log.
 
 To report a vulnerability, see [SECURITY.md](./SECURITY.md). Please do not open
 a public issue for one.

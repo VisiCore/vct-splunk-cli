@@ -17,15 +17,21 @@ The latest release on `main` receives security fixes. Older versions do not.
 
 ## How this tool handles your credentials
 
-- **Credentials come from the environment or a configuration profile, never
-  from a command-line flag.** Flags are recorded in shell history and are
-  visible to any other user in the process list, so no secret option exists to
-  pass one.
+- **Secret credentials come from the environment or a configuration profile,
+  never from a command-line flag.** Flags are recorded in shell history and are
+  visible to any other user in the process list, so no option accepts a
+  password, token, or session key. `auth login` accepts `--username`, which is
+  not a secret; it reads the password from `$SPLUNK_PASSWORD` or a no-echo
+  prompt.
 - **Credentials are never written to disk by this tool.** It reads them, uses
   them for the current invocation, and forgets them.
 - **Secret-bearing response fields are removed before data leaves an
-  operation.** HTTP Event Collector tokens, for example, are stripped inside
-  the ACS operation, so no code path can print one.
+  operation.** HTTP Event Collector tokens in a listing, for example, are
+  stripped inside the ACS operation, so no listing can print one.
+- **Two commands return a secret on purpose,** because minting one is what they
+  do: `auth login` prints the session key it created, and `hec rotate` prints
+  the token it minted. Both values go to standard output only — never to the
+  audit log, which records the action and the object name.
 - **TLS verification is on by default.** `SPLUNK_CA_BUNDLE` points at your own
   certificate authority. `SPLUNK_VERIFY=false` disables verification entirely
   and exists only for laboratory use.
