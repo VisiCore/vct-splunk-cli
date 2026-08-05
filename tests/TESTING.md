@@ -26,6 +26,28 @@ No server, no credentials, no network. Run this before anything else.
 .venv/bin/python -m pytest tests/unit
 ```
 
+### The Splunk Cloud contract, without a Splunk Cloud stack
+
+Two files in this group cover the Cloud path in full, so you can check it
+without an account:
+
+```bash
+.venv/bin/python -m pytest tests/unit/test_acs_loopback.py       # every Cloud read
+.venv/bin/python -m pytest tests/unit/test_cloud_write_refusal.py # every Cloud write
+```
+
+`test_acs_loopback.py` starts a small HTTP server on a loopback port, points
+the tool's Cloud address at it, and runs each read command the whole way
+through. Nothing is stubbed out, so it checks the address the tool builds, the
+token it sends, and that a returned secret never reaches your screen.
+
+`test_cloud_write_refusal.py` runs every command that changes something against
+a Cloud address, in the form that would really do it, and fails if any of them
+so much as opens a connection.
+
+Group 4 below is what these cannot be: proof that a real stack answers the way
+Splunk's specification says it does.
+
 ## Group 2: Enterprise reads
 
 Read-only, so it is safe against a server you care about.
@@ -132,7 +154,9 @@ global state, fails on a cleanup leak, and restarts Splunk last.
 
 ## What continuous integration runs
 
-Every pull request runs group 1 plus lint and type checks. Pull requests that
-touch code also run groups 2 and 3 against a throwaway container. Group 5 runs
-weekly. Group 4 runs on a schedule once a Cloud stack is configured. A single
-check named **Merge Gate** summarizes all of them.
+Every pull request runs group 1 — including the two Cloud contract files above
+— plus lint and type checks. Pull requests that touch code also run groups 2
+and 3 against a throwaway container. Groups 4 and 5 run weekly; group 4 reports
+that there is nothing to certify until a Cloud stack is configured, rather than
+passing without checking anything. A single check named **Merge Gate**
+summarizes the pull-request jobs.

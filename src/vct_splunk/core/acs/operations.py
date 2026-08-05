@@ -30,7 +30,7 @@ def list_cloud_indexes(client: AcsClient) -> list[dict[str, Any]]:
 
 def list_hec_tokens(client: AcsClient) -> list[dict[str, Any]]:
     """List HTTP Event Collector tokens on the Cloud stack (ACS)."""
-    return [_without_tokens(item) for item in _list(client, HEC_TOKENS, LIST_ENVELOPES[HEC_TOKENS])]
+    return _list(client, HEC_TOKENS, LIST_ENVELOPES[HEC_TOKENS])
 
 
 def list_cloud_roles(client: AcsClient) -> list[dict[str, Any]]:
@@ -39,7 +39,12 @@ def list_cloud_roles(client: AcsClient) -> list[dict[str, Any]]:
 
 
 def _list(client: AcsClient, path: str, envelope: str) -> list[dict[str, Any]]:
-    """Read every page from one official ACS list envelope."""
+    """Read every page from one official ACS list envelope, minus any secrets.
+
+    Token stripping happens here rather than in the one operation whose payload
+    is known to carry a secret today. Redacting at the boundary means no ACS
+    read can return a token, including one Splunk adds to an endpoint later.
+    """
     output: list[dict[str, Any]] = []
     offset = 0
     while True:
@@ -49,7 +54,7 @@ def _list(client: AcsClient, path: str, envelope: str) -> list[dict[str, Any]]:
         page = body[envelope]
         if not all(isinstance(item, dict) for item in page):
             raise APIError(f"ACS response contains malformed items in {envelope!r}.")
-        output.extend(page)
+        output.extend(_without_tokens(item) for item in page)
         if len(page) < 100:
             return output
         offset += len(page)

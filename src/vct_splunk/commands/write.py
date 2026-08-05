@@ -47,12 +47,9 @@ def do_write(
     Returns:
         The operation result, ready for :func:`output.emit`.
     """
-    # Writes are Enterprise-only this release. On a deduced Cloud backend, stop
-    # cleanly before resolving credentials or prompting -- ACS-backed writes are a
-    # later release. audit_event["action"] is "<resource>.<verb>" (e.g. index.create).
-    if getattr(ctx, "backend", "enterprise") == "cloud":
-        resource, _, verb = str(audit_event.get("action", "")).partition(".")
-        raise UnsupportedBackendError(resource or "this resource", verb or "write", "cloud")
+    # audit_event["action"] is "<resource>.<verb>", e.g. "index.create".
+    resource, _, verb = str(audit_event.get("action", "")).partition(".")
+    refuse_cloud_write(ctx, resource, verb)
     target = _safe_target(
         target or config_from_env(ctx.base_url, profile=getattr(ctx, "profile", None)).base_url
     )
@@ -62,6 +59,19 @@ def do_write(
     if not (isinstance(result, dict) and result.get("dry_run")):
         audit.record({**audit_event, "target": target})
     return result
+
+
+def refuse_cloud_write(ctx: Any, resource: str, verb: str) -> None:
+    """Stop a mutation aimed at a Splunk Cloud stack, before anything else runs.
+
+    Writes are Enterprise-only this release. :func:`do_write` calls this, which
+    is enough for a command that reaches the gate directly. A command that first
+    resolves a namespace calls it earlier as well, so a Cloud target is told that
+    writes are unsupported rather than being asked for an ``--app`` that would
+    not have helped.
+    """
+    if getattr(ctx, "backend", "enterprise") == "cloud":
+        raise UnsupportedBackendError(resource or "this resource", verb or "write", "cloud")
 
 
 def _safe_target(target: str) -> str:
