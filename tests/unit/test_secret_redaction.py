@@ -152,6 +152,10 @@ def test_ordinary_key_names_are_left_alone(key: str) -> None:
         # A slash ends the authority, so this lands in the path, where
         # stripping the userinfo never reaches it.
         f"https://sh.corp/x:{URL_PASSWORD}@elsewhere:8089",
+        # A query or fragment carries a credential without any userinfo `@`.
+        f"sh.corp:8089?token={URL_PASSWORD}",
+        f"localhost:8089#token={URL_PASSWORD}",
+        f"https://sh.corp:8089?token={URL_PASSWORD}",
     ],
 )
 def test_a_malformed_target_is_replaced_rather_than_echoed(target: str) -> None:

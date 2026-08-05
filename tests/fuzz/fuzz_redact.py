@@ -56,6 +56,16 @@ def build_target(data: bytes) -> str:
     user = fdp.ConsumeUnicodeNoSurrogates(12)
     host = "sh.corp:8089" if shape == 0 else fdp.ConsumeUnicodeNoSurrogates(24)
     tail = fdp.ConsumeUnicodeNoSurrogates(24)
+    # A credential does not only appear as userinfo. `?token=` and `#token=`
+    # carry one too, and these two shapes omit `//` and `@` on purpose: without
+    # an authority there is no host to rebuild from, which is the branch that
+    # returns the target as it stands. Keeping the `@` here would send every
+    # input down the userinfo rule instead and never reach it.
+    place = fdp.ConsumeIntInRange(0, 2)
+    if place == 1:
+        return f"{host}{tail}?token={SENTINEL}"
+    if place == 2:
+        return f"{host}{tail}#token={SENTINEL}"
     return f"{scheme}://{user}:{SENTINEL}@{host}{tail}"
 
 

@@ -46,6 +46,13 @@ def redact_secrets(value: Any) -> Any:
     return value
 
 
+def _before_query(target: str) -> str:
+    """Return *target* up to the first query or fragment delimiter."""
+    for delimiter in "?#":
+        target = target.split(delimiter, 1)[0]
+    return target
+
+
 def safe_target(target: str) -> str:
     """Return *target* with URL credentials and query components removed.
 
@@ -65,7 +72,12 @@ def safe_target(target: str) -> str:
     # A target that reaches here unvalidated may be malformed enough that
     # `urlsplit` itself rejects it — an unterminated IPv6 literal, say. Letting
     # that raise would print the offending value in the traceback.
-    fallback = target if "@" not in target else REDACTED
+    #
+    # The query and fragment go first, so the fallback drops them exactly as the
+    # rebuilt target does. A credential can sit in either (`?token=…`), and
+    # neither carries the `@` the userinfo rule looks for.
+    stripped = _before_query(target)
+    fallback = REDACTED if "@" in stripped else stripped
     try:
         parsed = urlsplit(target)
     except ValueError:

@@ -50,11 +50,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- Redact a credential in a Splunk URL that earlier releases echoed back. Four
-  URL shapes reached the printed target intact: a truncated authority, a
-  missing scheme, a credential following a path separator, and an unterminated
-  IPv6 literal that raised with the value in the traceback. Redaction now fails
-  closed — a target it cannot rebuild is replaced rather than repeated. A target
+- Redact a credential in a Splunk URL that earlier releases echoed back. Any
+  URL the redactor could not rebuild was returned as it stood, so a truncated
+  authority, a missing scheme, a credential following a path separator, or one
+  in a `?token=` query or `#` fragment all reached the printed target intact,
+  and an unterminated IPv6 literal raised with the value in the traceback.
+  Redaction now fails closed: a target it cannot rebuild is replaced rather
+  than repeated, and the query and fragment are dropped on every path. A target
   carrying no credential still prints in full, so error messages stay readable.
 - Capture stderr separately in the two tests that assert a secret does not reach
   it. Click below 8.2 folds stderr into stdout unless asked not to, and 8.2
