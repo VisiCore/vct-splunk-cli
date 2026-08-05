@@ -15,7 +15,7 @@ from ..core.namespace import resolve_ns
 from ..core.path import path_segment
 from . import output as out
 from .context import command
-from .write import do_write
+from .write import do_write, refuse_cloud_write
 
 
 @click.command("accelerate")
@@ -25,8 +25,9 @@ from .write import do_write
 def datamodel_accelerate(ctx, name, enable) -> None:
     """Toggle acceleration on a data model. Namespaced; gated write; requires an app."""
     path_segment(name, label="data model name")
-    owner, app = resolve_ns(ctx.owner, ctx.app, for_write=True)
     verb = "enable" if enable else "disable"
+    refuse_cloud_write(ctx, "datamodel", f"accelerate --{verb}")
+    owner, app = resolve_ns(ctx.owner, ctx.app, for_write=True)
     result = do_write(
         ctx,
         action=f"{verb} acceleration on data model '{name}' in app '{app}'",

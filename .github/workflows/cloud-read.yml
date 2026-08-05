@@ -1,6 +1,15 @@
+# Certify the Cloud read path against a real Splunk Cloud stack.
+#
+# The Cloud contract itself is proved on every pull request, credential-free, by
+# tests/unit/test_acs_loopback.py and tests/unit/test_cloud_write_refusal.py.
+# What only a live stack can show is that a real one answers the way the ACS
+# specification says it does. Until a stack is configured, this workflow ends as
+# an explicit no-op rather than a green run that checked nothing.
 name: Splunk Cloud Read Canary
 
 on:
+  schedule:
+    - cron: "41 6 * * 3"
   workflow_dispatch:
 
 permissions:
@@ -17,39 +26,53 @@ jobs:
       SPLUNK_ACS_TOKEN: ${{ secrets.SPLUNK_ACS_TOKEN }}
       SPLUNK_ACS_STACK: ${{ secrets.SPLUNK_ACS_STACK }}
       SPLUNK_ACS_BASE_URL: ${{ secrets.SPLUNK_ACS_BASE_URL }}
+      # splunkd credential. Without it, every read Cloud does not serve stops at
+      # the credential check instead of reaching the dispatch layer, so the run
+      # would prove far less than it appears to.
+      SPLUNK_TOKEN: ${{ secrets.SPLUNK_TOKEN }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+      # The secrets context is not available to a job-level `if`, so this is a
+      # step that reports "nothing to certify" rather than a skipped job.
+      - name: Check for a configured Cloud stack
+        id: stack
+        run: bash .github/scripts/detect-cloud-stack.sh
+
+      - if: steps.stack.outputs.ready == 'true'
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.14"
           cache: pip
 
       - name: Install project
+        if: steps.stack.outputs.ready == 'true'
         run: |
           python -m venv .venv
           .venv/bin/python -m pip install -e ".[dev]"
 
       - name: Cloud reads (every catalogued read command)
+        if: steps.stack.outputs.ready == 'true'
         run: >-
           .venv/bin/pytest tests/integration/cloud/read/test_catalog.py
           -m "integration and cloud and read"
           -vv --color=yes --tb=short --junitxml=cloud-read.xml
 
       - name: Cloud ACS operations (below the CLI)
+        if: steps.stack.outputs.ready == 'true'
         run: >-
           .venv/bin/pytest tests/integration/cloud/read/test_acs_operations.py
           -m "integration and cloud and read"
           -vv --color=yes --tb=short --junitxml=cloud-acs.xml
 
       - name: Publish test summary
-        if: always()
+        if: always() && steps.stack.outputs.ready == 'true'
         uses: test-summary/action@37b508cfee6d4d080eedd00b5bb240a6a784a6a5 # v2
         with:
           paths: cloud-*.xml
 
       - name: Upload test report
-        if: always()
+        if: always() && steps.stack.outputs.ready == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: cloud-read-${{ github.run_id }}

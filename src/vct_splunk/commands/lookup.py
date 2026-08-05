@@ -15,7 +15,7 @@ from ..core import lookups as core
 from ..core.namespace import resolve_ns
 from . import output as out
 from .context import command
-from .write import do_write
+from .write import do_write, refuse_cloud_write
 
 
 @click.group(name="lookup")
@@ -32,6 +32,7 @@ def lookup() -> None:
 @command
 def upload(ctx, server_file) -> None:
     """Install a staged CSV lookup table into an app. Namespaced, gated, and app-required."""
+    refuse_cloud_write(ctx, "lookup", "upload")
     owner, app = resolve_ns(ctx.owner, ctx.app, for_write=True)
     filename = PurePath(server_file).name
     result = do_write(

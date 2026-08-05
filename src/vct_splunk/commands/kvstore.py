@@ -21,7 +21,7 @@ from ..core.namespace import resolve_ns
 from ..core.path import path_segment
 from . import output as out
 from .context import command
-from .write import do_write
+from .write import do_write, refuse_cloud_write
 
 
 @click.group(name="kvstore")
@@ -75,6 +75,7 @@ def get(ctx, collection, key) -> None:
 def insert(ctx, collection, data) -> None:
     """Insert a record (JSON document). Gated write; requires an app."""
     path_segment(collection, label="collection")
+    refuse_cloud_write(ctx, "kvstore", "insert")
     owner, app = resolve_ns(ctx.owner, ctx.app, for_write=True)
     document = _parse_doc(data)
     result = do_write(
@@ -95,6 +96,7 @@ def update(ctx, collection, key, data) -> None:
     """Replace a record by its _key (JSON document). Gated write; requires an app."""
     path_segment(collection, label="collection")
     path_segment(key, label="record key")
+    refuse_cloud_write(ctx, "kvstore", "update")
     owner, app = resolve_ns(ctx.owner, ctx.app, for_write=True)
     document = _parse_doc(data)
     result = do_write(
@@ -119,6 +121,7 @@ def delete(ctx, collection, key) -> None:
     """Delete one record by its _key. Gated write; requires an app."""
     path_segment(collection, label="collection")
     path_segment(key, label="record key")
+    refuse_cloud_write(ctx, "kvstore", "delete")
     owner, app = resolve_ns(ctx.owner, ctx.app, for_write=True)
     result = do_write(
         ctx,
@@ -140,6 +143,7 @@ def delete(ctx, collection, key) -> None:
 def purge(ctx, collection) -> None:
     """Delete ALL records in a collection (the schema is kept). Gated write; requires an app."""
     path_segment(collection, label="collection")
+    refuse_cloud_write(ctx, "kvstore", "purge")
     owner, app = resolve_ns(ctx.owner, ctx.app, for_write=True)
     result = do_write(
         ctx,

@@ -23,7 +23,7 @@ from ..core.resource import CrudResource, Field, Spec
 from . import output as out
 from .context import AliasedGroup, command
 from .dispatch import dispatch_list, has_cloud_list
-from .write import do_write
+from .write import do_write, refuse_cloud_write
 
 _VERB_ALIASES = {"add": "create", "edit": "update", "remove": "delete"}
 
@@ -84,7 +84,7 @@ def build_group(spec: Spec) -> click.Group:
                     ctx.meta(),
                 )
                 return
-            owner, app = _ns(ctx, spec, for_write=False)
+            owner, app = _ns(ctx, spec)
             with ctx.client() as c:
                 out.emit(res.list(c, owner=owner, app=app), ctx.output_mode, ctx.meta())
 
@@ -95,7 +95,7 @@ def build_group(spec: Spec) -> click.Group:
         @command
         def _get(ctx, name) -> None:
             res.validate_name(name)
-            owner, app = _ns(ctx, spec, for_write=False)
+            owner, app = _ns(ctx, spec)
             with ctx.client() as c:
                 out.emit(res.get(c, name, owner=owner, app=app), ctx.output_mode, ctx.meta())
 
@@ -107,7 +107,7 @@ def build_group(spec: Spec) -> click.Group:
         @command
         def _create(ctx, name, **opts) -> None:
             res.validate_name(name)
-            owner, app = _ns(ctx, spec, for_write=True)
+            owner, app = _ns(ctx, spec, write_verb="create")
             fields, sets = _collect_fields(spec, opts)
             action, event = _gate_args(spec, "create", name, owner, app)
             result = do_write(
@@ -126,7 +126,7 @@ def build_group(spec: Spec) -> click.Group:
         @command
         def _update(ctx, name, **opts) -> None:
             res.validate_name(name)
-            owner, app = _ns(ctx, spec, for_write=True)
+            owner, app = _ns(ctx, spec, write_verb="update")
             fields, sets = _collect_fields(spec, opts)
             if not sets and all(v in (None, ()) for v in fields.values()):
                 raise UsageError("Nothing to update. Pass a field option or --set KEY=VALUE.")
@@ -146,7 +146,7 @@ def build_group(spec: Spec) -> click.Group:
         @command
         def _delete(ctx, name) -> None:
             res.validate_name(name)
-            owner, app = _ns(ctx, spec, for_write=True)
+            owner, app = _ns(ctx, spec, write_verb="delete")
             action, event = _gate_args(spec, "delete", name, owner, app)
             result = do_write(
                 ctx,
@@ -171,7 +171,7 @@ def _add_control(grp: click.Group, spec: Spec, res: CrudResource, verb: str) -> 
     @command
     def _control(ctx, name) -> None:
         res.validate_name(name)
-        owner, app = _ns(ctx, spec, for_write=True)
+        owner, app = _ns(ctx, spec, write_verb=verb)
         action, event = _gate_args(spec, verb, name, owner, app)
         result = do_write(
             ctx,
@@ -245,8 +245,14 @@ def _collect_fields(spec: Spec, opts: dict[str, Any]) -> tuple[dict[str, Any], d
     return values, sets
 
 
-def _ns(ctx: Any, spec: Spec, *, for_write: bool) -> tuple[str | None, str | None]:
-    """Resolve (owner, app) for a namespaced spec; global specs ignore them."""
+def _ns(ctx: Any, spec: Spec, *, write_verb: str | None = None) -> tuple[str | None, str | None]:
+    """Resolve (owner, app) for a namespaced spec; global specs ignore them.
+
+    A `write_verb` marks this as a mutation, which a Cloud target refuses here
+    rather than after being asked for an --app that would not have helped.
+    """
+    if write_verb is not None:
+        refuse_cloud_write(ctx, spec.name, write_verb)
     if not spec.namespaced:
         return (None, None)
-    return resolve_ns(ctx.owner, ctx.app, for_write=for_write)
+    return resolve_ns(ctx.owner, ctx.app, for_write=write_verb is not None)
