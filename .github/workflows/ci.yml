@@ -25,9 +25,16 @@ jobs:
 
   # Keep workflow-policy enforcement centralized without instantiating the
   # unrelated Nix, Ansible, Markdown, or file-size jobs from _ci-gate.
+  #
+  # Reusable workflows are pinned to a commit SHA, like every other `uses:` in
+  # this repository. A branch or tag can be repointed at new code after review,
+  # which would hand anything able to push to that repository code execution
+  # here. Bump deliberately: resolve the new SHA with
+  # `gh api repos/dryvist/.github/commits/main --jq .sha`, read the diff, then
+  # update both references below and their dated comments.
   workflow-security:
     if: github.event_name == 'pull_request'
-    uses: dryvist/.github/.github/workflows/_zizmor.yml@main
+    uses: dryvist/.github/.github/workflows/_zizmor.yml@7b9b165be9556c0228830c25246df2bde10a188e # main @ 2026-08-02
     with:
       runner_label: ubuntu-latest
 
@@ -43,7 +50,7 @@ jobs:
           (needs.dependency-review.result == 'success' &&
             needs.workflow-security.result == 'success'))
       }}
-    uses: dryvist/.github/.github/workflows/_python-ci.yml@main
+    uses: dryvist/.github/.github/workflows/_python-ci.yml@7b9b165be9556c0228830c25246df2bde10a188e # main @ 2026-08-02
     with:
       python_versions: >-
         ${{
