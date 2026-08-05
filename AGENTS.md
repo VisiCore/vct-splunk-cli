@@ -16,18 +16,9 @@ python3 -m venv .venv                            # `venv` is in the standard lib
 .venv/bin/splunk --help                          # or: .venv/bin/python -m vct_splunk --help
 ```
 
-Setup uses only `venv` and `pip`, which ship with Python. There is no separate
-package manager to install; on Windows the paths are `.venv\Scripts\` instead.
-
 Credentials come from the environment or a selected config profile; secret
-credentials are never accepted directly as CLI flags:
-
-```bash
-export SPLUNK_URL="https://your-search-head:8089"   # REST mgmt port, not :8000
-export SPLUNK_TOKEN="<a Splunk JWT auth token>"
-```
-
-See `.env.example` for every supported variable.
+credentials are never accepted as CLI flags. See `.env.example` for every
+supported variable, and [README.md](./README.md) for connecting to a server.
 
 ## Architecture
 
@@ -91,23 +82,16 @@ Two cross-cutting ideas to know about:
 
 ## Testing
 
-```bash
-pytest                                                # unit tests (mocked HTTP)
-SPLUNK_INTEGRATION_TEST=true pytest -m "integration and enterprise and read"
-SPLUNK_INTEGRATION_TEST=true SPLUNK_WRITE_TEST=true \
-  pytest -m "integration and enterprise and write"   # disposable Splunk only
-SPLUNK_ACS_LIVE_TEST=true pytest -m "integration and cloud and read"
-```
+`tests/cli_catalog.py` is the single catalog of every command leaf. The unit
+matrix and all three live suites read from it, so a new command joins every
+suite by being registered once. Unit tests mock the transport with
+`httpx.MockTransport` — the library's own facility, so no mocking package is
+needed.
 
-Unit tests live in `tests/unit/` and mock the transport. The Enterprise read
-catalog invokes all 61 read leaves; the write catalog invokes all 92 mutations
-with cleanup and requires both live-test opt-ins. Cloud and ACS tests use only
-Python and outbound HTTPS.
+[tests/TESTING.md](./tests/TESTING.md) is the runbook: every group, its exact
+variables, and its exact command.
 
 ## Checks before a PR
-
-Run the gate through the project venv (`.venv/bin/...`) — the same binaries CI
-calls — or via pre-commit.
 
 ```bash
 .venv/bin/ruff check .      # lint (never silence a rule — fix it)
@@ -116,14 +100,14 @@ calls — or via pre-commit.
 .venv/bin/pytest            # tests
 ```
 
-Or let pre-commit run the whole hook set (installed via `.venv/bin/pre-commit
-install --install-hooks` after the editable install above):
+Or run the whole hook set at once, after
+`.venv/bin/pre-commit install --install-hooks`:
 
 ```bash
-.venv/bin/pre-commit run --all-files                      # commit-stage gate
+.venv/bin/pre-commit run --all-files                       # commit-stage gate
 .venv/bin/pre-commit run --all-files --hook-stage pre-push # adds pytest
 ```
 
-The hook set (`.pre-commit-config.yaml`) is the dryvist org-wide Python standard
-— ruff + ruff-format + pyright at commit, pytest at pre-push. It is kept in sync
-with the Nix definition in `nix-devenv`; see the KEEP IN SYNC banner in that file.
+The hook set (`.pre-commit-config.yaml`) is the dryvist org-wide Python standard.
+It is kept in sync with the Nix definition in `nix-devenv`; see the KEEP IN SYNC
+banner in that file.

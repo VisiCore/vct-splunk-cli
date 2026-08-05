@@ -1,15 +1,31 @@
-# splunk
+# splunk-cli
 
 A small, scriptable command-line tool to read, search, health-check, and safely
 administer **Splunk Enterprise** over its documented REST API — built for AI CLI
 agents and humans alike.
 
-[![CI](https://github.com/VisiCore/vct-splunk-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/VisiCore/vct-splunk-cli/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![Python](https://img.shields.io/badge/python-3.10%E2%80%933.14-blue.svg)](https://www.python.org/)
-[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
-[![Checked with pyright](https://microsoft.github.io/pyright/img/pyright_badge.svg)](https://microsoft.github.io/pyright/)
-[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
+[![CI][ci-badge]][ci]
+[![OpenSSF Scorecard][scorecard-badge]][scorecard]
+[![ACS contract][acs-badge]][acs]
+[![License: MIT][license-badge]](./LICENSE)
+[![Python][python-badge]](https://www.python.org/)
+[![Ruff][ruff-badge]](https://github.com/astral-sh/ruff)
+[![Checked with pyright][pyright-badge]](https://microsoft.github.io/pyright/)
+[![pre-commit][precommit-badge]](https://github.com/pre-commit/pre-commit)
+[![Conventional Commits][commits-badge]](https://www.conventionalcommits.org)
+
+[ci]: https://github.com/VisiCore/vct-splunk-cli/actions/workflows/ci.yml
+[ci-badge]: https://github.com/VisiCore/vct-splunk-cli/actions/workflows/ci.yml/badge.svg
+[scorecard]: https://scorecard.dev/viewer/?uri=github.com/VisiCore/vct-splunk-cli
+[scorecard-badge]: https://api.scorecard.dev/projects/github.com/VisiCore/vct-splunk-cli/badge
+[acs]: https://github.com/VisiCore/vct-splunk-cli/actions/workflows/acs-contract.yml
+[acs-badge]: https://github.com/VisiCore/vct-splunk-cli/actions/workflows/acs-contract.yml/badge.svg
+[license-badge]: https://img.shields.io/badge/License-MIT-yellow.svg
+[python-badge]: https://img.shields.io/badge/python-3.10%E2%80%933.14-blue.svg
+[ruff-badge]: https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json
+[pyright-badge]: https://microsoft.github.io/pyright/img/pyright_badge.svg
+[precommit-badge]: https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white
+[commits-badge]: https://img.shields.io/badge/Conventional%20Commits-1.0.0-fe5196?logo=conventionalcommits&logoColor=white
 
 ## What this is
 
@@ -205,125 +221,31 @@ resolves to and what it can do. It answers offline, without contacting anything.
 
 ## Running the tests
 
-There are five groups. Only the first needs nothing at all — start there.
-
-| Group | What it checks | What you must provide |
-| --- | --- | --- |
-| Unit | Everything, with fake network replies | Nothing |
-| Enterprise reads | Every read command against a real server | A reachable Splunk |
-| Enterprise writes | Every change, then undoes it | A **disposable** Splunk |
-| Cloud reads | Every read command against a real Cloud stack | A Cloud stack and ACS token |
-| ACS contract | Whether Splunk changed its public Cloud API | Nothing |
-
-Every group is off unless you switch it on — leaving one off is an ordinary,
-expected skip, not an error. Once you switch a group on, forgetting one of its
-other variables stops the tests and says which one is missing; it never quietly
-passes by skipping.
-
-### Group 1: unit tests
-
-No server, no credentials, no network. Run this before anything else.
+The unit tests need no server, no credentials, and no network:
 
 ```bash
 .venv/bin/python -m pytest tests/unit
 ```
 
-### Group 2: Enterprise reads
+Four more groups run against a real server, a real Splunk Cloud stack, or
+Splunk's published API description. Each is off until you switch it on.
+[tests/TESTING.md](./tests/TESTING.md) gives every group its exact variables
+and its exact command.
 
-Read-only, so it is safe against a server you care about.
+## Security
 
-```bash
-export SPLUNK_INTEGRATION_TEST=true
-export SPLUNK_URL="https://your-server:8089"
-export SPLUNK_TOKEN="<your token>"
+Reading can never change your server. Everything that can is gated: `--dry-run`
+shows the request, a terminal asks first, a script must pass `--yes`, and every
+applied change is recorded in the audit log.
 
-.venv/bin/python -m pytest tests/integration/enterprise/read -v
-```
+Your credentials are read from the environment or a profile and are never
+accepted as a command-line flag, because flags are saved in shell history and
+are visible to anyone who can list processes. The tool writes no credential to
+disk, and it removes secret fields — Event Collector tokens, for example —
+before any data reaches your screen.
 
-### Group 3: Enterprise writes
-
-> **Warning.** This group creates, changes, deletes, and restarts things. Point
-> it only at a throwaway server. Never point it at production.
-
-Start a disposable Splunk in Docker and copy in the files the tests need:
-
-```bash
-docker run -d --name splunk-test -p 8089:8089 \
-  -e SPLUNK_START_ARGS=--accept-license \
-  -e SPLUNK_GENERAL_TERMS=--accept-sgt-current-at-splunk-com \
-  -e SPLUNK_PASSWORD='Ch4ng3d-CI-Pass!' splunk/splunk:latest
-
-# Splunk takes a few minutes to start. Wait until this prints a result:
-until curl -ksf -u "admin:Ch4ng3d-CI-Pass!" \
-  https://localhost:8089/services/server/info >/dev/null; do sleep 10; done
-
-FIXTURES=/opt/splunk/var/run/splunk/lookup_tmp
-docker exec -u root splunk-test mkdir -p "$FIXTURES"
-docker cp tests/data/server/. "splunk-test:$FIXTURES/"
-docker exec -u root splunk-test tar -czf "$FIXTURES/vct_ci_app.spl" -C "$FIXTURES" vct_ci_app
-docker cp tests/data/server/vct_test_input.sh \
-  splunk-test:/opt/splunk/etc/apps/search/bin/vct_test_input.sh
-docker exec -u root splunk-test chown -R splunk:splunk \
-  "$FIXTURES" /opt/splunk/etc/apps/search/bin/vct_test_input.sh
-docker exec -u root splunk-test chmod 755 /opt/splunk/etc/apps/search/bin/vct_test_input.sh
-```
-
-Then run the tests:
-
-```bash
-export SPLUNK_INTEGRATION_TEST=true
-export SPLUNK_WRITE_TEST=true
-export SPLUNK_URL="https://localhost:8089"
-export SPLUNK_USERNAME=admin
-export SPLUNK_PASSWORD='Ch4ng3d-CI-Pass!'
-export SPLUNK_VERIFY=false
-export SPLUNK_TEST_SERVER_FIXTURE_DIR=/opt/splunk/var/run/splunk/lookup_tmp
-
-.venv/bin/python -m pytest tests/integration/enterprise/write -v
-```
-
-Clean up when you are finished: `docker rm -f splunk-test`.
-
-### Group 4: Cloud reads
-
-Read-only. It needs a real Splunk Cloud stack and an ACS token.
-
-```bash
-export SPLUNK_ACS_LIVE_TEST=true
-export SPLUNK_URL="https://your-stack.splunkcloud.com"
-export SPLUNK_ACS_TOKEN="<your ACS token>"
-# export SPLUNK_ACS_BASE_URL="https://admin.splunkcloudgc.com"   # only for FedRAMP
-
-.venv/bin/python -m pytest tests/integration/cloud/read -v
-```
-
-This runs every read command your Cloud stack could receive. The reads Cloud
-serves must succeed. Every other read must fail with a proper error message and
-a documented exit code, which is how the tool proves it never guesses at an
-endpoint your stack does not offer.
-
-### Group 5: ACS public contract
-
-No credentials. It downloads Splunk's public Cloud API description and reports
-whether it changed underneath us.
-
-```bash
-export SPLUNK_ACS_SPEC_TEST=true
-.venv/bin/python -m pytest tests/integration/test_acs_public_spec.py -v
-```
-
-### Checks before you open a pull request
-
-```bash
-.venv/bin/ruff check .    # style problems
-.venv/bin/ruff format .   # fix formatting
-.venv/bin/pyright         # type problems
-.venv/bin/pytest          # unit tests
-```
-
-Continuous integration runs the same four commands, plus the Enterprise groups
-against a throwaway Splunk container. A single check named **Merge Gate**
-summarizes every job.
+To report a vulnerability, see [SECURITY.md](./SECURITY.md). Please do not open
+a public issue for one.
 
 ## Scope
 

@@ -25,33 +25,16 @@ Run the full check suite locally — all four must pass (CI runs the same):
 .venv/bin/pytest          # unit tests (mocked; no network)
 ```
 
-The live suites are independently gated and need a reachable Splunk Enterprise:
-
-```bash
-SPLUNK_INTEGRATION_TEST=true pytest -m "integration and enterprise and read"
-SPLUNK_INTEGRATION_TEST=true SPLUNK_WRITE_TEST=true \
-  pytest -m "integration and enterprise and write"
-```
-
-The write lane is destructive and is intended only for the disposable
-`splunk/splunk:latest` container. It exercises every mutation through the CLI,
-restores global state, fails cleanup leaks, and restarts Splunk last.
-
-The read-only Cloud canary needs `SPLUNK_URL` and `SPLUNK_ACS_TOKEN`:
-
-```bash
-SPLUNK_ACS_LIVE_TEST=true pytest -m "integration and cloud and read"
-```
+Four more test groups run against a live server, a live Splunk Cloud stack, or
+Splunk's published API description. Each is off until you switch it on.
+[tests/TESTING.md](./tests/TESTING.md) gives every group its exact variables,
+its exact command, and the container setup the destructive write lane needs.
 
 ## Project layout
 
-The package separates a Click-free core from a thin CLI shell. See
-[AGENTS.md](./AGENTS.md) for the full architecture, conventions, and safety
-rules. In short:
-
-- `src/vct_splunk/core/` — pure, Click-free library and typed errors.
-- `src/vct_splunk/commands/` — Click adapters, one module per command group.
-- `tests/unit/` and `tests/integration/` mirror the package.
+The package separates a Click-free core from a thin CLI shell, and the tests
+mirror that split. [AGENTS.md](./AGENTS.md) holds the full architecture,
+conventions, and safety rules.
 
 ## Conventions
 
