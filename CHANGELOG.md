@@ -31,9 +31,23 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   hook revisions, the ruff and pyright version floors, and the Nix input the
   development shell resolves. The shell now provides the same ruff the hook set
   pins, instead of whatever a stale input happened to resolve to.
+- Install from a hash-pinned lock in the three integration workflows, so a
+  replaced release on PyPI cannot change what continuous integration runs. The
+  contributor install is unchanged; see CONTRIBUTING.md for regenerating the
+  lock after a dependency edit.
+- Add weekly dependency updates, covering both Python packages and the
+  commit-pinned GitHub Actions.
+- Fuzz `safe_target`, the function that strips credentials out of a Splunk URL
+  before it is printed. It runs on every pull request that touches code.
 
 ### Fixed
 
+- Redact a credential in a Splunk URL that earlier releases echoed back. Four
+  URL shapes reached the printed target intact: a truncated authority, a
+  missing scheme, a credential following a path separator, and an unterminated
+  IPv6 literal that raised with the value in the traceback. Redaction now fails
+  closed — a target it cannot rebuild is replaced rather than repeated. A target
+  carrying no credential still prints in full, so error messages stay readable.
 - Capture stderr separately in the two tests that assert a secret does not reach
   it. Click below 8.2 folds stderr into stdout unless asked not to, and 8.2
   removed the parameter that asks, so both assertions raised on the 3.9

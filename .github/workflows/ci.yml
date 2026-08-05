@@ -137,11 +137,15 @@ jobs:
           cache: pip
 
       # `venv` and `pip` ship with Python, so this is the exact command a
-      # contributor runs locally on macOS, Linux, or Windows.
+      # Dependencies come from a hash-pinned lock so a compromised or
+      # yanked-and-replaced release on PyPI cannot change what CI runs. The
+      # project itself installs separately with --no-deps: nothing is resolved
+      # outside the lock. Contributors still run `pip install -e ".[dev]"`.
       - name: Install project
         run: |
           python -m venv .venv
-          .venv/bin/python -m pip install -e ".[dev]"
+          .venv/bin/python -m pip install --require-hashes -r requirements-ci.txt
+          .venv/bin/python -m pip install -e . --no-deps
 
       - name: Stage server fixtures
         env:
@@ -219,6 +223,57 @@ jobs:
             enterprise-*.xml
           if-no-files-found: ignore
 
+  # Fuzz the credential stripper. `safe_target` is what keeps a password in
+  # SPLUNK_URL out of prompts, JSON metadata, and the audit log, and it is
+  # handed the URL exactly as typed — before anything validates that it parses.
+  # A short run per PR is enough to catch a regression in the shapes that
+  # example-based tests do not think to write down.
+  #
+  # Linux-only, and separate from the test matrix: atheris publishes manylinux
+  # x86_64 wheels only, so it must never join pyproject.toml's `dev` extra.
+  fuzz:
+    name: Fuzz / Credential stripper
+    needs: [python, changes]
+    if: >-
+      ${{
+        !cancelled() && needs.python.result == 'success' &&
+        (github.event_name != 'pull_request' ||
+          needs.changes.outputs.code == 'true')
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install project
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --require-hashes -r requirements-fuzz.txt
+          .venv/bin/python -m pip install -e . --no-deps
+
+      # Bounded by wall clock rather than iteration count so the job cost stays
+      # predictable as the corpus grows.
+      - name: Fuzz safe_target
+        run: .venv/bin/python tests/fuzz/fuzz_redact.py -max_total_time=60 -print_final_stats=1
+
+      - name: Upload crash corpus
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: fuzz-crash-${{ github.run_id }}
+          path: crash-*
+          if-no-files-found: ignore
+
   # ============================================================================
   # MERGE GATE — the only check branch protection requires.
   # `name:` MUST stay "Merge Gate": required_status_checks matches the context
@@ -228,7 +283,7 @@ jobs:
   # ============================================================================
   merge-gate:
     name: Merge Gate
-    needs: [dependency-review, workflow-security, python, changes, enterprise]
+    needs: [dependency-review, workflow-security, python, changes, enterprise, fuzz]
     if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-latest
     permissions:
@@ -240,5 +295,5 @@ jobs:
           # These jobs are conditional (pull-request-only, or paths-filtered), so
           # a skip is a legitimate outcome and must not fail the gate. `python`
           # is deliberately absent: it runs on every event and must succeed.
-          allowed-skips: dependency-review, workflow-security, changes, enterprise
+          allowed-skips: dependency-review, workflow-security, changes, enterprise, fuzz
           jobs: ${{ toJSON(needs) }}

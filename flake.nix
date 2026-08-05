@@ -23,6 +23,9 @@
           packages = [
             pkgs.python314
             pkgs.ruff
+            # Regenerates the hash-pinned CI locks; not needed to develop or
+            # test. See the header of requirements-ci.in for the command.
+            pkgs.uv
           ];
           shellHook = ''
             echo "vct-splunk-cli dev shell. First run:"

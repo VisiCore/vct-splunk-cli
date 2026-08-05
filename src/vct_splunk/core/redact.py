@@ -52,10 +52,26 @@ def safe_target(target: str) -> str:
     A Splunk URL may carry `user:password@`, and the target is printed in
     prompts, JSON metadata, and the audit log. Only the scheme, host, port, and
     path identify an instance, so everything else is dropped.
+
+    When the host cannot be read, there is nothing to rebuild the target from,
+    so this fails closed. Credentials live in the userinfo component, which is
+    delimited by `@`: a target without one provably carries none and can stand
+    as it is, and anything else is replaced rather than echoed back.
+
+    The same `@` rule covers the path. A slash earlier in the string ends the
+    authority, so what the user meant as `user:password@host` can land in the
+    path instead — where stripping the userinfo never reaches it.
     """
-    parsed = urlsplit(target)
+    # A target that reaches here unvalidated may be malformed enough that
+    # `urlsplit` itself rejects it — an unterminated IPv6 literal, say. Letting
+    # that raise would print the offending value in the traceback.
+    fallback = target if "@" not in target else REDACTED
+    try:
+        parsed = urlsplit(target)
+    except ValueError:
+        return fallback
     if not parsed.hostname:
-        return target
+        return fallback
     host = parsed.hostname
     if ":" in host and not host.startswith("["):
         host = f"[{host}]"
@@ -65,4 +81,5 @@ def safe_target(target: str) -> str:
     except ValueError:
         # A malformed port cannot be read; the credential-free host still stands.
         pass
-    return urlunsplit((parsed.scheme, host, parsed.path, "", ""))
+    path = parsed.path if "@" not in parsed.path else f"/{REDACTED}"
+    return urlunsplit((parsed.scheme, host, path, "", ""))

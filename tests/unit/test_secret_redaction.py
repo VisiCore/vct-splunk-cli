@@ -142,6 +142,37 @@ def test_ordinary_key_names_are_left_alone(key: str) -> None:
     assert not redact.is_secret_key(key)
 
 
+@pytest.mark.parametrize(
+    "target",
+    [
+        f"http://admin:{URL_PASSWORD}@",
+        f"admin:{URL_PASSWORD}@sh.corp",
+        f"http://admin:{URL_PASSWORD}@[",
+        f"https://admin:{URL_PASSWORD}@sh.corp:8089/x?y=z",
+        # A slash ends the authority, so this lands in the path, where
+        # stripping the userinfo never reaches it.
+        f"https://sh.corp/x:{URL_PASSWORD}@elsewhere:8089",
+    ],
+)
+def test_a_malformed_target_is_replaced_rather_than_echoed(target: str) -> None:
+    """A target that does not parse as intended still never reveals its credential.
+
+    `SPLUNK_URL` is printed before anything validates it, so these arrive as
+    typed — a missing scheme, a truncated authority, an unterminated IPv6
+    literal, a stray slash. Each once came back verbatim, or raised with the
+    value in the traceback.
+    """
+    assert URL_PASSWORD not in redact.safe_target(target)
+
+
+@pytest.mark.parametrize(
+    "target", ["", "sh.corp:8089", "localhost:8089", "https://sh.corp:8089/services"]
+)
+def test_a_target_without_credentials_is_left_readable(target: str) -> None:
+    """Failing closed must not blank out an ordinary target in an error message."""
+    assert redact.safe_target(target) == target
+
+
 def test_no_command_prints_url_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
     """A credentialed SPLUNK_URL never reaches output, from any command.
 

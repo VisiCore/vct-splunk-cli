@@ -32,10 +32,27 @@ Continuous integration runs the same hook set in one command, which you can too:
 pre-commit run --all-files
 ```
 
-Four more test groups run against a live server, a live Splunk Cloud stack, or
-Splunk's published API description. Each is off until you switch it on.
-[tests/TESTING.md](./tests/TESTING.md) gives every group its exact variables,
-its exact command, and the container setup the destructive write lane needs.
+Five more test groups run against a live server, a live Splunk Cloud stack,
+Splunk's published API description, or a fuzzer. Each is off until you switch it
+on. [tests/TESTING.md](./tests/TESTING.md) gives every group its exact
+variables, its exact command, and the container setup the destructive write lane
+needs.
+
+## If you change a dependency
+
+Install with `pip install -e ".[dev]"` as above — that has not changed. But CI
+installs from `requirements-ci.txt`, a hash-pinned lock, so that a replaced
+release on PyPI cannot change what CI runs. After editing dependencies in
+`pyproject.toml`, regenerate it, or CI keeps resolving the old versions:
+
+```bash
+uv pip compile requirements-ci.in --generate-hashes \
+  --no-emit-package vct-splunk-cli --python-version 3.14 -o requirements-ci.txt
+```
+
+`requirements-fuzz.txt` is the same idea for the fuzz job; its header carries
+its own command. Both `.in` files list `.`, so version bounds stay declared once
+in `pyproject.toml`.
 
 ## Project layout
 
