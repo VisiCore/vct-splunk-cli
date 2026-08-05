@@ -5,7 +5,7 @@ checks every change must pass, and how review is assigned.
 
 ## Development setup
 
-Setup needs nothing beyond Python 3.10 or newer — `venv` and `pip` are part of
+Setup needs nothing beyond Python 3.9 or newer — `venv` and `pip` are part of
 the standard library.
 
 ```bash

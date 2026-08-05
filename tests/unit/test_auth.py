@@ -9,6 +9,7 @@ import httpx
 import pytest
 from click.testing import CliRunner
 
+from conftest import cli_runner
 from vct_splunk.cli import cli
 from vct_splunk.core import auth as core
 from vct_splunk.core.errors import APIError, AuthError
@@ -114,7 +115,7 @@ def test_auth_login_echoes_session_key(monkeypatch):
     monkeypatch.setenv("SPLUNK_USERNAME", "admin")
     monkeypatch.setenv("SPLUNK_PASSWORD", "secret")
     monkeypatch.setattr("vct_splunk.commands.auth.core.login", lambda *a, **k: "SK-FROM-LOGIN")
-    result = CliRunner().invoke(cli, ["auth", "login", "--output", "json"])
+    result = cli_runner().invoke(cli, ["auth", "login", "--output", "json"])
     assert result.exit_code == 0
     assert '"session_key": "SK-FROM-LOGIN"' in result.output
     assert "export SPLUNK_SESSION_KEY" not in result.stderr
@@ -230,6 +231,6 @@ def test_non_utf8_profile_is_clean_cli_error(tmp_path, monkeypatch):
     cfgfile = tmp_path / "config"
     cfgfile.write_bytes(b"[prod]\nurl = \xff\n")
     monkeypatch.setenv("VCT_SPLUNK_CONFIG", str(cfgfile))
-    result = CliRunner().invoke(cli, ["inspect", "--profile", "prod", "--output", "json"])
+    result = cli_runner().invoke(cli, ["inspect", "--profile", "prod", "--output", "json"])
     assert result.exit_code == 2
     assert json.loads(result.stderr)["error"]["code"] == "usage_error"

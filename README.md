@@ -21,7 +21,7 @@ agents and humans alike.
 [acs]: https://github.com/VisiCore/vct-splunk-cli/actions/workflows/acs-contract.yml
 [acs-badge]: https://github.com/VisiCore/vct-splunk-cli/actions/workflows/acs-contract.yml/badge.svg
 [license-badge]: https://img.shields.io/badge/License-MIT-yellow.svg
-[python-badge]: https://img.shields.io/badge/python-3.10%E2%80%933.14-blue.svg
+[python-badge]: https://img.shields.io/badge/python-3.9%E2%80%933.14-blue.svg
 [ruff-badge]: https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json
 [pyright-badge]: https://microsoft.github.io/pyright/img/pyright_badge.svg
 [precommit-badge]: https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white
@@ -44,7 +44,7 @@ first, asks before acting, and records what it did.
 
 You need two things.
 
-1. **Python 3.10 or newer.** Check with `python3 --version`. If that fails or
+1. **Python 3.9 or newer.** Check with `python3 --version`. If that fails or
    shows an older version, install Python from [python.org](https://www.python.org/downloads/).
    Nothing else is required — the `venv` and `pip` tools used below come with
    Python.
