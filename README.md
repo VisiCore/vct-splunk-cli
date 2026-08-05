@@ -245,11 +245,13 @@ list processes. (`auth login` takes `--username`, which is not a secret; it
 reads the password from the environment or a no-echo prompt.) The tool writes
 no credential to disk.
 
-Secret values in a server's reply are removed before you see them — Event
-Collector tokens in a listing, for example. Two commands are deliberate
-exceptions, because handing you a new secret is the whole point of running
-them: `auth login` prints the session key it just created, and `hec rotate`
-prints the token it just minted. Neither value is written to the audit log.
+Secret values in a server's reply are replaced with `<redacted>` before you see
+them, so listing Event Collector tokens shows you which ones exist without
+printing any of them. Three commands are deliberate exceptions, because handing
+you a new secret is the whole point of running them: `auth login` prints the
+session key it just created, `hec rotate` prints the token it regenerated, and
+`hec-token create` prints the token it just created. None of those values is
+written to the audit log.
 
 To report a vulnerability, see [SECURITY.md](./SECURITY.md). Please do not open
 a public issue for one.

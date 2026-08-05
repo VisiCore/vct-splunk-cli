@@ -20,6 +20,7 @@ from .client import SplunkClient
 from .errors import NotFoundError
 from .namespace import ns_path
 from .path import absolute_path_segment, path_segment
+from .redact import redact_secrets
 
 Verb = Literal["list", "get", "create", "update", "delete", "enable", "disable"]
 FieldType = Literal["str", "int", "float", "bool"]
@@ -114,7 +115,9 @@ class CrudResource:
         data = self._body(fields, sets)
         self.validate_name(name)
         data["name"] = name
-        return self._unwrap(client.write("POST", self._base(owner, app), data))
+        # A create can mint a credential (an HEC token), and the caller needs the
+        # value exactly once. Every other path redacts.
+        return self._unwrap(client.write("POST", self._base(owner, app), data), reveal_secrets=True)
 
     def update(
         self,
@@ -183,14 +186,20 @@ class CrudResource:
         data.update(sets or {})
         return data
 
-    def _unwrap(self, result: dict[str, Any]) -> dict[str, Any]:
+    def _unwrap(self, result: dict[str, Any], *, reveal_secrets: bool = False) -> dict[str, Any]:
         if result.get("dry_run"):
             return result
         entries = result.get("entry") or []
-        return self._out(entries[0]) if entries else result
+        return self._out(entries[0], reveal_secrets=reveal_secrets) if entries else result
 
-    def _out(self, entry: dict[str, Any]) -> dict[str, Any]:
+    def _out(self, entry: dict[str, Any], *, reveal_secrets: bool = False) -> dict[str, Any]:
         content = entry.get("content") or {}
+        if not reveal_secrets:
+            # Splunk returns secrets in ordinary reads -- an HTTP Event Collector
+            # input carries its own token -- so browsing a resource would print
+            # every credential it holds. Only a command whose purpose is to mint
+            # one passes reveal_secrets.
+            content = redact_secrets(content)
         acl = entry.get("acl") or {}
         # The name leads (first table column / JSON key); reassigning it after
         # the content merge keeps the entry name authoritative over any content

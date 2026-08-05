@@ -1,9 +1,9 @@
 """Tests for the transparent Cloud/Enterprise backend + the read-only ACS slice.
 
 The backend is deduced from SPLUNK_URL (a ``*.splunkcloud.com`` host is Cloud);
-the user sees one flat command surface. Cloud certification is deferred (no live
-canary), so these use a mocked transport rather than recorded cassettes. The
-public-spec test verifies the operation declarations against Splunk's OpenAPI.
+the user sees one flat command surface. These use a mocked transport rather than
+recorded cassettes; `test_acs_loopback.py` covers the same path over a real
+socket, and the public-spec test checks the declarations against Splunk's OpenAPI.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import pytest
 from click.testing import CliRunner
 
 from vct_splunk.cli import cli
-from vct_splunk.core import backends
+from vct_splunk.core import backends, redact
 from vct_splunk.core.acs import operations
 from vct_splunk.core.acs.client import AcsClient, AcsConfig, acs_config_from_env
 from vct_splunk.core.client import ClientConfig, SplunkClient
@@ -97,7 +97,7 @@ def test_acs_rejects_missing_or_malformed_envelope(body):
         operations.list_cloud_roles(_acs(lambda req: httpx.Response(200, json=body)))
 
 
-def test_acs_hec_tokens_are_removed_at_operation_boundary():
+def test_acs_hec_tokens_are_redacted_at_operation_boundary():
     result = operations.list_hec_tokens(
         _acs(
             lambda req: httpx.Response(
@@ -112,7 +112,11 @@ def test_acs_hec_tokens_are_removed_at_operation_boundary():
         )
     )
 
-    assert result == [{"spec": {"name": "one"}}, {"spec": {"name": "two"}}]
+    # The key survives so a caller can see the field exists; the value does not.
+    assert result == [
+        {"spec": {"name": "one"}, "token": redact.REDACTED},
+        {"spec": {"name": "two", "token": redact.REDACTED}},
+    ]
     assert "secret" not in json.dumps(result)
 
 
@@ -278,27 +282,9 @@ def test_index_list_routes_to_rest_on_enterprise(monkeypatch):
 
 
 # --- Unsupported operations stop cleanly -------------------------------------
-
-
-def test_write_on_cloud_stops_with_unsupported_backend(monkeypatch):
-    monkeypatch.setenv("SPLUNK_URL", CLOUD_URL)
-    monkeypatch.setenv("SPLUNK_ACS_TOKEN", "T")
-    result = CliRunner().invoke(cli, ["index", "create", "x", "--yes", "--output", "json"])
-    assert result.exit_code == 4
-    assert "unsupported_backend" in result.output
-    assert "Splunk Cloud" in result.output
-
-
-def test_factory_write_on_cloud_stops_too(monkeypatch):
-    # The Cloud write guard sits in the shared write path, so every generated
-    # group refuses as well — not just index.
-    monkeypatch.setenv("SPLUNK_URL", CLOUD_URL)
-    monkeypatch.setenv("SPLUNK_APP", "my_app")
-    result = CliRunner().invoke(
-        cli, ["macro", "create", "m1", "--set", "definition=x", "--yes", "--output", "json"]
-    )
-    assert result.exit_code == 4
-    assert "unsupported_backend" in result.output
+#
+# Cloud write refusal is proved for every mutation in test_cloud_write_refusal.py;
+# spot checks here would only restate a subset of it.
 
 
 # --- `inspect` reports the deduced backend (no --backend selector) -----------

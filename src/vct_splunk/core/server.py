@@ -6,8 +6,7 @@ from typing import Any
 
 from .client import SplunkClient
 from .errors import APIError, UsageError
-
-_REDACTED = "<redacted>"
+from .redact import redact_secrets
 
 
 def get_server_info(client: SplunkClient) -> dict[str, Any]:
@@ -42,7 +41,7 @@ def get_settings(client: SplunkClient) -> dict[str, Any]:
     body = client.get("/services/server/settings/settings")
     entries = body.get("entry") or []
     content = entries[0].get("content") or {} if entries else {}
-    return _redact_settings(content)
+    return redact_secrets(content)
 
 
 def set_settings(client: SplunkClient, settings: dict[str, Any]) -> dict[str, Any]:
@@ -50,30 +49,9 @@ def set_settings(client: SplunkClient, settings: dict[str, Any]) -> dict[str, An
     try:
         result = client.write("POST", "/services/server/settings/settings", settings)
     except APIError as exc:
-        raise APIError(
-            exc.message, status=exc.status, details=_redact_settings(exc.details)
-        ) from exc
+        raise APIError(exc.message, status=exc.status, details=redact_secrets(exc.details)) from exc
     if result.get("dry_run"):
-        return _redact_settings(result)
+        return redact_secrets(result)
     entries = result.get("entry") or []
     content = entries[0].get("content") or {} if entries else result
-    return _redact_settings(content)
-
-
-def _redact_settings(value: Any) -> Any:
-    """Recursively replace secret-bearing server-setting values."""
-    if isinstance(value, dict):
-        return {
-            key: _REDACTED if _secret_setting(key) else _redact_settings(item)
-            for key, item in value.items()
-        }
-    if isinstance(value, list):
-        return [_redact_settings(item) for item in value]
-    return value
-
-
-def _secret_setting(key: object) -> bool:
-    normalized = str(key).casefold().replace("_", "").replace("-", "")
-    return any(
-        marker in normalized for marker in ("pass4symmkey", "password", "passwd", "secret", "token")
-    )
+    return redact_secrets(content)

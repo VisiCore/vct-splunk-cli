@@ -48,7 +48,12 @@ def _parse_doc(data: str) -> dict[str, Any]:
 def records(ctx, collection, query, limit) -> None:
     """List records in a collection (use --query/--limit to narrow)."""
     path_segment(collection, label="collection")
-    owner, app = resolve_ns(ctx.owner, ctx.app, for_write=True)
+    owner, app = resolve_ns(
+        ctx.owner,
+        ctx.app,
+        for_write=True,
+        reason="Reading a KV store collection needs the app that owns it.",
+    )
     with ctx.client() as c:
         data = core.list_records(c, collection, owner=owner, app=app, query=query, limit=limit)
     out.emit(data, ctx.output_mode, ctx.meta())
@@ -62,7 +67,12 @@ def get(ctx, collection, key) -> None:
     """Show one record by its _key."""
     path_segment(collection, label="collection")
     path_segment(key, label="record key")
-    owner, app = resolve_ns(ctx.owner, ctx.app, for_write=True)
+    owner, app = resolve_ns(
+        ctx.owner,
+        ctx.app,
+        for_write=True,
+        reason="Reading a KV store collection needs the app that owns it.",
+    )
     with ctx.client() as c:
         data = core.get_record(c, collection, key, owner=owner, app=app)
     out.emit(data, ctx.output_mode, ctx.meta())

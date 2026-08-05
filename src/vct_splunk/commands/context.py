@@ -30,6 +30,7 @@ from ..core.backends import deduce_backend
 from ..core.client import SplunkClient, config_from_env
 from ..core.errors import SplunkError
 from ..core.profiles import load_profile
+from ..core.redact import safe_target
 from . import output as out
 
 if TYPE_CHECKING:
@@ -125,7 +126,7 @@ class Ctx:
         Right now this is just the target Splunk URL, so a piece of output can be
         traced back to the instance it came from.
         """
-        return {"target": self.base_url}
+        return {"target": safe_target(self.base_url or "")}
 
 
 def command(fn: Callable) -> Callable:

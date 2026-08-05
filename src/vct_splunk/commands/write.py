@@ -14,11 +14,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from typing import Any
-from urllib.parse import urlsplit, urlunsplit
 
 from ..core import audit
 from ..core.client import SplunkClient, config_from_env
 from ..core.errors import UnsupportedBackendError
+from ..core.redact import safe_target
 from . import output as out
 
 
@@ -50,7 +50,7 @@ def do_write(
     # audit_event["action"] is "<resource>.<verb>", e.g. "index.create".
     resource, _, verb = str(audit_event.get("action", "")).partition(".")
     refuse_cloud_write(ctx, resource, verb)
-    target = _safe_target(
+    target = safe_target(
         target or config_from_env(ctx.base_url, profile=getattr(ctx, "profile", None)).base_url
     )
     out.confirm_write(ctx, action, target)
@@ -72,19 +72,3 @@ def refuse_cloud_write(ctx: Any, resource: str, verb: str) -> None:
     """
     if getattr(ctx, "backend", "enterprise") == "cloud":
         raise UnsupportedBackendError(resource or "this resource", verb or "write", "cloud")
-
-
-def _safe_target(target: str) -> str:
-    """Remove URL credentials and non-target components before display or audit."""
-    parsed = urlsplit(target)
-    if not parsed.hostname:
-        return target
-    host = parsed.hostname
-    if ":" in host and not host.startswith("["):
-        host = f"[{host}]"
-    try:
-        if parsed.port is not None:
-            host = f"{host}:{parsed.port}"
-    except ValueError:
-        return urlunsplit((parsed.scheme, host, parsed.path, "", ""))
-    return urlunsplit((parsed.scheme, host, parsed.path, "", ""))

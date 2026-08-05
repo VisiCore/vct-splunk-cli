@@ -21,7 +21,7 @@
         # and CI — a contributor without Nix runs exactly the same thing.
         default = pkgs.mkShell {
           packages = [
-            pkgs.python313
+            pkgs.python314
             pkgs.ruff
           ];
           shellHook = ''
