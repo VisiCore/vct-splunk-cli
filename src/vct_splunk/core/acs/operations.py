@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..errors import APIError
+from ..redact import redact_secrets
 from .client import AcsClient
 
 # ACS read paths and their official success envelopes. This is the runtime
@@ -54,18 +55,7 @@ def _list(client: AcsClient, path: str, envelope: str) -> list[dict[str, Any]]:
         page = body[envelope]
         if not all(isinstance(item, dict) for item in page):
             raise APIError(f"ACS response contains malformed items in {envelope!r}.")
-        output.extend(_without_tokens(item) for item in page)
+        output.extend(redact_secrets(item) for item in page)
         if len(page) < 100:
             return output
         offset += len(page)
-
-
-def _without_tokens(value: Any) -> Any:
-    """Remove token fields before HEC data leaves the ACS operation boundary."""
-    if isinstance(value, dict):
-        return {
-            key: _without_tokens(item) for key, item in value.items() if key.casefold() != "token"
-        }
-    if isinstance(value, list):
-        return [_without_tokens(item) for item in value]
-    return value

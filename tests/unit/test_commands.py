@@ -525,7 +525,9 @@ def test_saved_search_run_dispatches_with_times(cli_env, patch_client):
             "saved-search",
             "run",
             "nightly",
+            # Firing alert actions is a gated write; --yes is the scripted form.
             "--trigger-actions",
+            "--yes",
             "--earliest",
             "-1h",
             "--app",

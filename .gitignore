@@ -12,12 +12,13 @@ dist/
 *.whl
 *.tar.gz
 
-# Virtual environments. No trailing slash: a pattern ending in `/` matches a
-# directory only, so a `.venv` symlink -- the usual way to share one
-# environment across git worktrees -- would slip past `git add -A`.
-.venv
-venv
-ENV
+# Virtual environments. `.venv` carries no trailing slash on purpose: a pattern
+# ending in `/` matches a directory only, so a `.venv` symlink -- the usual way
+# to share one environment across git worktrees -- would slip past `git add -A`.
+# It is anchored so it cannot shadow a file of that name deeper in the tree.
+/.venv
+venv/
+ENV/
 
 # uv. This repo installs with stdlib `venv` + `pip`; a lock file from a local
 # uv run is not part of the build and must not be committed.
@@ -31,8 +32,11 @@ uv.lock
 .env.*
 !.env.example
 
-# direnv
+# direnv. A machine-local `.envrc.local` is the conventional place for settings
+# that must never leave one machine, so it is ignored here rather than left to
+# each contributor to remember.
 .direnv/
+/.envrc.local
 
 # Test & coverage
 .pytest_cache/

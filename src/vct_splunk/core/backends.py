@@ -87,8 +87,6 @@ def inspect_report(url: str | None = None) -> dict[str, Any]:
     if backend == "cloud":
         report["stack"] = cloud_stack_from_url(url)
         report["note"] = (
-            "Cloud/ACS coverage is read-only and not yet certified: the canary "
-            "workflow exists, but no live Splunk Cloud stack is configured for it "
-            "to run against."
+            "Cloud/ACS coverage is read-only and not yet certified against a live stack."
         )
     return report

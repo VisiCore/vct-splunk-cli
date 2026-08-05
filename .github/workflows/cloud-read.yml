@@ -32,6 +32,8 @@ jobs:
       SPLUNK_TOKEN: ${{ secrets.SPLUNK_TOKEN }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       # The secrets context is not available to a job-level `if`, so this is a
       # step that reports what can be certified rather than a skipped job.

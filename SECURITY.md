@@ -25,13 +25,23 @@ The latest release on `main` receives security fixes. Older versions do not.
   prompt.
 - **Credentials are never written to disk by this tool.** It reads them, uses
   them for the current invocation, and forgets them.
-- **Secret-bearing response fields are removed before data leaves an
-  operation.** HTTP Event Collector tokens in a listing, for example, are
-  stripped inside the ACS operation, so no listing can print one.
-- **Two commands return a secret on purpose,** because minting one is what they
-  do: `auth login` prints the session key it created, and `hec rotate` prints
-  the token it minted. Both values go to standard output only — never to the
-  audit log, which records the action and the object name.
+- **Secret-bearing response fields are replaced before data leaves an
+  operation.** Splunk returns secrets inside ordinary reads — an HTTP Event
+  Collector input carries its own token, a server setting carries
+  `pass4SymmKey`. Whether a field is secret is decided by its name, in one
+  place (`core/redact.py`), and applied to every named read command on both
+  backends. The key survives as `<redacted>` so you can still see the field
+  exists, and a field Splunk adds later is covered the day it appears.
+- **`api get` is the one exception, by design.** It is a raw escape hatch that
+  returns the endpoint's body verbatim, so it can show a stored secret. It
+  stays verbatim on purpose: redacting it would corrupt the round-trip that
+  makes an escape hatch useful. Prefer the named command when one exists.
+- **Three commands return a secret on purpose,** because minting one is what
+  they do: `auth login` prints the session key it created, `hec rotate` prints
+  the token it regenerated, and `hec-token create` prints the token it just
+  created — you cannot configure a sender without it. Those values go to
+  standard output only, never to the audit log, which records the action and
+  the object name. Every other named command redacts.
 - **TLS verification is on by default.** `SPLUNK_CA_BUNDLE` points at your own
   certificate authority. `SPLUNK_VERIFY=false` disables verification entirely
   and exists only for laboratory use.
@@ -54,9 +64,12 @@ never falls back to guessing an endpoint.
 - **Two runtime dependencies:** `click` and `httpx`. Every added package is
   both maintenance burden and attack surface, so the list does not grow without
   a written case that the standard library cannot do the job.
-- Third-party GitHub Actions are pinned to full commit SHAs.
+- Every GitHub Actions reference is pinned to a full commit SHA — third-party
+  actions and reusable workflows alike. A branch or tag can be repointed at new
+  code after review; a commit cannot.
 - Workflows declare least-privilege `permissions:` blocks.
-- Every pull request runs CodeQL, `zizmor` workflow-security analysis, and
+- Every pull request runs CodeQL (GitHub code scanning default setup, so there
+  is no workflow file for it), `zizmor` workflow-security analysis, and
   dependency review that fails on moderate or higher severity.
 - [OpenSSF Scorecard](https://github.com/VisiCore/vct-splunk-cli/actions/workflows/scorecard.yml)
   audits these practices weekly and publishes the result.

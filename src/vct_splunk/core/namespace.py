@@ -49,7 +49,9 @@ def ns_path(suffix: str, *, owner: str, app: str) -> str:
     )
 
 
-def resolve_ns(owner: str | None, app: str | None, *, for_write: bool) -> tuple[str, str]:
+def resolve_ns(
+    owner: str | None, app: str | None, *, for_write: bool, reason: str | None = None
+) -> tuple[str, str]:
     """Resolve ``(owner, app)`` for a namespaced request, applying the safe policy.
 
     Reads (``for_write=False``) default to the ``-`` wildcard for both, so a
@@ -68,13 +70,21 @@ def resolve_ns(owner: str | None, app: str | None, *, for_write: bool) -> tuple[
     Returns:
         The resolved ``(owner, app)`` pair.
 
+    Args:
+        reason: Overrides the "this write needs an app" wording. A KV store read
+            also requires an explicit app -- Splunk does not serve a wildcarded
+            collection -- and telling that caller an object would be "created"
+            describes the wrong operation.
+
     Raises:
-        UsageError: For a write with no app.
+        UsageError: When an explicit app is required and none was given.
     """
     if for_write:
         if not app:
             raise UsageError(
-                "This write needs an app. Pass --app NAME (or set SPLUNK_APP) so the "
+                f"{reason} Pass --app NAME (or set SPLUNK_APP)."
+                if reason
+                else "This write needs an app. Pass --app NAME (or set SPLUNK_APP) so the "
                 "object is created in a real app instead of defaulting to 'search'."
             )
         return (owner or SHARED_OWNER, app)

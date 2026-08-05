@@ -6,6 +6,24 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+- Stop printing credentials in ordinary reads. Splunk returns secrets inside
+  normal responses -- an HTTP Event Collector input carries its own token, a
+  server setting carries `pass4SymmKey` -- so `hec-token list` and `hec-token
+  get` printed every token in full. Secret fields are now replaced with
+  `<redacted>` by one rule, applied to every read on both backends and decided
+  by field name, so a field Splunk adds later is covered when it appears. The
+  three commands whose purpose is to mint a credential (`auth login`,
+  `hec rotate`, `hec-token create`) still return it.
+- Gate `saved-search run --trigger-actions`. Firing a saved search's alert
+  actions can send email, call a webhook, or run a script on the server, so it
+  now confirms, requires `--yes` in a script, and is recorded in the audit log.
+  A plain dispatch creates only a job and stays ungated.
+- Remove URL credentials everywhere the target is echoed: response metadata,
+  dry-run previews, `auth status`, and transport error messages. Prompts and
+  the audit log already stripped them. A test now sweeps every command rather
+  than checking the places someone thought of.
+- Say what an operation needs: a KV store read that lacks an app no longer
+  reports that a write needs one.
 - Strip token fields from every Splunk Cloud read rather than from the one
   listing known to return them, so no ACS response can carry a secret out —
   including from an endpoint Splunk adds later.

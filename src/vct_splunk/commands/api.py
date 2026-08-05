@@ -22,7 +22,13 @@ def api() -> None:
 )
 @command
 def get(ctx, path, query) -> None:
-    """GET any /services/... endpoint and print the JSON."""
+    """GET any /services/... endpoint and print the JSON, exactly as sent.
+
+    This is a raw escape hatch, so it does not redact. A named command hides
+    secret fields; this one shows the body verbatim, which is the point of an
+    escape hatch and means it can print a stored credential. Prefer the named
+    command when one exists.
+    """
     with ctx.client() as c:
         data = core.api_get(c, path, _parse_query(query))
     out.emit(data, ctx.output_mode, ctx.meta())

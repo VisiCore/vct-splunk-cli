@@ -17,6 +17,7 @@ import httpx
 from . import auth
 from .errors import APIError, AuthError, NotFoundError, TransportError, UsageError
 from .profiles import load_profile, require_private_profile
+from .redact import safe_target
 
 _RETRY_STATUS = {429, 503}
 _MAX_RETRIES = 3
@@ -164,7 +165,7 @@ class SplunkClient:
             return {
                 "dry_run": True,
                 "request": {"method": method, "path": "/" + path.lstrip("/"), "body": data},
-                "target": self.config.base_url,
+                "target": safe_target(self.config.base_url),
             }
         return self._request(method, path, data=data)
 
@@ -180,7 +181,7 @@ class SplunkClient:
             return {
                 "dry_run": True,
                 "request": {"method": method, "path": "/" + path.lstrip("/"), "body": body},
-                "target": self.config.base_url,
+                "target": safe_target(self.config.base_url),
             }
         return self._request(method, path, json_body=body)
 
@@ -223,7 +224,7 @@ class SplunkClient:
                 )
             except httpx.HTTPError as exc:
                 raise TransportError(
-                    f"Could not reach Splunk at {self.config.base_url}: {exc}"
+                    f"Could not reach Splunk at {safe_target(self.config.base_url)}: {exc}"
                 ) from exc
             if resp.status_code in _RETRY_STATUS and attempt < _MAX_RETRIES:
                 time.sleep(_retry_after(resp, attempt))

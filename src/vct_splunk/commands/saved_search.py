@@ -18,6 +18,7 @@ from . import output as out
 from .context import command
 from .factory import build_group
 from .registry import SAVED_SEARCH
+from .write import do_write
 
 saved_search = build_group(SAVED_SEARCH)
 
@@ -31,8 +32,14 @@ saved_search = build_group(SAVED_SEARCH)
 def run(ctx, name, trigger_actions, earliest, latest) -> None:
     """Dispatch a saved search and return the new job's SID.
 
-    Dispatching creates a server-side job like ``search run``; it is not a config
-    change, so it is not gated. ``--dry-run`` previews the request instead.
+    A plain dispatch creates a server-side job like ``search run``. It changes no
+    configuration, so it is not gated; ``--dry-run`` previews the request.
+
+    ``--trigger-actions`` is different. It fires the search's alert actions, which
+    can send email, call a webhook, or run a script on the server -- effects that
+    reach outside Splunk and cannot be undone. That form goes through the same
+    gate as any other mutation: confirmed on a terminal, ``--yes`` in a script,
+    and recorded in the audit log.
 
     Requires an app: Splunk rejects a dispatch POST to a wildcarded namespace
     ("Cannot edit/create a saved search for wildcarded users or applications"),
@@ -58,8 +65,9 @@ def run(ctx, name, trigger_actions, earliest, latest) -> None:
         }
         out.emit(preview, ctx.output_mode, ctx.meta())
         return
-    with ctx.client() as c:
-        data = core.dispatch_saved_search(
+
+    def dispatch(c):
+        return core.dispatch_saved_search(
             c,
             name,
             owner=owner,
@@ -68,4 +76,18 @@ def run(ctx, name, trigger_actions, earliest, latest) -> None:
             earliest=earliest,
             latest=latest,
         )
+
+    if trigger_actions:
+        data = do_write(
+            ctx,
+            action=(
+                f"dispatch saved search {name!r} in app {app!r} and fire its alert "
+                "actions (this can send email, call a webhook, or run a script)"
+            ),
+            audit_event={"action": "saved-search.run", "name": name, "app": app},
+            run=dispatch,
+        )
+    else:
+        with ctx.client() as c:
+            data = dispatch(c)
     out.emit(data, ctx.output_mode, ctx.meta())
