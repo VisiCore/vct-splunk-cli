@@ -31,6 +31,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   hook revisions, the ruff and pyright version floors, and the Nix input the
   development shell resolves. The shell now provides the same ruff the hook set
   pins, instead of whatever a stale input happened to resolve to.
+- Continuous integration installs the project with `venv` and `pip` from the
+  standard library, the same commands the documentation gives contributors,
+  instead of a separate installer. The lint, format, and type gate runs
+  `pre-commit` directly. The install path users are told to use is now the one
+  that is tested on every pull request, and the project depends on no build tool
+  beyond what ships with Python. Workflow-security analysis stays centralized.
 
 ### Fixed
 

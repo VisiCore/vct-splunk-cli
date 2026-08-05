@@ -28,23 +28,26 @@ jobs:
   # Keep workflow-policy enforcement centralized without instantiating the
   # unrelated Nix, Ansible, Markdown, or file-size jobs from _ci-gate.
   #
-  # Reusable workflows are pinned to a commit SHA, like every other `uses:` in
+  # The reusable workflow is pinned to a commit SHA, like every other `uses:` in
   # this repository. A branch or tag can be repointed at new code after review,
   # which would hand anything able to push to that repository code execution
   # here. Bump deliberately: resolve the new SHA with
   # `gh api repos/dryvist/.github/commits/main --jq .sha`, read the diff, then
-  # update both references below and their dated comments.
+  # update the reference below and its dated comment.
   workflow-security:
     if: github.event_name == 'pull_request'
     uses: dryvist/.github/.github/workflows/_zizmor.yml@7b9b165be9556c0228830c25246df2bde10a188e # main @ 2026-08-02
     with:
       runner_label: ubuntu-latest
 
-  # Run the floor and the latest supported Python on PRs, so a break against
-  # either end of the supported range surfaces before merge. A push to main
-  # (which occurs after a merge) runs every supported Python. This is
-  # deliberately downstream of every applicable pull-request check above.
-  python:
+  # Lint, format, and type gate. It installs with `venv` + `pip` from the
+  # standard library — the same commands CONTRIBUTING.md documents and the
+  # Enterprise job below already runs — so continuous integration exercises the
+  # install path users are told to use, and the project needs no installer of
+  # its own. `pytest` is a pre-push hook, so this stage covers hygiene, ruff,
+  # and pyright; the matrix job below owns the suite.
+  gate:
+    name: Gate
     needs: [dependency-review, workflow-security]
     if: >-
       ${{
@@ -53,16 +56,72 @@ jobs:
           (needs.dependency-review.result == 'success' &&
             needs.workflow-security.result == 'success'))
       }}
-    uses: dryvist/.github/.github/workflows/_python-ci.yml@7b9b165be9556c0228830c25246df2bde10a188e # main @ 2026-08-02
-    with:
-      python_versions: >-
-        ${{
-          github.event_name == 'push' &&
-          '["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]' ||
-          '["3.9", "3.14"]'
-        }}
-      gate_python_version: "3.14"
-      runner_label: ubuntu-latest
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install project
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -e ".[dev]"
+
+      - name: Lint, format, and type gate
+        run: .venv/bin/pre-commit run --all-files --show-diff-on-failure
+
+  # Run the floor and the latest supported Python on PRs, so a break against
+  # either end of the supported range surfaces before merge. A push to main
+  # (which occurs after a merge) runs every supported Python. This is
+  # deliberately downstream of every applicable pull-request check above.
+  test:
+    name: Test
+    needs: [dependency-review, workflow-security]
+    if: >-
+      ${{
+        !cancelled() &&
+        (github.event_name != 'pull_request' ||
+          (needs.dependency-review.result == 'success' &&
+            needs.workflow-security.result == 'success'))
+      }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: >-
+          ${{ fromJSON(
+            github.event_name == 'push' &&
+            '["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]' ||
+            '["3.9", "3.14"]'
+          ) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install project
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -e ".[dev]"
+
+      - name: Test
+        run: .venv/bin/pytest
 
   # Cost gate for the Enterprise container job: only PRs that touch code or
   # this workflow pay for a live Splunk boot. Docs-only PRs skip it, and the
@@ -137,7 +196,7 @@ jobs:
           cache: pip
 
       # `venv` and `pip` ship with Python, so this is the exact command a
-      # contributor runs locally on macOS, Linux, or Windows.
+      # contributor runs locally.
       - name: Install project
         run: |
           python -m venv .venv
@@ -228,7 +287,7 @@ jobs:
   # ============================================================================
   merge-gate:
     name: Merge Gate
-    needs: [dependency-review, workflow-security, python, changes, enterprise]
+    needs: [dependency-review, workflow-security, gate, test, changes, enterprise]
     if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-latest
     permissions:
@@ -238,7 +297,8 @@ jobs:
         uses: re-actors/alls-green@05ac9388f0aebcb5727afa17fcccfecd6f8ec5fe # release/v1
         with:
           # These jobs are conditional (pull-request-only, or paths-filtered), so
-          # a skip is a legitimate outcome and must not fail the gate. `python`
-          # is deliberately absent: it runs on every event and must succeed.
+          # a skip is a legitimate outcome and must not fail the gate. `gate` and
+          # `test` are deliberately absent: they run on every event and must
+          # succeed.
           allowed-skips: dependency-review, workflow-security, changes, enterprise
           jobs: ${{ toJSON(needs) }}
