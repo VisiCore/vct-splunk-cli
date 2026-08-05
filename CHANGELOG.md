@@ -27,6 +27,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the security scorecard, the Splunk Cloud API contract canary, the licence, and
   the supported Python range. The four that only named a tool always rendered the
   same image regardless of whether anything passed.
+- Update the development tooling to current releases: the ruff and markdownlint
+  hook revisions, the ruff and pyright version floors, and the Nix input the
+  development shell resolves. The shell now provides the same ruff the hook set
+  pins, instead of whatever a stale input happened to resolve to.
 
 ### Fixed
 

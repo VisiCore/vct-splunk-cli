@@ -41,13 +41,13 @@ repos:
       - id: detect-private-key
 
   - repo: https://github.com/DavidAnson/markdownlint-cli2
-    rev: v0.22.1
+    rev: v0.23.2
     hooks:
       - id: markdownlint-cli2
         exclude: ^CHANGELOG\.md$
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.18
+    rev: v0.16.1
     hooks:
       # `ruff-check` is the current lint hook id; bare `ruff` is a legacy alias.
       - id: ruff-check
