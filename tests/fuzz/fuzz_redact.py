@@ -61,10 +61,13 @@ def build_target(data: bytes) -> str:
     # an authority there is no host to rebuild from, which is the branch that
     # returns the target as it stands. Keeping the `@` here would send every
     # input down the userinfo rule instead and never reach it.
-    place = fdp.ConsumeIntInRange(0, 2)
-    if place == 1:
-        return f"{host}{tail}?token={SENTINEL}"
+    # Half the budget stays on the userinfo shape. These two reach the fallback
+    # quickly and so explore fewer branches; splitting evenly measurably cost
+    # coverage of the parse-and-rebuild path that the other half exercises.
+    place = fdp.ConsumeIntInRange(0, 3)
     if place == 2:
+        return f"{host}{tail}?token={SENTINEL}"
+    if place == 3:
         return f"{host}{tail}#token={SENTINEL}"
     return f"{scheme}://{user}:{SENTINEL}@{host}{tail}"
 
