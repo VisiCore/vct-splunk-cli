@@ -12,6 +12,7 @@ from __future__ import annotations
 import httpx
 
 from .errors import APIError, AuthError, TransportError
+from .redact import safe_target
 
 
 def login(
@@ -53,7 +54,7 @@ def login(
                 data={"username": username, "password": password, "output_mode": "json"},
             )
     except httpx.HTTPError as exc:
-        raise TransportError(f"Could not reach Splunk at {url}: {exc}") from exc
+        raise TransportError(f"Could not reach Splunk at {safe_target(url)}: {exc}") from exc
     if resp.status_code in {401, 403}:
         raise AuthError(f"Login failed ({resp.status_code}). Check the username and password.")
     if resp.status_code >= 400:

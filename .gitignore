@@ -32,8 +32,11 @@ uv.lock
 .env.*
 !.env.example
 
-# direnv
+# direnv. A machine-local `.envrc.local` is the conventional place for settings
+# that must never leave one machine, so it is ignored here rather than left to
+# each contributor to remember.
 .direnv/
+/.envrc.local
 
 # Test & coverage
 .pytest_cache/

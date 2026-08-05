@@ -144,6 +144,9 @@ HEC_TOKEN = Spec(
     path="/services/data/inputs/http",
     help="HTTP Event Collector tokens.",
     verbs=_CRUD_TOGGLE,
+    # Creating the token is the only way to learn its value, so the create
+    # response shows it. Every other hec-token command redacts.
+    mints_secret=True,
 )
 
 OUTPUT_SERVER = Spec(

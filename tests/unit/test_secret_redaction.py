@@ -26,6 +26,7 @@ from vct_splunk.core import redact
 from vct_splunk.core.client import ClientConfig, SplunkClient
 
 SECRET = "s3cret-token-value"
+URL_PASSWORD = "url-password-must-not-appear"
 
 
 @pytest.fixture
@@ -123,3 +124,28 @@ def test_secret_key_names_are_recognized(key: str) -> None:
 @pytest.mark.parametrize("key", ["index", "name", "disabled", "sourcetype", "maxTotalDataSizeMB"])
 def test_ordinary_key_names_are_left_alone(key: str) -> None:
     assert not redact.is_secret_key(key)
+
+
+def test_no_command_prints_url_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A credentialed SPLUNK_URL never reaches output, from any command.
+
+    The target is echoed in response metadata, dry-run previews, `auth status`,
+    and transport error messages. Sweeping the whole catalog is how a new echo
+    site gets caught, rather than each one being remembered separately.
+    """
+    from cli_catalog import CATALOG
+
+    monkeypatch.setenv("SPLUNK_URL", f"https://admin:{URL_PASSWORD}@sh.corp:8089")
+    monkeypatch.setenv("SPLUNK_TOKEN", "T")
+    monkeypatch.setenv("SPLUNK_APP", "my_app")
+
+    leaking = []
+    for case in CATALOG:
+        argv = [*case.path, *case.argvs[0]]
+        if "--dry-run" not in argv:
+            argv.append("--dry-run")
+        result = CliRunner().invoke(cli, [*argv, "--yes", "--output", "json"])
+        if URL_PASSWORD in (result.output or ""):
+            leaking.append(" ".join(case.path))
+
+    assert leaking == []

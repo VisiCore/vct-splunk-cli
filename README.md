@@ -247,7 +247,9 @@ no credential to disk.
 
 Secret values in a server's reply are replaced with `<redacted>` before you see
 them, so listing Event Collector tokens shows you which ones exist without
-printing any of them. Three commands are deliberate exceptions, because handing
+printing any of them. The exception is `api get`, the raw escape hatch, which
+returns whatever the endpoint sends so that what you read matches what is
+there — use a named command when one exists. Three commands are deliberate exceptions, because handing
 you a new secret is the whole point of running them: `auth login` prints the
 session key it just created, `hec rotate` prints the token it regenerated, and
 `hec-token create` prints the token it just created. None of those values is

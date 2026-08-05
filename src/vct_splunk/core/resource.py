@@ -66,6 +66,10 @@ class Spec:
         namespaced: True for objects under ``/servicesNS/<owner>/<app>/``.
         absolute_name: True when Splunk identifies the resource by an absolute
             server path, as monitor inputs do.
+        mints_secret: True when ``create`` produces a credential the caller cannot
+            get any other way, so its response may show it. Off for everything
+            else, including resources that *accept* a secret (a user password),
+            whose create response must not echo it back.
     """
 
     name: str
@@ -76,6 +80,7 @@ class Spec:
     out_map: dict[str, str] = field(default_factory=dict)
     namespaced: bool = False
     absolute_name: bool = False
+    mints_secret: bool = False
 
 
 class CrudResource:

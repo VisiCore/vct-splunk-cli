@@ -18,6 +18,7 @@ from typing import Any
 import httpx
 
 from ..errors import APIError, AuthError, NotFoundError, TransportError, UsageError
+from ..redact import safe_target
 
 ACS_BASE_URL = "https://admin.splunk.com"
 _STACK_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]*$")
@@ -86,7 +87,7 @@ class AcsClient:
                 resp = self._http.get(url, params=params)
             except httpx.HTTPError as exc:
                 raise TransportError(
-                    f"Could not reach ACS at {self.config.base_url}: {exc}"
+                    f"Could not reach ACS at {safe_target(self.config.base_url)}: {exc}"
                 ) from exc
             if (resp.status_code == 429 or 500 <= resp.status_code < 600) and (
                 attempt < _MAX_RETRIES

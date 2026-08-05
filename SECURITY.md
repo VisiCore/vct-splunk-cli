@@ -29,15 +29,19 @@ The latest release on `main` receives security fixes. Older versions do not.
   operation.** Splunk returns secrets inside ordinary reads — an HTTP Event
   Collector input carries its own token, a server setting carries
   `pass4SymmKey`. Whether a field is secret is decided by its name, in one
-  place (`core/redact.py`), and applied to every read on both backends. The key
-  survives as `<redacted>` so you can still see the field exists, and a field
-  Splunk adds later is covered the day it appears.
+  place (`core/redact.py`), and applied to every named read command on both
+  backends. The key survives as `<redacted>` so you can still see the field
+  exists, and a field Splunk adds later is covered the day it appears.
+- **`api get` is the one exception, by design.** It is a raw escape hatch that
+  returns the endpoint's body verbatim, so it can show a stored secret. It
+  stays verbatim on purpose: redacting it would corrupt the round-trip that
+  makes an escape hatch useful. Prefer the named command when one exists.
 - **Three commands return a secret on purpose,** because minting one is what
   they do: `auth login` prints the session key it created, `hec rotate` prints
   the token it regenerated, and `hec-token create` prints the token it just
   created — you cannot configure a sender without it. Those values go to
   standard output only, never to the audit log, which records the action and
-  the object name. Every other command that touches those resources redacts.
+  the object name. Every other named command redacts.
 - **TLS verification is on by default.** `SPLUNK_CA_BUNDLE` points at your own
   certificate authority. `SPLUNK_VERIFY=false` disables verification entirely
   and exists only for laboratory use.
