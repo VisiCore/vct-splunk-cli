@@ -37,10 +37,13 @@ def cloud_target_with_no_network(monkeypatch: pytest.MonkeyPatch) -> None:
     including a future one, and cannot be satisfied by a command that simply
     fails earlier for an unrelated reason.
     """
+    # Clear the ambient settings a developer may have exported, so the suite
+    # tests the tool rather than the machine it runs on.
+    for name in ("SPLUNK_APP", "SPLUNK_OWNER", "SPLUNK_PROFILE", "SPLUNK_ACS_BASE_URL"):
+        monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("SPLUNK_URL", "https://acme.splunkcloud.com")
     monkeypatch.setenv("SPLUNK_ACS_TOKEN", "unused")
     monkeypatch.setenv("SPLUNK_TOKEN", "unused")
-    monkeypatch.delenv("SPLUNK_ACS_BASE_URL", raising=False)
 
     def refuse(*args: object, **kwargs: object) -> object:
         raise AssertionError("a write against a Cloud target reached the network")

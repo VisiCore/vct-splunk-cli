@@ -28,13 +28,13 @@ jobs:
       SPLUNK_ACS_BASE_URL: ${{ secrets.SPLUNK_ACS_BASE_URL }}
       # splunkd credential. Without it, every read Cloud does not serve stops at
       # the credential check instead of reaching the dispatch layer, so the run
-      # would prove far less than it appears to.
+      # covers far less than it appears to. The guard below says so out loud.
       SPLUNK_TOKEN: ${{ secrets.SPLUNK_TOKEN }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       # The secrets context is not available to a job-level `if`, so this is a
-      # step that reports "nothing to certify" rather than a skipped job.
+      # step that reports what can be certified rather than a skipped job.
       - name: Check for a configured Cloud stack
         id: stack
         run: bash .github/scripts/detect-cloud-stack.sh
