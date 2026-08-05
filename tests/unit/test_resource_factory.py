@@ -25,8 +25,8 @@ GLOBAL_SPEC = Spec(
     out_map={"sizeMB": "size_mb", "color": "color"},
 )
 
-# The namespaced twin of GLOBAL_SPEC. Keeping the two identical apart from
-# `namespaced` lets one parametrized test assert a property for both.
+# A namespaced spec sharing GLOBAL_SPEC's `color` field, so one parametrized
+# test can assert a property against both a global and a namespaced resource.
 NS_SPEC = Spec(
     name="gadget",
     path="configs/conf-gadgets",

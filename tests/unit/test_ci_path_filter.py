@@ -58,10 +58,13 @@ def _covers(path: str) -> bool:
     """
     docs = shlex.quote(_expression("DOCS"))
     covered = shlex.quote(_expression("COVERED"))
-    pipeline = f"grep -vE {docs} | grep -qE {covered}"
+    pipeline = f"set -o pipefail; grep -vE {docs} | grep -qE {covered}"
     result = subprocess.run(
         ["bash", "-c", pipeline],
-        input=path,
+        # A trailing newline, because `git diff --name-only` emits one, and
+        # pipefail on, because the script sets it -- together these surface a
+        # broken pattern as an error instead of a silent "no match".
+        input=f"{path}\n",
         capture_output=True,
         text=True,
     )
