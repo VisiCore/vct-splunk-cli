@@ -6,6 +6,26 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Lower the supported Python floor to 3.9, so the CLI runs under the interpreter
+  bundled with Splunk Enterprise 9.x. Shipped code needed no change: the package
+  already uses only 3.9-compatible syntax and APIs. Declarations move
+  (`requires-python`, the ruff target, a new explicit pyright `pythonVersion`),
+  and the `pytest` dev floor drops to 8.4 because 9.x requires 3.10. Resolution
+  keeps modern versions on modern interpreters — 3.10+ still gets click 8.4 and
+  pytest 9.x.
+- Continuous integration now runs the floor as well as the latest interpreter on
+  every pull request, rather than the latest alone, so a break at either end of
+  the supported range surfaces before merge.
+
+### Fixed
+
+- Capture stderr separately in the two tests that assert a secret does not reach
+  it. Click below 8.2 folds stderr into stdout unless asked not to, and 8.2
+  removed the parameter that asks, so both assertions raised on the 3.9
+  interpreter. A single helper covers both Click versions.
+
 ## [0.3.0] - 2026-08-05
 
 - Stop printing credentials in ordinary reads. Splunk returns secrets inside

@@ -4,10 +4,25 @@ from collections.abc import Callable
 
 import httpx
 import pytest
+from click.testing import CliRunner
 
 from vct_splunk.core.client import ClientConfig, SplunkClient
 
 _TEST_URL = "https://splunk.test:8089"
+
+
+def cli_runner() -> CliRunner:
+    """Return a ``CliRunner`` that captures stderr separately on every Click.
+
+    Click below 8.2 folds stderr into stdout unless asked not to, so reading
+    ``result.stderr`` raises. Click 8.2 removed the parameter and always
+    separates. Ask for separation, and fall back when the parameter is gone.
+    Only tests that assert on stderr need this.
+    """
+    try:
+        return CliRunner(mix_stderr=False)  # type: ignore[call-arg]
+    except TypeError:
+        return CliRunner()
 
 
 def make_client(handler: Callable, *, dry_run: bool = False) -> SplunkClient:
