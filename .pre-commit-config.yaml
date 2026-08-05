@@ -18,10 +18,10 @@
 #     so pyproject.toml dev-deps are the SINGLE version authority — no rev
 #     pin to drift against.
 #
-# CI runs this same hook set via the dryvist `_ci-gate.yml` reusable workflow
-# (python_ci) — `uv run --extra dev pre-commit run --all-files`. zizmor is NOT
-# here: it runs CENTRALLY in _python-ci.yml against dryvist/.github's canonical
-# zizmor.yml (zero-copy — this repo no longer carries a zizmor.yml).
+# CI runs this same hook set via the dryvist `_python-ci.yml` reusable workflow
+# (see .github/workflows/ci.yml). zizmor is NOT here: it runs CENTRALLY via
+# `_zizmor.yml` against dryvist/.github's canonical zizmor.yml (zero-copy —
+# this repo no longer carries a zizmor.yml).
 ---
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -75,14 +75,3 @@ repos:
         pass_filenames: false
         always_run: true
         stages: [pre-push]
-
-  # OPT-IN, NON-MANDATED: Astral `ty` as a non-blocking shadow type check.
-  # `ty` is beta (<1.0) as of 2026-06 and is NOT the mandated checker (pyright
-  # is). Uncomment to gather diffs; do not let it block. Promote to mandated
-  # only at ty 1.0 GA after a clean shadow trial. KEEP IN SYNC with the ty
-  # opt-in note in nix-devenv/flake-modules/profiles/python.nix.
-  # - repo: https://github.com/astral-sh/ty-pre-commit
-  #   rev: v0.0.52
-  #   hooks:
-  #     - id: ty
-  #       verbose: true   # informational only
