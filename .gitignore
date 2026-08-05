@@ -12,10 +12,12 @@ dist/
 *.whl
 *.tar.gz
 
-# Virtual environments
-.venv/
-venv/
-ENV/
+# Virtual environments. No trailing slash: a pattern ending in `/` matches a
+# directory only, so a `.venv` symlink -- the usual way to share one
+# environment across git worktrees -- would slip past `git add -A`.
+.venv
+venv
+ENV
 
 # uv. This repo installs with stdlib `venv` + `pip`; a lock file from a local
 # uv run is not part of the build and must not be committed.
