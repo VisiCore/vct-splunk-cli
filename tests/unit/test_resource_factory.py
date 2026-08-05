@@ -25,12 +25,14 @@ GLOBAL_SPEC = Spec(
     out_map={"sizeMB": "size_mb", "color": "color"},
 )
 
+# A namespaced spec sharing GLOBAL_SPEC's `color` field, so one parametrized
+# test can assert a property against both a global and a namespaced resource.
 NS_SPEC = Spec(
     name="gadget",
     path="configs/conf-gadgets",
     help="Gadgets.",
     namespaced=True,
-    verbs=("list", "get"),
+    fields=(Field("color", key="color"),),
 )
 
 PATH_SPEC = Spec(
@@ -72,6 +74,51 @@ def test_out_map_renames_and_drops_unmapped(client_for):
     }
     rows = CrudResource(GLOBAL_SPEC).list(client_for(lambda req: httpx.Response(200, json=body)))
     assert rows[0] == {"size_mb": 1024, "color": "blue", "name": "w1"}  # 'junk' dropped
+
+
+@pytest.mark.parametrize("spec", [GLOBAL_SPEC, NS_SPEC], ids=lambda spec: spec.name)
+def test_update_never_sends_a_name(spec, client_for):
+    """An update sends only changed settings; the name stays in the URL.
+
+    Splunk merges an update server-side, and a `name` in the body would read as
+    a rename. This holds for every spec, so the engine is the place to pin it.
+    """
+    seen: dict[str, str] = {}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen["method"] = req.method
+        seen["body"] = req.content.decode()
+        return httpx.Response(200, json={"entry": [{"name": "thing", "content": {}}]})
+
+    owner = "nobody" if spec.namespaced else None
+    app = "my_app" if spec.namespaced else None
+    CrudResource(spec).update(
+        client_for(handler), "thing", fields={"color": "blue"}, owner=owner, app=app
+    )
+
+    assert seen["method"] == "POST"
+    assert "name=" not in seen["body"]
+
+
+def test_namespaced_list_surfaces_the_acl_block(client_for):
+    """A namespaced row carries its app, owner, and sharing from the acl block."""
+    body = {
+        "entry": [
+            {
+                "name": "g1",
+                "content": {},
+                "acl": {"app": "my_app", "owner": "nobody", "sharing": "app"},
+            }
+        ],
+        "paging": {"total": 1},
+    }
+    rows = CrudResource(NS_SPEC).list(
+        client_for(lambda req: httpx.Response(200, json=body)), owner="-", app="-"
+    )
+
+    assert rows[0]["app"] == "my_app"
+    assert rows[0]["owner"] == "nobody"
+    assert rows[0]["sharing"] == "app"
 
 
 def test_namespaced_base_builds_servicesns(client_for):
