@@ -87,7 +87,7 @@ def inspect_report(url: str | None = None) -> dict[str, Any]:
     if backend == "cloud":
         report["stack"] = cloud_stack_from_url(url)
         report["note"] = (
-            "Cloud/ACS coverage is read-only and not yet certified against a live stack; "
-            "confidence is capped until a real canary exists."
+            "Cloud/ACS coverage is read-only and not yet certified against a live "
+            "stack: the canary that would certify it needs a reachable one."
         )
     return report

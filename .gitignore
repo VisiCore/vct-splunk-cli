@@ -17,8 +17,12 @@ dist/
 venv/
 ENV/
 
-# uv (this repo installs with `uv pip install -e`, not the uv lock workflow)
+# uv. This repo installs with stdlib `venv` + `pip`; a lock file from a local
+# uv run is not part of the build and must not be committed.
 uv.lock
+
+# Git worktrees created beside this checkout
+.worktrees/
 
 # Environment files (keep the example)
 .env
