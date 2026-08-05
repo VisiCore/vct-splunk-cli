@@ -6,6 +6,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-05
+
 - Stop printing credentials in ordinary reads. Splunk returns secrets inside
   normal responses -- an HTTP Event Collector input carries its own token, a
   server setting carries `pass4SymmKey` -- so `hec-token list` and `hec-token
@@ -183,5 +185,6 @@ This is the 0.2.0 development line (version bumped from 0.0.1).
 - TTY-adaptive output: a table on a terminal, JSON when piped or with
   `--output json`.
 
-[Unreleased]: https://github.com/VisiCore/vct-splunk-cli/compare/v0.0.1...HEAD
+[Unreleased]: https://github.com/VisiCore/vct-splunk-cli/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/VisiCore/vct-splunk-cli/compare/v0.0.1...v0.3.0
 [0.0.1]: https://github.com/VisiCore/vct-splunk-cli/releases/tag/v0.0.1
