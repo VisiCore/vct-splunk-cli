@@ -18,6 +18,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Continuous integration now runs the floor as well as the latest interpreter on
   every pull request, rather than the latest alone, so a break at either end of
   the supported range surfaces before merge.
+- Shorten the README by a quarter and give every fact one owner. The security
+  section now points to `SECURITY.md`, which already stated the same rules more
+  precisely, so there is no second copy to drift. Examples activate the virtual
+  environment once instead of prefixing every command with a path, and the
+  platform-specific command table is gone in favour of one set of commands.
+- Reduce the README badges to those that carry a signal: continuous integration,
+  the security scorecard, the Splunk Cloud API contract canary, the licence, and
+  the supported Python range. The four that only named a tool always rendered the
+  same image regardless of whether anything passed.
 
 ### Fixed
 

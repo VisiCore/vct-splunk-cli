@@ -9,9 +9,10 @@ Setup needs nothing beyond Python 3.9 or newer — `venv` and `pip` are part of
 the standard library.
 
 ```bash
-python3 -m venv .venv                          # Windows: py -m venv .venv
-.venv/bin/python -m pip install -e ".[dev]"    # Windows: .venv\Scripts\python -m pip ...
-.venv/bin/splunk --help
+python3 -m venv .venv
+.venv/bin/python -m pip install -e ".[dev]"    # editable install with dev tools
+source .venv/bin/activate                      # puts `splunk` and the tools on your path
+splunk --help
 ```
 
 ## Before you open a PR
@@ -19,10 +20,16 @@ python3 -m venv .venv                          # Windows: py -m venv .venv
 Run the full check suite locally — all four must pass (CI runs the same):
 
 ```bash
-.venv/bin/ruff check .    # lint — never silence a rule, fix it
-.venv/bin/ruff format .   # format
-.venv/bin/pyright         # types
-.venv/bin/pytest          # unit tests (mocked; no network)
+ruff check .    # lint — never silence a rule, fix it
+ruff format .   # format
+pyright         # types
+pytest          # unit tests (mocked; no network)
+```
+
+Continuous integration runs the same hook set in one command, which you can too:
+
+```bash
+pre-commit run --all-files
 ```
 
 Four more test groups run against a live server, a live Splunk Cloud stack, or
