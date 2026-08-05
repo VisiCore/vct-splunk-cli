@@ -6,6 +6,23 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+- Strip token fields from every Splunk Cloud read rather than from the one
+  listing known to return them, so no ACS response can carry a secret out —
+  including from an endpoint Splunk adds later.
+- Refuse a write aimed at Splunk Cloud before resolving its namespace. A
+  namespaced write previously answered a Cloud target by asking for `--app`, an
+  option that could not have helped, instead of saying the operation is
+  unavailable there.
+- Prove the Splunk Cloud read and write contracts on every change without a
+  Cloud stack: reads run against a local Splunk Cloud endpoint over a real
+  connection, and every write must refuse a Cloud target without opening a
+  connection. The live canary now runs weekly and reports that there is nothing
+  to certify until a stack is configured.
+- Add a published security policy (`SECURITY.md`) with private vulnerability
+  reporting, and a weekly OpenSSF Scorecard audit of the project's security
+  practices.
+- Move the test runbooks to `tests/TESTING.md` beside the tests they run, so the
+  README stays aimed at someone installing the tool for the first time.
 - Add a single **Merge Gate** check that aggregates every CI job, so branch
   protection needs exactly one required status check and adding a job later
   never needs a protection change.
