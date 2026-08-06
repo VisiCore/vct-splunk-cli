@@ -66,23 +66,27 @@ def build_target(data: bytes) -> str:
     # authority, so the port and IPv6-bracket branches are actually reached.
     # The rest are free-form — the shape that broke this function.
     shape = fdp.ConsumeIntInRange(0, 2)
-    scheme = ("https", "http", _fuzzed(fdp, 12))[shape]
-    user = _fuzzed(fdp, 12)
-    host = "sh.corp:8089" if shape == 0 else _fuzzed(fdp, 24)
-    tail = _fuzzed(fdp, 24)
     # A credential does not only appear as userinfo. `?token=` and `#token=`
     # carry one too, and these two shapes omit `//` and `@` on purpose: without
     # an authority there is no host to rebuild from, which is the branch that
     # returns the target as it stands. Keeping the `@` here would send every
     # input down the userinfo rule instead and never reach it.
+    #
     # Half the budget stays on the userinfo shape. These two reach the fallback
     # quickly and so explore fewer branches; splitting evenly measurably cost
     # coverage of the parse-and-rebuild path that the other half exercises.
+    #
+    # Drawn before scheme/user, which the query/fragment shapes never use —
+    # consuming them anyway would waste fuzzer budget on two of every four runs.
     place = fdp.ConsumeIntInRange(0, 3)
+    host = "sh.corp:8089" if shape == 0 else _fuzzed(fdp, 24)
+    tail = _fuzzed(fdp, 24)
     if place == 2:
         return f"{host}{tail}?token={SENTINEL}"
     if place == 3:
         return f"{host}{tail}#token={SENTINEL}"
+    scheme = ("https", "http", _fuzzed(fdp, 12))[shape]
+    user = _fuzzed(fdp, 12)
     return f"{scheme}://{user}:{SENTINEL}@{host}{tail}"
 
 

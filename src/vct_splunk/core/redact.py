@@ -46,11 +46,20 @@ def redact_secrets(value: Any) -> Any:
     return value
 
 
-def _before_query(target: str) -> str:
-    """Return *target* up to the first query or fragment delimiter."""
+def _fallback(target: str) -> str:
+    """Return *target* with any credential removed, when it cannot be rebuilt.
+
+    Only reached on the rare malformed-input path, so the query/fragment split
+    is done by hand here rather than paid on every well-formed call — `urlsplit`
+    already does that split internally for the common case.
+
+    A credential can sit in a query or fragment (`?token=…`) as well as in
+    userinfo, and neither carries the `@` the userinfo rule looks for, so both
+    are dropped before that check runs.
+    """
     for delimiter in "?#":
         target = target.split(delimiter, 1)[0]
-    return target
+    return REDACTED if "@" in target else target
 
 
 def safe_target(target: str) -> str:
@@ -72,18 +81,12 @@ def safe_target(target: str) -> str:
     # A target that reaches here unvalidated may be malformed enough that
     # `urlsplit` itself rejects it — an unterminated IPv6 literal, say. Letting
     # that raise would print the offending value in the traceback.
-    #
-    # The query and fragment go first, so the fallback drops them exactly as the
-    # rebuilt target does. A credential can sit in either (`?token=…`), and
-    # neither carries the `@` the userinfo rule looks for.
-    stripped = _before_query(target)
-    fallback = REDACTED if "@" in stripped else stripped
     try:
         parsed = urlsplit(target)
     except ValueError:
-        return fallback
+        return _fallback(target)
     if not parsed.hostname:
-        return fallback
+        return _fallback(target)
     host = parsed.hostname
     if ":" in host and not host.startswith("["):
         host = f"[{host}]"

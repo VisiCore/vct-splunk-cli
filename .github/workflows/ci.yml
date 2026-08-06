@@ -194,11 +194,15 @@ jobs:
           cache: pip
 
       # Dependencies come from a hash-pinned lock, so a yanked-and-replaced
-      # release on PyPI cannot change what this job runs against a live server.
-      # The project installs separately with --no-deps: nothing resolves outside
-      # the lock. The `gate` and `test` jobs above deliberately keep resolving
-      # `.[dev]` live, because their purpose is to exercise the install path
-      # CONTRIBUTING.md documents.
+      # release on PyPI cannot change what this job runs against a live server
+      # and the credentials in its env. The project installs separately with
+      # --no-deps: nothing resolves outside the lock. The `gate` and `test`
+      # jobs above deliberately keep resolving `.[dev]` live — they carry no
+      # secrets, and their purpose is to exercise the install path
+      # CONTRIBUTING.md documents. A future job that touches a secret must be
+      # pinned regardless of whether it also needs to test that live path —
+      # don't let the two goals get conflated into "pin if it happens to be
+      # live-install-focused."
       - name: Install project
         run: |
           python -m venv .venv
