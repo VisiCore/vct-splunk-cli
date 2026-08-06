@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable
+from typing import Any
 
 import httpx
 import pytest
@@ -16,13 +18,13 @@ def cli_runner() -> CliRunner:
 
     Click below 8.2 folds stderr into stdout unless asked not to, so reading
     ``result.stderr`` raises. Click 8.2 removed the parameter and always
-    separates. Ask for separation, and fall back when the parameter is gone.
-    Only tests that assert on stderr need this.
+    separates. Ask for separation only when the installed Click still takes
+    the parameter. Only tests that assert on stderr need this.
     """
-    try:
-        return CliRunner(mix_stderr=False)  # type: ignore[call-arg]
-    except TypeError:
-        return CliRunner()
+    kwargs: dict[str, Any] = {}
+    if "mix_stderr" in inspect.signature(CliRunner.__init__).parameters:
+        kwargs["mix_stderr"] = False
+    return CliRunner(**kwargs)
 
 
 def make_client(handler: Callable, *, dry_run: bool = False) -> SplunkClient:

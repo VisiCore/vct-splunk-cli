@@ -18,8 +18,8 @@
 #     so pyproject.toml dev-deps are the SINGLE version authority — no rev
 #     pin to drift against.
 #
-# CI runs this same hook set via the dryvist `_python-ci.yml` reusable workflow
-# (see .github/workflows/ci.yml). zizmor is NOT here: it runs CENTRALLY via
+# CI runs this same hook set directly: the `gate` job in
+# .github/workflows/ci.yml. zizmor is NOT here: it runs CENTRALLY via
 # `_zizmor.yml` against dryvist/.github's canonical zizmor.yml (zero-copy —
 # this repo no longer carries a zizmor.yml).
 ---
