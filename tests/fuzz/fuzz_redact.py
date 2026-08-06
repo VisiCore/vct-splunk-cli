@@ -40,6 +40,20 @@ with atheris.instrument_imports():
 SENTINEL = "fuzz-password-must-not-survive"
 
 
+def _fuzzed(fdp: "atheris.FuzzedDataProvider", n: int) -> str:
+    """Consume up to *n* fuzzed characters, scrubbed of the sentinel itself.
+
+    libFuzzer's coverage-guided mutator extracts the sentinel as a useful byte
+    string (it shows up as a `DE:` dictionary entry in the corpus) and splices
+    it wherever bytes are consumed — including here, not only where the
+    credential is deliberately placed below. Left unscrubbed, that plants the
+    sentinel in a field like the host, which `safe_target` correctly leaves
+    visible, and the oracle then reports a leak that never happened: the
+    credential slot was never touched.
+    """
+    return fdp.ConsumeUnicodeNoSurrogates(n).replace(SENTINEL, "")
+
+
 def build_target(data: bytes) -> str:
     """Shape one candidate URL around the sentinel password.
 
@@ -52,10 +66,10 @@ def build_target(data: bytes) -> str:
     # authority, so the port and IPv6-bracket branches are actually reached.
     # The rest are free-form — the shape that broke this function.
     shape = fdp.ConsumeIntInRange(0, 2)
-    scheme = ("https", "http", fdp.ConsumeUnicodeNoSurrogates(12))[shape]
-    user = fdp.ConsumeUnicodeNoSurrogates(12)
-    host = "sh.corp:8089" if shape == 0 else fdp.ConsumeUnicodeNoSurrogates(24)
-    tail = fdp.ConsumeUnicodeNoSurrogates(24)
+    scheme = ("https", "http", _fuzzed(fdp, 12))[shape]
+    user = _fuzzed(fdp, 12)
+    host = "sh.corp:8089" if shape == 0 else _fuzzed(fdp, 24)
+    tail = _fuzzed(fdp, 24)
     # A credential does not only appear as userinfo. `?token=` and `#token=`
     # carry one too, and these two shapes omit `//` and `@` on purpose: without
     # an authority there is no host to rebuild from, which is the branch that
