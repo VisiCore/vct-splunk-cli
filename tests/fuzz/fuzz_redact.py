@@ -50,6 +50,13 @@ def _fuzzed(fdp: "atheris.FuzzedDataProvider", n: int) -> str:
     sentinel in a field like the host, which `safe_target` correctly leaves
     visible, and the oracle then reports a leak that never happened: the
     credential slot was never touched.
+
+    Scrubbing each field alone is not enough where two fuzzed fields sit
+    directly adjacent with nothing fixed between them — the mutator can split
+    the sentinel across that boundary, so neither field contains the whole
+    string on its own but their join does. `build_target` scrubs `host` and
+    `tail` together for exactly that reason; this per-field scrub still
+    matters for `scheme` and `user`, where the sentinel can land whole.
     """
     return fdp.ConsumeUnicodeNoSurrogates(n).replace(SENTINEL, "")
 
@@ -79,15 +86,18 @@ def build_target(data: bytes) -> str:
     # Drawn before scheme/user, which the query/fragment shapes never use —
     # consuming them anyway would waste fuzzer budget on two of every four runs.
     place = fdp.ConsumeIntInRange(0, 3)
-    host = "sh.corp:8089" if shape == 0 else _fuzzed(fdp, 24)
-    tail = _fuzzed(fdp, 24)
+    host = "sh.corp:8089" if shape == 0 else fdp.ConsumeUnicodeNoSurrogates(24)
+    tail = fdp.ConsumeUnicodeNoSurrogates(24)
+    # host and tail are drawn raw and joined before scrubbing, not scrubbed as
+    # separate fields — see the note on _fuzzed() above.
+    authority = (host + tail).replace(SENTINEL, "")
     if place == 2:
-        return f"{host}{tail}?token={SENTINEL}"
+        return f"{authority}?token={SENTINEL}"
     if place == 3:
-        return f"{host}{tail}#token={SENTINEL}"
+        return f"{authority}#token={SENTINEL}"
     scheme = ("https", "http", _fuzzed(fdp, 12))[shape]
     user = _fuzzed(fdp, 12)
-    return f"{scheme}://{user}:{SENTINEL}@{host}{tail}"
+    return f"{scheme}://{user}:{SENTINEL}@{authority}"
 
 
 # CamelCase because libFuzzer's Python binding looks the entry point up by name.
