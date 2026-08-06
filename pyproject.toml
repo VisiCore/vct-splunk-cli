@@ -103,6 +103,10 @@ select = [
 # Check against the floor, not the interpreter that happens to be in .venv.
 pythonVersion = "3.9"
 include = ["src", "tests"]
+# atheris publishes manylinux x86_64 wheels only, so it is absent from every
+# development environment that is not Linux and cannot be resolved here. The
+# fuzz job on Linux is where that file is exercised.
+exclude = ["tests/fuzz"]
 extraPaths = ["src"]
 venvPath = "."
 venv = ".venv"

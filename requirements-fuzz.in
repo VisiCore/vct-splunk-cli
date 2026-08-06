@@ -1,0 +1,12 @@
+# Source for requirements-fuzz.txt — the fuzz job only.
+#
+# atheris publishes manylinux x86_64 wheels only, so this set is resolved for
+# Linux and installed nowhere else. Keeping it out of pyproject.toml's `dev`
+# extra is what lets `pip install -e ".[dev]"` keep working on macOS.
+#
+# Regenerate after changing pyproject.toml or this file:
+#   uv pip compile requirements-fuzz.in --generate-hashes \
+#     --no-emit-package vct-splunk-cli --python-version 3.14 \
+#     --python-platform x86_64-unknown-linux-gnu -o requirements-fuzz.txt
+.
+atheris

@@ -1,0 +1,28 @@
+# Dependency updates.
+#
+# Every `uses:` in this repository is pinned to a commit SHA, which is the only
+# pin a tag cannot be repointed around — but a SHA never expires on its own, so
+# without a bot the pins silently rot at whatever was current the day they were
+# written. Dependabot rewrites the SHA and its trailing `# vN` comment together.
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # One PR per week for the whole set. Each action is still reviewed on its
+      # own diff line; separate PRs would only multiply the CI runs.
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      python:
+        patterns: ["*"]
