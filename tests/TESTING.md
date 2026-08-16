@@ -1,6 +1,6 @@
 # Running the tests
 
-Five groups. Only the first needs nothing at all — start there.
+Six groups. Only the first needs nothing at all — start there.
 
 | Group | What it checks | What you must provide | Directory |
 | --- | --- | --- | --- |
@@ -9,6 +9,7 @@ Five groups. Only the first needs nothing at all — start there.
 | Enterprise writes | Every change, then undoes it | A **disposable** Splunk | `tests/integration/enterprise/write/` |
 | Cloud reads | Every read command against a real Cloud stack | A Cloud stack and an ACS token | `tests/integration/cloud/read/` |
 | ACS contract | Whether Splunk changed its public Cloud API | Nothing | `tests/integration/` |
+| Fuzz | That a credentialed URL never survives redaction | Linux on x86_64 | `tests/fuzz/` |
 
 Every group is off unless you switch it on. Leaving one off is an ordinary,
 expected skip, not an error. Once you switch a group on, forgetting one of its
@@ -140,6 +141,25 @@ export SPLUNK_ACS_SPEC_TEST=true
 .venv/bin/python -m pytest tests/integration/test_acs_public_spec.py -v
 ```
 
+## Group 6: fuzz
+
+`core.redact.safe_target` is what keeps a password in `SPLUNK_URL` out of
+prompts, JSON metadata, and the audit log, and it receives the URL exactly as
+typed — before anything validates that it parses. This group generates
+malformed targets around a marker password and asserts the marker never comes
+back and the call never raises.
+
+It is not part of group 1 and pytest does not collect it: the file is named
+`fuzz_redact.py`, and atheris publishes manylinux x86_64 wheels only. On macOS
+or arm64 it cannot be installed, which is why it is absent from the `dev`
+extra. On Linux:
+
+```bash
+.venv/bin/python -m pip install --require-hashes -r requirements-fuzz.txt
+.venv/bin/python -m pip install -e . --no-deps
+.venv/bin/python tests/fuzz/fuzz_redact.py -max_total_time=60
+```
+
 ## How the suites are organized
 
 `tests/cli_catalog.py` is the single catalog of every command leaf, with the
@@ -155,8 +175,9 @@ global state, fails on a cleanup leak, and restarts Splunk last.
 ## What continuous integration runs
 
 Every pull request runs group 1 — including the two Cloud contract files above
-— plus lint and type checks. Pull requests that touch code also run groups 2
-and 3 against a throwaway container. Groups 4 and 5 run weekly; group 4 reports
+— plus lint and type checks. Pull requests that touch code also run groups 2,
+3, and 6 against a throwaway container and a Linux runner. Groups 4 and 5 run
+weekly; group 4 reports
 that there is nothing to certify until a Cloud stack is configured, rather than
 passing without checking anything. A single check named **Merge Gate**
 summarizes the pull-request jobs.

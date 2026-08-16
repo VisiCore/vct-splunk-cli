@@ -37,9 +37,27 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `pre-commit` directly. The install path users are told to use is now the one
   that is tested on every pull request, and the project depends on no build tool
   beyond what ships with Python. Workflow-security analysis stays centralized.
+- Install from a hash-pinned lock in the three jobs that run against a live
+  server or Splunk's public API, so a replaced release on PyPI cannot change
+  what they run. The lint, type, and test jobs still resolve `.[dev]` live,
+  because their purpose is to exercise the documented install path. The
+  contributor install is unchanged; see CONTRIBUTING.md for regenerating the
+  lock after a dependency edit.
+- Add weekly dependency updates, covering both Python packages and the
+  commit-pinned GitHub Actions.
+- Fuzz `safe_target`, the function that strips credentials out of a Splunk URL
+  before it is printed. It runs on every pull request that touches code.
 
 ### Fixed
 
+- Redact a credential in a Splunk URL that earlier releases echoed back. Any
+  URL the redactor could not rebuild was returned as it stood, so a truncated
+  authority, a missing scheme, a credential following a path separator, or one
+  in a `?token=` query or `#` fragment all reached the printed target intact,
+  and an unterminated IPv6 literal raised with the value in the traceback.
+  Redaction now fails closed: a target it cannot rebuild is replaced rather
+  than repeated, and the query and fragment are dropped on every path. A target
+  carrying no credential still prints in full, so error messages stay readable.
 - Capture stderr separately in the two tests that assert a secret does not reach
   it. Click below 8.2 folds stderr into stdout unless asked not to, and 8.2
   removed the parameter that asks, so both assertions raised on the 3.9

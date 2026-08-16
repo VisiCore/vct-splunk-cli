@@ -28,7 +28,8 @@ jobs:
       - name: Install project
         run: |
           python -m venv .venv
-          .venv/bin/python -m pip install -e ".[dev]"
+          .venv/bin/python -m pip install --require-hashes -r requirements-ci.txt
+          .venv/bin/python -m pip install -e . --no-deps
 
       - name: Check current public ACS contract
         run: >-

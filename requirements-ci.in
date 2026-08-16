@@ -1,0 +1,9 @@
+# Source for requirements-ci.txt — the exact set the three integration workflows
+# install. `.` defers to pyproject.toml, so dependency bounds stay declared once.
+#
+# Regenerate after changing pyproject.toml or this file:
+#   uv pip compile requirements-ci.in --generate-hashes \
+#     --no-emit-package vct-splunk-cli --python-version 3.14 \
+#     -o requirements-ci.txt
+.
+pytest
