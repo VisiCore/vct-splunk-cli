@@ -109,27 +109,176 @@ export SPLUNK_TEST_SERVER_FIXTURE_DIR=/opt/splunk/var/run/splunk/lookup_tmp
 
 Clean up when you are finished: `docker rm -f splunk-test`.
 
-## Group 4: Cloud reads
+## Group 4: human-operated Splunk Cloud validation
 
-Read-only. It needs a real Splunk Cloud stack and an ACS token.
+This is the approval runbook for a real Splunk Cloud stack. It is read-only and
+requires no AI or interpretation service: a person runs the commands, checks
+the stated results, and completes the sign-off table at the end.
+
+Coverage means every endpoint and command this CLI supports, not every API
+endpoint Splunk Cloud exposes. The guaranteed ACS-backed surface is `inspect`,
+`index list`, `role list`, and `hec-token list`. The catalog-driven read suite
+exercises every other supported read and records the documented unsupported or
+credential boundary. Search-head REST is a separate, optional check because it
+needs a second credential and a different network path.
+
+### 1. Prepare a clean local environment
+
+Start at the repository root on the revision you intend to approve. Python 3.9
+or newer is the only prerequisite.
 
 ```bash
-export SPLUNK_ACS_LIVE_TEST=true
-export SPLUNK_URL="https://your-stack.splunkcloud.com"
-export SPLUNK_ACS_TOKEN="<your ACS token>"
-# export SPLUNK_ACS_BASE_URL="https://admin.splunkcloudgc.com"   # only for FedRAMP
-
-.venv/bin/python -m pytest tests/integration/cloud/read -v
+git status --short --branch
+python3 --version
+python3 -m venv .venv
+.venv/bin/python -m pip install -e ".[dev]"
 ```
 
-This runs every read command your Cloud stack could receive. The reads Cloud
-serves must succeed. Every other read must fail with a proper error message and
-a documented exit code, which is how the tool proves it never guesses at an
-endpoint your stack does not offer.
+`git status` must name the expected revision or branch and show no unexpected
+changes. The install must finish successfully.
 
-Supplying `SPLUNK_TOKEN` as well exercises the reads Cloud does not serve
-through the full dispatch path. Without it they stop earlier, at the
-credential check.
+### 2. Prove the Cloud contract without credentials
+
+Run the local end-to-end Cloud routes, every Cloud write refusal, and the
+current public ACS OpenAPI contract:
+
+```bash
+.venv/bin/python -m pytest \
+  tests/unit/test_acs_loopback.py \
+  tests/unit/test_cloud_write_refusal.py \
+  -q --tb=short
+
+SPLUNK_ACS_SPEC_TEST=true .venv/bin/python -m pytest \
+  tests/integration/test_acs_public_spec.py \
+  -q --tb=short
+```
+
+Both commands must end in `passed`, with no failures or errors. These checks
+send no request to your stack; the second command downloads Splunk's public API
+description from `admin.splunk.com`.
+
+### 3. Connect to ACS
+
+You need the stack URL and a short-lived ACS JWT whose role can list indexes,
+roles, and HEC tokens. If ACS access is restricted by an IP allow list, the
+computer running this runbook must already be allowed.
+
+Clear profile and Splunk REST credentials first so they cannot silently affect
+the ACS-only result. The Python prompt hides the token and keeps it out of
+shell history:
+
+```bash
+unset SPLUNK_PROFILE VCT_SPLUNK_CONFIG
+unset SPLUNK_TOKEN SPLUNK_SESSION_KEY SPLUNK_USERNAME SPLUNK_PASSWORD
+unset SPLUNK_ACS_STACK SPLUNK_ACS_BASE_URL
+
+export SPLUNK_ACS_LIVE_TEST=true
+export SPLUNK_URL="https://your-stack.splunkcloud.com"
+export SPLUNK_ACS_TOKEN="$(
+  .venv/bin/python -c 'import getpass; print(getpass.getpass("ACS token: "))'
+)"
+```
+
+For FedRAMP IL2, set the alternate ACS origin after the block above:
+
+```bash
+export SPLUNK_ACS_BASE_URL="https://admin.splunkcloudgc.com"
+```
+
+Do not add `:8089` yet. The ACS checks use the normal Cloud stack URL.
+
+### 4. Exercise every supported ACS command and Cloud read
+
+Run each public ACS-backed command directly so the human approver can see its
+output:
+
+```bash
+.venv/bin/splunk inspect --output json
+.venv/bin/splunk index list --output json
+.venv/bin/splunk role list --output json
+.venv/bin/splunk hec-token list --output json
+```
+
+Every command must exit `0` and print a top-level `data` and `meta` object.
+`inspect` must report the `cloud` backend and the intended stack. A secret field
+in HEC output must contain `<redacted>`; an actual token value must never
+appear.
+
+Now exercise the complete catalog of supported Cloud reads through the public
+CLI. The directory is intentional: it runs both catalog-driven CLI reads and
+the direct ACS operations in the live suite.
+
+```bash
+.venv/bin/python -m pytest \
+  tests/integration/cloud/read \
+  -q --tb=short
+```
+
+The command must end in `passed`, with no failure, error, traceback, or
+undocumented exit code. With only the ACS credential configured, non-ACS reads
+stop at their documented credential or unsupported-backend boundary.
+
+### 5. Optionally validate search-head REST
+
+Run this section only when the stack exposes its search-head API. It requires:
+
+- port `8089` open for the deployment;
+- this computer on the `search-api` IP allow list; and
+- a short-lived Splunk authentication token, separate from the ACS token.
+
+Free-trial Cloud stacks do not expose this API. Mark this section `N/A` when a
+prerequisite is intentionally unavailable; do not weaken TLS verification.
+
+```bash
+export SPLUNK_URL="https://your-stack.splunkcloud.com:8089"
+export SPLUNK_TOKEN="$(
+  .venv/bin/python -c 'import getpass; print(getpass.getpass("Splunk REST token: "))'
+)"
+
+.venv/bin/splunk search run \
+  --query '| makeresults | stats count' \
+  --earliest -5m \
+  --latest now \
+  --max-rows 5 \
+  --timeout 60 \
+  --export \
+  --output json
+
+.venv/bin/python -m pytest \
+  tests/integration/cloud/read \
+  -q --tb=short
+```
+
+The bounded search must exit `0` and return one result. The complete Cloud
+read suite must again end in `passed`; this run carries both credentials and
+therefore reaches the full dispatch path available to the stack.
+
+### 6. Clean up credentials and approve the run
+
+```bash
+unset SPLUNK_ACS_LIVE_TEST SPLUNK_ACS_TOKEN SPLUNK_ACS_STACK SPLUNK_ACS_BASE_URL
+unset SPLUNK_URL SPLUNK_TOKEN SPLUNK_SESSION_KEY SPLUNK_USERNAME SPLUNK_PASSWORD
+```
+
+Revoke both short-lived tokens in Splunk Cloud. These read-only commands create
+no durable Cloud object and no local write-audit record.
+
+Record `PASS`, `FAIL`, or `N/A` beside each row. Overall approval is `PASS` only
+when every required row passes and the cleanup is complete.
+
+| Check | Required result | Result |
+| --- | --- | --- |
+| Revision and clean checkout | Intended revision; no unexpected changes | |
+| Credential-free Cloud routes and write refusals | Pytest passed | |
+| Public ACS OpenAPI contract | Pytest passed | |
+| Backend inspection | `cloud` and intended stack | |
+| Index list | Exit 0; `data` + `meta` | |
+| Role list | Exit 0; `data` + `meta` | |
+| HEC token list | Exit 0; secrets absent or `<redacted>` | |
+| Complete Cloud read suite (ACS-only) | Pytest passed | |
+| Search-head REST | Bounded search and complete read suite passed, or justified N/A | |
+| Cleanup | Variables unset and short-lived tokens revoked | |
+| **Overall approval** | **PASS** | |
 
 ## Group 5: ACS public contract
 
