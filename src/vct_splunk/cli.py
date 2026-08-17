@@ -9,6 +9,7 @@ from .commands.api import api
 from .commands.apps import app_install
 from .commands.auth import auth
 from .commands.cluster import cluster
+from .commands.config import config
 from .commands.datamodel import datamodel_accelerate
 from .commands.deploy import deploy_client, deploy_server
 from .commands.factory import build_group
@@ -41,6 +42,7 @@ for _group in (
     auth,
     kvstore,
     cluster,
+    config,
     shcluster,
     license,
     deploy_server,
