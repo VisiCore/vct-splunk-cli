@@ -1,6 +1,6 @@
 # Running the tests
 
-Six groups. Only the first needs nothing at all — start there.
+Seven groups. Only the first needs nothing at all — start there.
 
 | Group | What it checks | What you must provide | Directory |
 | --- | --- | --- | --- |
@@ -8,6 +8,7 @@ Six groups. Only the first needs nothing at all — start there.
 | Enterprise reads | Every read command against a real server | A reachable Splunk | `tests/integration/enterprise/read/` |
 | Enterprise writes | Every change, then undoes it | A **disposable** Splunk | `tests/integration/enterprise/write/` |
 | Cloud reads | Every read command against a real Cloud stack | A Cloud stack and an ACS token | `tests/integration/cloud/read/` |
+| Cloud writes | Index/role/HEC create-update-delete, then undo | Non-production Cloud stack + write ACS token | `tests/integration/cloud/write/` |
 | ACS contract | Whether Splunk changed its public Cloud API | Nothing | `tests/integration/` |
 | Fuzz | That a credentialed URL never survives redaction | Linux on x86_64 | `tests/fuzz/` |
 
@@ -109,7 +110,36 @@ export SPLUNK_TEST_SERVER_FIXTURE_DIR=/opt/splunk/var/run/splunk/lookup_tmp
 
 Clean up when you are finished: `docker rm -f splunk-test`.
 
-## Group 4: human-operated Splunk Cloud validation
+## Group 4: Splunk Cloud validation (GitHub Actions, then local fallback)
+
+Certification is the GitHub Actions canary, not a filled-in table. Configure
+these repository secrets (names only; never commit values):
+
+- Read canary (`Splunk Cloud Read Canary`): `SPLUNK_URL`, `SPLUNK_ACS_TOKEN`,
+  `SPLUNK_ACS_STACK` (the stack label, so leftover prints still mask), optional
+  `SPLUNK_ACS_BASE_URL`, optional `SPLUNK_TOKEN` for the full catalogue vs
+  ACS-only.
+- Write canary (`Splunk Cloud Write Canary`): `SPLUNK_ACS_WRITE_TOKEN` (a
+  write-scoped ACS JWT, distinct from the read token). Point it at a
+  **non-production** stack. The job creates and deletes indexes, roles, and
+  HEC tokens; that consumes entitlement and appears in the stack's own audit
+  trail.
+
+Dispatch the read workflow from the Actions tab (or `gh workflow run`). A
+100% pass with a clean leak scan is the Cloud read certification. The write
+workflow never runs on a schedule or a pull request: type `WRITE` as the
+`confirm` input, and HEAD's commit subject must start with
+`tests: splunk cloud write`. An optional GitHub Environment
+`splunk-cloud-write` with required reviewers is extra defence; the workflow
+does not require it so a missing Environment cannot block a first run.
+
+Store throwaway fake secret values first, dispatch, confirm the leak scan is
+clean, then swap in real credentials. A leaked ACS token can be rotated; a
+leaked stack name cannot.
+
+The human-operated runbook below remains as a local fallback.
+
+## Group 4b: human-operated Splunk Cloud validation
 
 This is the approval runbook for a real Splunk Cloud stack. It is read-only and
 requires no AI or interpretation service: a person runs the commands, checks

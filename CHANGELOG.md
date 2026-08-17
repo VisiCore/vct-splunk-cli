@@ -12,9 +12,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   config get FILE STANZA`. The commands use the normal read namespace, accept a
   file name with or without `.conf`, paginate collection results, and redact
   secret-valued properties.
+- Opt-in Splunk Cloud writes for `index`, `role`, and `hec-token`
+  create/update/delete via ACS. Default remains refuse-before-network; set
+  `SPLUNK_CLOUD_WRITE=true` (no CLI flag) and still pass `--yes` or confirm on
+  a TTY. `--dry-run` sends nothing. A separate `SPLUNK_ACS_WRITE_TOKEN` can
+  scope the write credential apart from the read token.
+- GitHub Actions canaries for live Cloud reads (existing workflow, leak-scanned)
+  and destructive Cloud writes with undo (`workflow_dispatch` only, typed
+  `confirm=WRITE`).
 
 ### Changed
 
+- `splunk inspect` no longer emits the Cloud stack name. It reports
+  `stack_configured` instead. Set `VCT_SPLUNK_REDACT_TARGET=1` to hide the
+  stack label in `meta.target` as well (CI does this). The audit log still
+  records a credential-stripped but host-honest target.
 - Lower the supported Python floor to 3.9, so the CLI runs under the interpreter
   bundled with Splunk Enterprise 9.x. Shipped code needed no change: the package
   already uses only 3.9-compatible syntax and APIs. Declarations move

@@ -1,0 +1,114 @@
+# Destructive ACS writes against a real Splunk Cloud stack, with undo.
+#
+# This never runs on pull_request or a schedule. A human must dispatch it and
+# type WRITE. HEAD's commit subject must start with "tests: splunk cloud write".
+# Use a non-production stack: the job creates and deletes indexes, roles, and
+# HEC tokens.
+name: Splunk Cloud Write Canary
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type WRITE to run destructive ACS tests on the configured stack
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: splunk-cloud-write
+  cancel-in-progress: false
+
+jobs:
+  confirm:
+    name: Confirm WRITE
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Fail closed unless confirm is WRITE
+        env:
+          CONFIRM: ${{ github.event.inputs.confirm }}
+        run: |
+          if [ "$CONFIRM" != "WRITE" ]; then
+            echo "confirm must be exactly WRITE"
+            exit 1
+          fi
+
+  cloud-write:
+    name: Cloud / ACS writes
+    needs: confirm
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Require the write-canary commit prefix
+        run: |
+          subject=$(git log -1 --format=%s)
+          case "$subject" in
+            "tests: splunk cloud write"*) ;;
+            *)
+              echo "HEAD subject must start with: tests: splunk cloud write"
+              exit 1
+              ;;
+          esac
+
+      - name: Check for a configured Cloud stack
+        id: stack
+        env:
+          SPLUNK_URL: ${{ secrets.SPLUNK_URL }}
+          SPLUNK_ACS_TOKEN: ${{ secrets.SPLUNK_ACS_WRITE_TOKEN }}
+        run: bash .github/scripts/detect-cloud-stack.sh
+
+      - name: Require write secrets when dispatched
+        if: steps.stack.outputs.ready != 'true'
+        run: |
+          echo "SPLUNK_URL and SPLUNK_ACS_WRITE_TOKEN are required for a WRITE run"
+          exit 1
+
+      - if: steps.stack.outputs.ready == 'true'
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install project
+        if: steps.stack.outputs.ready == 'true'
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --require-hashes -r requirements-ci.txt
+          .venv/bin/python -m pip install -e . --no-deps
+
+      - name: Cloud writes (index, role, hec-token) with undo
+        if: steps.stack.outputs.ready == 'true'
+        env:
+          SPLUNK_ACS_LIVE_TEST: "true"
+          SPLUNK_CLOUD_WRITE: "true"
+          SPLUNK_URL: ${{ secrets.SPLUNK_URL }}
+          SPLUNK_ACS_WRITE_TOKEN: ${{ secrets.SPLUNK_ACS_WRITE_TOKEN }}
+          SPLUNK_ACS_TOKEN: ${{ secrets.SPLUNK_ACS_WRITE_TOKEN }}
+          SPLUNK_ACS_STACK: ${{ secrets.SPLUNK_ACS_STACK }}
+          SPLUNK_ACS_BASE_URL: ${{ secrets.SPLUNK_ACS_BASE_URL }}
+          VCT_SPLUNK_REDACT_TARGET: "1"
+          VCT_SPLUNK_AUDIT: ${{ runner.temp }}/vct-splunk-audit.log
+        run: |
+          set -o pipefail
+          set +e
+          .venv/bin/pytest tests/integration/cloud/write \
+          -m "integration and cloud and write" \
+          -q --tb=line -r N \
+          -o addopts='--strict-markers --import-mode=importlib' \
+          --junitxml=cloud-write.xml \
+          | tee cloud-write.log
+          pytest_status=${PIPESTATUS[0]}
+          set -e
+          scan_files=(cloud-write.log cloud-write.xml)
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+            scan_files+=("$GITHUB_STEP_SUMMARY")
+          fi
+          python .github/scripts/scan-cloud-ci-leaks.py "${scan_files[@]}"
+          exit "$pytest_status"
