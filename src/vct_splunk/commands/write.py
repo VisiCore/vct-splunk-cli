@@ -20,7 +20,7 @@ from ..config.loader import load_config
 from ..output import formatter as out
 from ..utils import audit
 from ..utils.errors import UnsupportedBackendError
-from ..utils.redact import safe_target
+from ..utils.redact import public_target, safe_target
 
 
 def do_write(
@@ -51,14 +51,12 @@ def do_write(
     # audit_event["action"] is "<resource>.<verb>", e.g. "index.create".
     resource, _, verb = str(audit_event.get("action", "")).partition(".")
     refuse_cloud_write(ctx, resource, verb)
-    target = safe_target(
-        target or load_config(ctx.base_url, profile=getattr(ctx, "profile", None)).base_url
-    )
-    out.confirm_write(ctx, action, target)
+    target = target or load_config(ctx.base_url, profile=getattr(ctx, "profile", None)).base_url
+    out.confirm_write(ctx, action, public_target(target))
     with ctx.client() as c:
         result = run(c)
     if not (isinstance(result, dict) and result.get("dry_run")):
-        audit.record({**audit_event, "target": target})
+        audit.record({**audit_event, "target": safe_target(target)})
     return result
 
 

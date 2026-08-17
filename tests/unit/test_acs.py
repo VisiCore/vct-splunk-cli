@@ -169,6 +169,19 @@ def test_acs_unreachable_maps_transport_error():
         operations.list_cloud_roles(_acs(handler))
 
 
+def test_acs_transport_error_hides_stack_from_exception_text():
+    def handler(req: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError(
+            "failed to reach https://admin.splunk.com/acme/adminconfig/v2/roles"
+        )
+
+    with pytest.raises(TransportError) as exc_info:
+        operations.list_cloud_roles(_acs(handler))
+
+    assert "acme" not in str(exc_info.value)
+    assert "admin.splunk.com/<redacted>/adminconfig/v2/roles" in str(exc_info.value)
+
+
 def test_acs_config_requires_stack(monkeypatch):
     monkeypatch.delenv("SPLUNK_ACS_STACK", raising=False)
     monkeypatch.delenv("SPLUNK_ACS_TOKEN", raising=False)
@@ -296,7 +309,9 @@ def test_inspect_reports_deduced_cloud(monkeypatch):
     result = CliRunner().invoke(cli, ["inspect", "--output", "json"])
     assert result.exit_code == 0
     assert '"backend": "cloud"' in result.output
-    assert '"stack": "acme"' in result.output
+    assert '"stack_configured": true' in result.output
+    assert '"stack": "acme"' not in result.output
+    assert "acme" not in result.output
     assert "not yet certified" in result.output
 
 

@@ -85,7 +85,7 @@ def inspect_report(url: str | None = None) -> dict[str, Any]:
     backend = deduce_backend(url)
     report: dict[str, Any] = {"backend": backend, "capabilities": CAPABILITIES[backend]}
     if backend == "cloud":
-        report["stack"] = cloud_stack_from_url(url)
+        report["stack_configured"] = cloud_stack_from_url(url) is not None
         report["note"] = (
             "Cloud/ACS coverage is read-only and not yet certified against a live stack."
         )

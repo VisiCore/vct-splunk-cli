@@ -20,16 +20,6 @@ jobs:
     name: Cloud / ACS reads
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      SPLUNK_ACS_LIVE_TEST: "true"
-      SPLUNK_URL: ${{ secrets.SPLUNK_URL }}
-      SPLUNK_ACS_TOKEN: ${{ secrets.SPLUNK_ACS_TOKEN }}
-      SPLUNK_ACS_STACK: ${{ secrets.SPLUNK_ACS_STACK }}
-      SPLUNK_ACS_BASE_URL: ${{ secrets.SPLUNK_ACS_BASE_URL }}
-      # splunkd credential. Without it, every read Cloud does not serve stops at
-      # the credential check instead of reaching the dispatch layer, so the run
-      # covers far less than it appears to. The guard below says so out loud.
-      SPLUNK_TOKEN: ${{ secrets.SPLUNK_TOKEN }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -39,6 +29,10 @@ jobs:
       # step that reports what can be certified rather than a skipped job.
       - name: Check for a configured Cloud stack
         id: stack
+        env:
+          SPLUNK_URL: ${{ secrets.SPLUNK_URL }}
+          SPLUNK_ACS_TOKEN: ${{ secrets.SPLUNK_ACS_TOKEN }}
+          SPLUNK_TOKEN: ${{ secrets.SPLUNK_TOKEN }}
         run: bash .github/scripts/detect-cloud-stack.sh
 
       - if: steps.stack.outputs.ready == 'true'
@@ -56,28 +50,58 @@ jobs:
 
       - name: Cloud reads (every catalogued read command)
         if: steps.stack.outputs.ready == 'true'
-        run: >-
-          .venv/bin/pytest tests/integration/cloud/read/test_catalog.py
-          -m "integration and cloud and read"
-          -vv --color=yes --tb=short --junitxml=cloud-read.xml
+        env:
+          SPLUNK_ACS_LIVE_TEST: "true"
+          SPLUNK_URL: ${{ secrets.SPLUNK_URL }}
+          SPLUNK_ACS_TOKEN: ${{ secrets.SPLUNK_ACS_TOKEN }}
+          SPLUNK_ACS_STACK: ${{ secrets.SPLUNK_ACS_STACK }}
+          SPLUNK_ACS_BASE_URL: ${{ secrets.SPLUNK_ACS_BASE_URL }}
+          SPLUNK_TOKEN: ${{ secrets.SPLUNK_TOKEN }}
+          VCT_SPLUNK_REDACT_TARGET: "1"
+          VCT_SPLUNK_AUDIT: ${{ runner.temp }}/vct-splunk-audit.log
+        run: |
+          set -o pipefail
+          set +e
+          .venv/bin/pytest tests/integration/cloud/read/test_catalog.py \
+          -m "integration and cloud and read" \
+          -q --tb=line -r N \
+          -o addopts='--strict-markers --import-mode=importlib' \
+          --junitxml=cloud-read.xml \
+          | tee cloud-read.log
+          pytest_status=${PIPESTATUS[0]}
+          set -e
+          scan_files=(cloud-read.log cloud-acs.log cloud-read.xml cloud-acs.xml)
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+            scan_files+=("$GITHUB_STEP_SUMMARY")
+          fi
+          python .github/scripts/scan-cloud-ci-leaks.py "${scan_files[@]}"
+          exit "$pytest_status"
 
       - name: Cloud ACS operations (below the CLI)
         if: steps.stack.outputs.ready == 'true'
-        run: >-
-          .venv/bin/pytest tests/integration/cloud/read/test_acs_operations.py
-          -m "integration and cloud and read"
-          -vv --color=yes --tb=short --junitxml=cloud-acs.xml
-
-      - name: Publish test summary
-        if: always() && steps.stack.outputs.ready == 'true'
-        uses: test-summary/action@37b508cfee6d4d080eedd00b5bb240a6a784a6a5 # v2
-        with:
-          paths: cloud-*.xml
-
-      - name: Upload test report
-        if: always() && steps.stack.outputs.ready == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: cloud-read-${{ github.run_id }}
-          path: cloud-*.xml
-          if-no-files-found: ignore
+        env:
+          SPLUNK_ACS_LIVE_TEST: "true"
+          SPLUNK_URL: ${{ secrets.SPLUNK_URL }}
+          SPLUNK_ACS_TOKEN: ${{ secrets.SPLUNK_ACS_TOKEN }}
+          SPLUNK_ACS_STACK: ${{ secrets.SPLUNK_ACS_STACK }}
+          SPLUNK_ACS_BASE_URL: ${{ secrets.SPLUNK_ACS_BASE_URL }}
+          SPLUNK_TOKEN: ${{ secrets.SPLUNK_TOKEN }}
+          VCT_SPLUNK_REDACT_TARGET: "1"
+          VCT_SPLUNK_AUDIT: ${{ runner.temp }}/vct-splunk-audit.log
+        run: |
+          set -o pipefail
+          set +e
+          .venv/bin/pytest tests/integration/cloud/read/test_acs_operations.py \
+          -m "integration and cloud and read" \
+          -q --tb=line -r N \
+          -o addopts='--strict-markers --import-mode=importlib' \
+          --junitxml=cloud-acs.xml \
+          | tee cloud-acs.log
+          pytest_status=${PIPESTATUS[0]}
+          set -e
+          scan_files=(cloud-read.log cloud-acs.log cloud-read.xml cloud-acs.xml)
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+            scan_files+=("$GITHUB_STEP_SUMMARY")
+          fi
+          python .github/scripts/scan-cloud-ci-leaks.py "${scan_files[@]}"
+          exit "$pytest_status"

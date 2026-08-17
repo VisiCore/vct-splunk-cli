@@ -28,8 +28,7 @@ def _require_cloud_target() -> None:
     # would quietly test Enterprise instead of what this suite claims to cover.
     if deduce_backend(url) != "cloud":
         pytest.fail(
-            f"SPLUNK_URL={url!r} is not a Splunk Cloud host; "
-            "expected something like https://<stack>.splunkcloud.com",
+            "SPLUNK_URL is not a Splunk Cloud host; expected a *.splunkcloud.com URL",
             pytrace=False,
         )
 

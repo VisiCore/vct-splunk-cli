@@ -6,6 +6,7 @@ import click
 
 from ..output import formatter as out
 from ..utils.backends import inspect_report
+from ..utils.redact import redact_exception_text
 from .context import command
 
 
@@ -20,4 +21,7 @@ def inspect(ctx) -> None:
     capability map: offline, no live instance touched. Unsupported operations are
     named, so a caller never falls through to an unofficial endpoint.
     """
-    out.emit(inspect_report(ctx.base_url), ctx.output_mode, ctx.meta())
+    meta = ctx.meta()
+    if ctx.backend == "cloud":
+        meta["target"] = redact_exception_text(meta["target"] or "")
+    out.emit(inspect_report(ctx.base_url), ctx.output_mode, meta)
