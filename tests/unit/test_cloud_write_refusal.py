@@ -38,8 +38,16 @@ def cloud_target_with_no_network(monkeypatch: pytest.MonkeyPatch) -> None:
     fails earlier for an unrelated reason.
     """
     # Clear the ambient settings a developer may have exported, so the suite
-    # tests the tool rather than the machine it runs on.
-    for name in ("SPLUNK_APP", "SPLUNK_OWNER", "SPLUNK_PROFILE", "SPLUNK_ACS_BASE_URL"):
+    # tests the tool rather than the machine it runs on. SPLUNK_CLOUD_WRITE in
+    # particular: this suite must prove every write is refused by *default*,
+    # which an ambient opt-in in the environment would silently defeat.
+    for name in (
+        "SPLUNK_APP",
+        "SPLUNK_OWNER",
+        "SPLUNK_PROFILE",
+        "SPLUNK_ACS_BASE_URL",
+        "SPLUNK_CLOUD_WRITE",
+    ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("SPLUNK_URL", "https://acme.splunkcloud.com")
     monkeypatch.setenv("SPLUNK_ACS_TOKEN", "unused")

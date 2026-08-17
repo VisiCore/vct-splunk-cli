@@ -20,7 +20,8 @@ vct_splunk/
       server.py, search.py, jobs.py, saved_searches.py, kvstore.py,
       hec.py, apps.py, cluster.py, license.py, deploy.py, lookups.py,
       datamodel.py, health.py, raw.py
-    acs/                   # Splunk Cloud ACS management-plane client (read-only)
+    acs/                   # Splunk Cloud ACS management-plane client (reads +
+                           # gated index/role/hec-token writes)
       client.py, operations.py
 
   auth/
@@ -31,7 +32,8 @@ vct_splunk/
     registry.py            # Declarative list of factory-generated resources
     context.py             # Shared `command` decorator + Ctx (builds clients)
     write.py               # The single gated write path (confirm + audit)
-    dispatch.py            # Routes index/role/hec-token list to ACS on Cloud
+    dispatch.py            # Routes index/role/hec-token reads (and gated
+                           # writes) to ACS on Cloud
     server.py, api.py, auth.py, search.py, saved_search.py, health.py,
     kvstore.py, hec.py, apps.py, cluster.py, shcluster.py, license.py,
     deploy.py, lookup.py, datamodel.py, inspect.py
@@ -150,8 +152,9 @@ Every mutation funnels through `commands/write.py:do_write()`: `--dry-run`
 previews the exact request and sends nothing; otherwise it confirms on a TTY or
 requires `--yes` when non-interactive, then appends a record to the local audit
 log. Reads redact secret-named fields by default; only commands whose purpose
-is to mint a credential reveal one. Splunk Cloud targets refuse writes and
-route supported reads through ACS.
+is to mint a credential reveal one. Splunk Cloud targets route supported reads
+through ACS; writes are refused by default and opt in narrowly via
+`SPLUNK_CLOUD_WRITE=true` (index/role/hec-token create/update/delete only).
 
 ### Error handling
 

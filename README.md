@@ -178,10 +178,19 @@ export SPLUNK_ACS_TOKEN="<your ACS token>"
 export SPLUNK_ACS_BASE_URL="https://admin.splunkcloudgc.com"   # only for FedRAMP
 ```
 
-Cloud support is **read-only** today, and covers `index list`, `role list`, and
-`hec-token list`. Anything else stops with a clear "not supported here" error
-instead of guessing. Run `splunk inspect` to see which backend your address
-resolves to and what it can do; it answers offline, without contacting anything.
+Cloud reads cover `index list`, `role list`, and `hec-token list`. Anything else
+stops with a clear "not supported here" error instead of guessing. Run
+`splunk inspect` to see which backend your address resolves to and what it can
+do; it answers offline, without contacting anything.
+
+Cloud **writes** are opt-in and narrow: set `SPLUNK_CLOUD_WRITE=true` to unlock
+`create`/`update`/`delete` for `index`, `role`, and `hec-token` only (enable and
+disable, and every other resource, stay refused regardless). There is no CLI
+flag for the opt-in -- only the environment variable, so a write is never
+enabled by accident from a saved command line. `--dry-run` and `--yes` work the
+same as they do against Enterprise. An ACS write token can be scoped separately
+from the read token via `SPLUNK_ACS_WRITE_TOKEN` (falls back to
+`SPLUNK_ACS_TOKEN` when unset).
 
 ## Security
 

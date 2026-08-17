@@ -19,8 +19,10 @@ Backend = Literal["enterprise", "cloud"]
 _CLOUD_HOST_MARKER = "splunkcloud"
 
 #: What each backend supports, for the `splunk inspect` report. Values are True
-#: (full support) or a short string naming the limit. Cloud is read-only this
-#: release. This is informational only -- routing is decided per command, and an
+#: (full support) or a short string naming the limit. Cloud writes are opt-in
+#: (`SPLUNK_CLOUD_WRITE=true`) and narrow: only index/role/hec-token create,
+#: update, and delete go through ACS -- everything else on Cloud is read-only.
+#: This is informational only -- routing is decided per command, and an
 #: unavailable operation stops with a typed error, never a silent fallthrough.
 CAPABILITIES: dict[str, dict[str, Any]] = {
     "enterprise": {
@@ -35,11 +37,13 @@ CAPABILITIES: dict[str, dict[str, Any]] = {
         "health": True,
     },
     "cloud": {
-        "indexes": "read-only (ACS)",
-        "hec_tokens": "read-only (ACS)",
-        "roles": "read-only (ACS)",
+        "indexes": "read via ACS; create/update/delete gated behind SPLUNK_CLOUD_WRITE=true",
+        "hec_tokens": "read via ACS; create/update/delete gated behind SPLUNK_CLOUD_WRITE=true",
+        "roles": "read via ACS; create/update/delete gated behind SPLUNK_CLOUD_WRITE=true",
         "search": "via the search head REST (your SPLUNK_URL), where the stack permits",
-        "writes": "not supported this release (read-only)",
+        "writes": (
+            "opt-in (SPLUNK_CLOUD_WRITE=true): index/role/hec-token create/update/delete only"
+        ),
     },
 }
 
@@ -87,6 +91,8 @@ def inspect_report(url: str | None = None) -> dict[str, Any]:
     if backend == "cloud":
         report["stack_configured"] = cloud_stack_from_url(url) is not None
         report["note"] = (
-            "Cloud/ACS coverage is read-only and not yet certified against a live stack."
+            "Cloud/ACS reads are certified; writes are opt-in (SPLUNK_CLOUD_WRITE=true, "
+            "index/role/hec-token create/update/delete only) and not yet certified against "
+            "a live stack."
         )
     return report

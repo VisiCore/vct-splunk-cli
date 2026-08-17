@@ -69,8 +69,11 @@ Two cross-cutting ideas to know about:
   require an explicit app and never silently default to `search`.
 - **Transparent backend.** When `SPLUNK_URL` points at `*.splunkcloud.com`, a
   few reads (`index list`, `role list`, `hec-token list`) route through the
-  Cloud ACS API and writes are refused; everything else talks to splunkd REST.
-  The backend is deduced from the URL — there is no flag to pick it. `splunk
+  Cloud ACS API; everything else talks to splunkd REST. Cloud writes are
+  opt-in and narrow: `SPLUNK_CLOUD_WRITE=true` unlocks `create`/`update`/
+  `delete` for `index`, `role`, and `hec-token` only (never a CLI flag, and
+  enable/disable plus every other resource stay refused regardless). The
+  backend is deduced from the URL — there is no flag to pick it. `splunk
   inspect` reports what the deduced backend supports, offline.
 
 ## Conventions
