@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import click
 
-from ..core.backends import inspect_report
-from . import output as out
+from ..output import formatter as out
+from ..utils.backends import inspect_report
 from .context import command
 
 

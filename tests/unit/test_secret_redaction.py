@@ -20,10 +20,11 @@ import httpx
 import pytest
 from click.testing import CliRunner
 
+from vct_splunk.api.client import SplunkClient
 from vct_splunk.cli import cli
 from vct_splunk.commands import context
-from vct_splunk.core import redact
-from vct_splunk.core.client import ClientConfig, SplunkClient
+from vct_splunk.config.types import SplunkConfig
+from vct_splunk.utils import redact
 
 SECRET = "s3cret-token-value"
 URL_PASSWORD = "url-password-must-not-appear"
@@ -63,7 +64,7 @@ def splunk(monkeypatch: pytest.MonkeyPatch):
         context.Ctx,
         "client",
         lambda self: SplunkClient(
-            ClientConfig(base_url="https://sh.corp:8089", token="T"),
+            SplunkConfig(base_url="https://sh.corp:8089", token="T"),
             transport=httpx.MockTransport(handler),
         ),
     )

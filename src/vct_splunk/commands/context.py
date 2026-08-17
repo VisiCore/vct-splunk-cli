@@ -26,15 +26,15 @@ from typing import TYPE_CHECKING, Any
 
 import click
 
-from ..core.backends import deduce_backend
-from ..core.client import SplunkClient, config_from_env
-from ..core.errors import SplunkError
-from ..core.profiles import load_profile
-from ..core.redact import safe_target
-from . import output as out
+from ..api.client import SplunkClient, create_client
+from ..config.loader import load_config, load_profile
+from ..output import formatter as out
+from ..utils.backends import deduce_backend
+from ..utils.errors import SplunkError
+from ..utils.redact import safe_target
 
 if TYPE_CHECKING:
-    from ..core.acs.client import AcsClient
+    from ..api.acs.client import AcsClient
 
 
 class AliasedGroup(click.Group):
@@ -92,7 +92,7 @@ class Ctx:
         """Build a :class:`SplunkClient` from the environment plus this context.
 
         Credentials and TLS settings are read from flags, the environment, and
-        the active profile (see :func:`vct_splunk.core.client.config_from_env`);
+        the active profile (see :func:`vct_splunk.config.loader.load_config`);
         the ``dry_run`` flag is carried over from the command line so that writes
         can be previewed.
 
@@ -103,9 +103,9 @@ class Ctx:
                 with ctx.client() as c:
                     ...
         """
-        cfg = config_from_env(self.base_url, profile=self.profile)
+        cfg = load_config(self.base_url, profile=self.profile)
         cfg.dry_run = self.dry_run
-        return SplunkClient(cfg)
+        return create_client(cfg)
 
     def acs_client(self) -> AcsClient:
         """Build an :class:`AcsClient` for the deduced Cloud stack.
@@ -114,8 +114,8 @@ class Ctx:
         the cloud host (``$SPLUNK_URL`` or ``--base-url``), and the ACS Bearer
         token is read from ``$SPLUNK_ACS_TOKEN``. Use as a context manager.
         """
-        from ..core.acs.client import AcsClient, acs_config_from_env
-        from ..core.backends import cloud_stack_from_url
+        from ..api.acs.client import AcsClient, acs_config_from_env
+        from ..utils.backends import cloud_stack_from_url
 
         stack = cloud_stack_from_url(self.base_url)
         return AcsClient(acs_config_from_env(stack))
@@ -137,7 +137,7 @@ def command(fn: Callable) -> Callable:
     ``--dry-run``/``--yes``/``--base-url``/``--app``/``--owner``), so the
     command body can focus on its own arguments. Any :class:`SplunkError` raised
     by the core is caught and rendered to stderr with the correct exit code via
-    :func:`vct_splunk.commands.output.fail`.
+    :func:`vct_splunk.output.formatter.fail`.
 
     Args:
         fn: The leaf command implementation, called as ``fn(ctx, **command_args)``.

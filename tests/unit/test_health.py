@@ -7,7 +7,7 @@ from urllib.parse import parse_qs
 import httpx
 import pytest
 
-from vct_splunk.core import health
+from vct_splunk.api.endpoints import health
 
 
 def test_health_maps_findings(client_for):

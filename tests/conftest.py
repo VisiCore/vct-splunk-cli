@@ -8,7 +8,8 @@ import httpx
 import pytest
 from click.testing import CliRunner
 
-from vct_splunk.core.client import ClientConfig, SplunkClient
+from vct_splunk.api.client import SplunkClient
+from vct_splunk.config.types import SplunkConfig
 
 _TEST_URL = "https://splunk.test:8089"
 
@@ -28,7 +29,7 @@ def cli_runner() -> CliRunner:
 
 
 def make_client(handler: Callable, *, dry_run: bool = False) -> SplunkClient:
-    cfg = ClientConfig(base_url=_TEST_URL, token="TESTTOKEN", dry_run=dry_run)
+    cfg = SplunkConfig(base_url=_TEST_URL, token="TESTTOKEN", dry_run=dry_run)
     return SplunkClient(cfg, transport=httpx.MockTransport(handler))
 
 
@@ -67,7 +68,7 @@ def patch_client(monkeypatch) -> Callable:
 
     def _patch(handler: Callable) -> None:
         def make(self):
-            cfg = ClientConfig(base_url=_TEST_URL, token="T", dry_run=self.dry_run)
+            cfg = SplunkConfig(base_url=_TEST_URL, token="T", dry_run=self.dry_run)
             return SplunkClient(cfg, transport=httpx.MockTransport(handler))
 
         monkeypatch.setattr("vct_splunk.commands.context.Ctx.client", make)

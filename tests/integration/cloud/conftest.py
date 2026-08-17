@@ -11,7 +11,7 @@ import os
 
 import pytest
 
-from vct_splunk.core.backends import deduce_backend
+from vct_splunk.utils.backends import deduce_backend
 
 
 @pytest.fixture(scope="session", autouse=True)

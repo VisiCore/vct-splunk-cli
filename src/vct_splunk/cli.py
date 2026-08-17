@@ -9,9 +9,9 @@ from .commands.api import api
 from .commands.apps import app_install
 from .commands.auth import auth
 from .commands.cluster import cluster
+from .commands.command_factory import build_group
 from .commands.datamodel import datamodel_accelerate
 from .commands.deploy import deploy_client, deploy_server
-from .commands.factory import build_group
 from .commands.health import health
 from .commands.hec import hec
 from .commands.inspect import inspect

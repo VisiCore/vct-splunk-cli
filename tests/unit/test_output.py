@@ -4,8 +4,8 @@ import json
 
 import pytest
 
-from vct_splunk.commands import output as out
-from vct_splunk.core.errors import UsageError
+from vct_splunk.output import formatter as out
+from vct_splunk.utils.errors import UsageError
 
 
 def test_resolve_mode_explicit():

@@ -54,8 +54,12 @@ def test_password_prompted_on_a_tty_when_env_unset(cli_env, patch_client, monkey
     monkeypatch.setenv("VCT_SPLUNK_AUDIT", str(tmp_path / "audit.log"))
     # Rebind the module's `sys` (CliRunner swaps the real sys.stdin mid-invoke).
     tty = SimpleNamespace(isatty=lambda: True)
-    monkeypatch.setattr("vct_splunk.commands.factory.sys", SimpleNamespace(stdin=tty, stderr=tty))
-    monkeypatch.setattr("vct_splunk.commands.factory.click.prompt", lambda *a, **k: "fromprompt")
+    monkeypatch.setattr(
+        "vct_splunk.commands.command_factory.sys", SimpleNamespace(stdin=tty, stderr=tty)
+    )
+    monkeypatch.setattr(
+        "vct_splunk.commands.command_factory.click.prompt", lambda *a, **k: "fromprompt"
+    )
     seen: dict[str, str] = {}
 
     def handler(req: httpx.Request) -> httpx.Response:

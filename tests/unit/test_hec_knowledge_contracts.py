@@ -8,9 +8,9 @@ import httpx
 import pytest
 from click.testing import CliRunner
 
+from vct_splunk.api.endpoints.hec import rotate_token
 from vct_splunk.cli import cli
-from vct_splunk.core.errors import APIError
-from vct_splunk.core.hec import rotate_token
+from vct_splunk.utils.errors import APIError
 
 
 def test_hec_rotate_exact_contract_and_official_response(cli_env, patch_client):

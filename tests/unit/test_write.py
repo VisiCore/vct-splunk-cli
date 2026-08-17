@@ -9,9 +9,10 @@ from __future__ import annotations
 import httpx
 import pytest
 
+from vct_splunk.api.client import SplunkClient
 from vct_splunk.commands.write import do_write
-from vct_splunk.core.client import ClientConfig, SplunkClient
-from vct_splunk.core.errors import UsageError
+from vct_splunk.config.types import SplunkConfig
+from vct_splunk.utils.errors import UsageError
 
 
 class _Ctx:
@@ -23,7 +24,7 @@ class _Ctx:
         self.yes = yes
 
     def client(self) -> SplunkClient:
-        cfg = ClientConfig(base_url=self.base_url, token="T", dry_run=self.dry_run)
+        cfg = SplunkConfig(base_url=self.base_url, token="T", dry_run=self.dry_run)
         return SplunkClient(
             cfg, transport=httpx.MockTransport(lambda req: httpx.Response(200, json={}))
         )
@@ -103,7 +104,7 @@ def test_interactive_confirm_gates_the_write(monkeypatch, tmp_path):
     monkeypatch.setenv("SPLUNK_TOKEN", "T")
     monkeypatch.setenv("VCT_SPLUNK_AUDIT", str(tmp_path / "audit.log"))
     tty = SimpleNamespace(isatty=lambda: True)
-    monkeypatch.setattr("vct_splunk.commands.output.sys", SimpleNamespace(stdin=tty, stderr=tty))
+    monkeypatch.setattr("vct_splunk.output.formatter.sys", SimpleNamespace(stdin=tty, stderr=tty))
 
     prompts: list[str] = []
 
@@ -111,7 +112,7 @@ def test_interactive_confirm_gates_the_write(monkeypatch, tmp_path):
         prompts.append(message)
         raise click.Abort()
 
-    monkeypatch.setattr("vct_splunk.commands.output.click.confirm", deny)
+    monkeypatch.setattr("vct_splunk.output.formatter.click.confirm", deny)
     with pytest.raises(click.Abort):
         do_write(
             _Ctx(),
@@ -121,13 +122,13 @@ def test_interactive_confirm_gates_the_write(monkeypatch, tmp_path):
         )
     assert "delete index 'web'" in prompts[0]
 
-    monkeypatch.setattr("vct_splunk.commands.output.click.confirm", lambda *a, **k: True)
+    monkeypatch.setattr("vct_splunk.output.formatter.click.confirm", lambda *a, **k: True)
     result = do_write(_Ctx(), action="a", audit_event={"action": "x"}, run=lambda c: {"ok": True})
     assert result == {"ok": True}
 
 
 def test_audit_falls_back_to_xdg_state_home(monkeypatch, tmp_path):
-    from vct_splunk.core import audit
+    from vct_splunk.utils import audit
 
     monkeypatch.delenv("VCT_SPLUNK_AUDIT", raising=False)
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))

@@ -22,29 +22,45 @@ supported variable, and [README.md](./README.md) for connecting to a server.
 
 ## Architecture
 
-The package separates a Click-free core from a thin CLI shell (the "functional
-core, imperative shell" pattern):
+The package follows the same API-endpoint framework as `vct-cribl-cli`, with a
+Click-free library under `api/` + `auth/` + `config/` + `utils/` and a thin CLI
+shell in `commands/` (the "functional core, imperative shell" pattern). See
+[docs/architecture.md](./docs/architecture.md) for the full map.
 
-- `src/vct_splunk/core/` — plain functions and typed errors. **Never imports
-  Click.** This is the reusable, unit-testable library: `client` (transport,
-  auth, retries, pagination, dry-run), `auth` (session login), `profiles`
-  (INI profile loading), `errors`, `audit`, `namespace`
-  (owner/app resolution), `resource` (the generic CRUD engine: `Spec`/`Field`/
-  `CrudResource`), `backends` + `acs/` (Splunk Cloud ACS support), and one
-  module per hand-written operation (`server`, `api`, `jobs`, `search`,
-  `saved_searches` for dispatch, `health`).
+- `src/vct_splunk/api/` — the reusable REST layer. **Never imports Click.**
+  `client.py` holds the layered httpx transport stack (`AuthTransport` injects
+  the Authorization header per request, `RetryTransport` retries 429/503) and
+  the envelope-aware `SplunkClient`; `endpoint_factory.py` is the generic CRUD
+  engine (`EndpointConfig`/`Field`/`Endpoints`); `endpoints/` holds one module
+  per hand-written operation (`server`, `search`, `jobs`, `saved_searches`,
+  `kvstore`, `hec`, `apps`, `cluster`, `license`, `deploy`, `lookups`,
+  `datamodel`, `health`, `raw`); `acs/` is the Splunk Cloud ACS
+  management-plane client.
+- `src/vct_splunk/auth/` — `session.py`: credential resolution
+  (token / session key / username+password login) with cribl-style caching,
+  called per request by the auth transport.
+- `src/vct_splunk/config/` — `types.py` (`SplunkConfig`) and `loader.py`
+  (INI profiles, env vars, flag merging: flag > env > profile > default).
+- `src/vct_splunk/utils/` — typed `errors`, `redact`, `namespace` (owner/app
+  resolution), `path`, `validation`, `audit`, `backends` (Cloud deduction).
+- `src/vct_splunk/output/` — `formatter.py`: JSON/table rendering and the
+  error envelope.
 - `src/vct_splunk/commands/` — Click adapters, one module per hand-written
   command group (`server`, `api`, `auth`, `search`, `health`, `inspect`, plus
   `saved_search`'s `run`), plus shared plumbing: `context` (the `command`
-  decorator and `Ctx`), `output` (rendering, error envelope), `write` (the
-  single gated write path), `dispatch` (routes a few reads to Cloud ACS), and
-  `registry` + `factory` (resource specs declared as data, turned into
-  generated CRUD groups — `index`, `saved-search`, `user`, `role`, `macro`,
-  the data inputs/outputs, and friends).
+  decorator and `Ctx`), `write` (the single gated write path), `dispatch`
+  (routes a few reads to Cloud ACS), and `registry` + `command_factory`
+  (resource configs declared as data, turned into generated CRUD groups —
+  `index`, `saved-search`, `user`, `role`, `macro`, the data inputs/outputs,
+  and friends).
 - `src/vct_splunk/cli.py` assembles the root group and the `splunk` entry point;
   `__main__.py` enables `python -m vct_splunk`.
 
-Dependencies flow one way: `commands` import `core`, never the reverse.
+Dependencies flow one way: `commands` import the library packages, never the
+reverse. A downstream application embeds the library surface directly:
+`config.loader.load_config()` → `api.client.create_client()` → the
+`api.endpoints.*` / `api.endpoint_factory.Endpoints` functions (plus the
+cribl-style `api.client.set_client()`/`get_client()` process-wide hook).
 
 Two cross-cutting ideas to know about:
 

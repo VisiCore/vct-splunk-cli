@@ -10,11 +10,11 @@ from __future__ import annotations
 import httpx
 import pytest
 
+from vct_splunk.api.endpoint_factory import EndpointConfig, Endpoints, Field
 from vct_splunk.commands.registry import INDEX, REGISTRY, SAVED_SEARCH
-from vct_splunk.core.errors import NotFoundError, UsageError
-from vct_splunk.core.resource import CrudResource, Field, Spec
+from vct_splunk.utils.errors import NotFoundError, UsageError
 
-GLOBAL_SPEC = Spec(
+GLOBAL_SPEC = EndpointConfig(
     name="widget",
     path="/services/data/widgets",
     help="Widgets.",
@@ -27,15 +27,15 @@ GLOBAL_SPEC = Spec(
 
 # A namespaced spec sharing GLOBAL_SPEC's `color` field, so one parametrized
 # test can assert a property against both a global and a namespaced resource.
-NS_SPEC = Spec(
+NS_SPEC = EndpointConfig(
     name="gadget",
     path="configs/conf-gadgets",
     help="Gadgets.",
-    namespaced=True,
+    scope="namespaced",
     fields=(Field("color", key="color"),),
 )
 
-PATH_SPEC = Spec(
+PATH_SPEC = EndpointConfig(
     name="monitor",
     path="/services/data/inputs/monitor",
     help="Monitor inputs.",
@@ -52,7 +52,7 @@ def test_create_maps_keys_scale_and_set(client_for):
         seen["body"] = req.content.decode()
         return httpx.Response(201, json={"entry": [{"name": "w1", "content": {}}]})
 
-    CrudResource(GLOBAL_SPEC).create(
+    Endpoints(GLOBAL_SPEC).create(
         client_for(handler),
         "w1",
         fields={"size_gb": 2, "color": "red"},
@@ -72,7 +72,7 @@ def test_out_map_renames_and_drops_unmapped(client_for):
         "entry": [{"name": "w1", "content": {"sizeMB": 1024, "color": "blue", "junk": "x"}}],
         "paging": {"total": 1},
     }
-    rows = CrudResource(GLOBAL_SPEC).list(client_for(lambda req: httpx.Response(200, json=body)))
+    rows = Endpoints(GLOBAL_SPEC).list(client_for(lambda req: httpx.Response(200, json=body)))
     assert rows[0] == {"size_mb": 1024, "color": "blue", "name": "w1"}  # 'junk' dropped
 
 
@@ -90,9 +90,9 @@ def test_update_never_sends_a_name(spec, client_for):
         seen["body"] = req.content.decode()
         return httpx.Response(200, json={"entry": [{"name": "thing", "content": {}}]})
 
-    owner = "nobody" if spec.namespaced else None
-    app = "my_app" if spec.namespaced else None
-    CrudResource(spec).update(
+    owner = "nobody" if spec.scope == "namespaced" else None
+    app = "my_app" if spec.scope == "namespaced" else None
+    Endpoints(spec).update(
         client_for(handler), "thing", fields={"color": "blue"}, owner=owner, app=app
     )
 
@@ -112,7 +112,7 @@ def test_namespaced_list_surfaces_the_acl_block(client_for):
         ],
         "paging": {"total": 1},
     }
-    rows = CrudResource(NS_SPEC).list(
+    rows = Endpoints(NS_SPEC).list(
         client_for(lambda req: httpx.Response(200, json=body)), owner="-", app="-"
     )
 
@@ -128,13 +128,13 @@ def test_namespaced_base_builds_servicesns(client_for):
         seen["path"] = req.url.path
         return httpx.Response(200, json={"entry": [], "paging": {"total": 0}})
 
-    CrudResource(NS_SPEC).list(client_for(handler), owner="nobody", app="my_app")
+    Endpoints(NS_SPEC).list(client_for(handler), owner="nobody", app="my_app")
     assert seen["path"] == "/servicesNS/nobody/my_app/configs/conf-gadgets"
 
 
 def test_get_missing_raises_notfound(client_for):
     with pytest.raises(NotFoundError):
-        CrudResource(GLOBAL_SPEC).get(
+        Endpoints(GLOBAL_SPEC).get(
             client_for(lambda req: httpx.Response(200, json={"entry": []})), "nope"
         )
 
@@ -148,11 +148,13 @@ def test_every_registry_spec_uses_the_generic_read_engine(spec, client_for):
         seen["path"] = req.url.path
         return httpx.Response(200, json={"entry": [], "paging": {"total": 0}})
 
-    owner = "nobody" if spec.namespaced else None
-    app = "my_app" if spec.namespaced else None
-    assert CrudResource(spec).list(client_for(handler), owner=owner, app=app) == []
+    owner = "nobody" if spec.scope == "namespaced" else None
+    app = "my_app" if spec.scope == "namespaced" else None
+    assert Endpoints(spec).list(client_for(handler), owner=owner, app=app) == []
     expected = (
-        f"/servicesNS/nobody/my_app/{spec.path.lstrip('/')}" if spec.namespaced else spec.path
+        f"/servicesNS/nobody/my_app/{spec.path.lstrip('/')}"
+        if spec.scope == "namespaced"
+        else spec.path
     )
     assert seen == {"method": "GET", "path": expected}
 
@@ -165,7 +167,7 @@ def test_dynamic_name_paths_are_encoded(client_for, operation):
         seen["path"] = req.url.raw_path.decode().partition("?")[0]
         return httpx.Response(200, json={"entry": [{"name": "east west", "content": {}}]})
 
-    resource = CrudResource(GLOBAL_SPEC)
+    resource = Endpoints(GLOBAL_SPEC)
     client = client_for(handler)
     if operation == "get":
         resource.get(client, "east west")
@@ -190,7 +192,7 @@ def test_absolute_path_identifiers_are_validated_and_encoded(client_for):
         seen["path"] = req.url.raw_path.decode().partition("?")[0]
         return httpx.Response(200, json={})
 
-    CrudResource(PATH_SPEC).delete(client_for(handler), "/var/tmp/input.log")
+    Endpoints(PATH_SPEC).delete(client_for(handler), "/var/tmp/input.log")
 
     assert seen["path"] == "/services/data/inputs/monitor/%2Fvar%2Ftmp%2Finput.log"
 
@@ -205,7 +207,7 @@ def test_absolute_path_identifiers_are_validated_and_encoded(client_for):
 )
 def test_path_identifiers_refuse_wrong_shape_and_traversal(client_for, spec, name):
     requests: list[httpx.Request] = []
-    resource = CrudResource(spec)
+    resource = Endpoints(spec)
     client = client_for(lambda req: requests.append(req) or httpx.Response(200, json={}))
 
     with pytest.raises(UsageError):
@@ -218,7 +220,7 @@ def test_path_identifiers_refuse_wrong_shape_and_traversal(client_for, spec, nam
 @pytest.mark.parametrize("name", ["..", "a/b", "a\\b", "%252fetc", "a\nb"])
 def test_dynamic_name_traversal_sends_no_request(client_for, operation, name):
     requests: list[httpx.Request] = []
-    resource = CrudResource(GLOBAL_SPEC)
+    resource = Endpoints(GLOBAL_SPEC)
     client = client_for(lambda req: requests.append(req) or httpx.Response(200, json={"entry": []}))
 
     with pytest.raises(UsageError):

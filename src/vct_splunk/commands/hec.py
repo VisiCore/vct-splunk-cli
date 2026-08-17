@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import click
 
-from ..core import hec as core
-from ..core.path import path_segment
-from . import output as out
+from ..api.endpoints import hec as core
+from ..output import formatter as out
+from ..utils.path import path_segment
 from .context import command
 from .write import do_write
 

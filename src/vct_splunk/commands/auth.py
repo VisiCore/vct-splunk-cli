@@ -13,11 +13,11 @@ import sys
 
 import click
 
-from ..core import auth as core
-from ..core.client import auth_status_from_env
-from ..core.errors import UsageError
-from ..core.redact import safe_target
-from . import output as out
+from ..auth import session as core
+from ..config.loader import auth_status
+from ..output import formatter as out
+from ..utils.errors import UsageError
+from ..utils.redact import safe_target
 from .context import command
 
 
@@ -94,7 +94,7 @@ def login(ctx, username: str | None) -> None:
 @command
 def status(ctx) -> None:
     """Report the resolved target URL and active auth scheme (no secret shown)."""
-    resolved = auth_status_from_env(ctx.base_url, profile=ctx.profile)
+    resolved = auth_status(ctx.base_url, profile=ctx.profile)
     out.emit(
         {"target": safe_target(resolved.base_url), "auth_scheme": resolved.auth_scheme},
         ctx.output_mode,

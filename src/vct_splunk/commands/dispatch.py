@@ -13,8 +13,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from ..core.acs import operations as acs
-from ..core.errors import UnsupportedBackendError
+from ..api.acs import operations as acs
+from ..utils.errors import UnsupportedBackendError
 
 #: resource name -> the ACS read op. Only these resources have a Cloud route; the
 #: REST side is supplied by each call site (it already knows its own path/output).

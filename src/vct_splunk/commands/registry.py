@@ -1,8 +1,8 @@
 """The flat registry of factory-generated CRUD resources.
 
-Each entry is data -- a :class:`~vct_splunk.core.resource.Spec` describing a
+Each entry is data -- a :class:`~vct_splunk.api.endpoint_factory.EndpointConfig` describing a
 CRUD-shaped Splunk resource. ``cli.py`` loops over :data:`REGISTRY` and builds a
-command group per spec via :func:`vct_splunk.commands.factory.build_group`.
+command group per spec via :func:`vct_splunk.commands.command_factory.build_group`.
 Resources that do not fit the CRUD shape stay hand-written and are not listed here.
 
 Specs are intentionally thin: a path, help text, and the verbs/flags that shape
@@ -14,7 +14,7 @@ stays a typed secret field so it is read from the environment, never a flag.
 
 from __future__ import annotations
 
-from ..core.resource import Field, Spec
+from ..api.endpoint_factory import EndpointConfig, Field
 
 # Verb set for inputs/outputs that also support enable/disable control endpoints.
 # (Plain CRUD is the Spec default, so it does not need a named constant.)
@@ -25,7 +25,7 @@ _CRUD_TOGGLE = ("list", "get", "create", "update", "delete", "enable", "disable"
 # factory and keeps its curated flags/output, and `saved-search` adds a
 # hand-written `run` (dispatch) command on top of the generated group.
 
-INDEX = Spec(
+INDEX = EndpointConfig(
     name="index",
     path="/services/data/indexes",
     help="Splunk indexes.",
@@ -54,12 +54,12 @@ INDEX = Spec(
     },
 )
 
-SAVED_SEARCH = Spec(
+SAVED_SEARCH = EndpointConfig(
     name="saved-search",
     path="saved/searches",
     help="Splunk saved searches (namespaced by owner + app).",
     verbs=("list", "get", "create", "update", "delete"),
-    namespaced=True,
+    scope="namespaced",
     fields=(
         Field("search", key="search", required=True, help="SPL for the saved search."),
         Field("description", key="description", help="Description of the saved search."),
@@ -78,7 +78,7 @@ SAVED_SEARCH = Spec(
 
 # --- Access (#4) -------------------------------------------------------------
 
-USER = Spec(
+USER = EndpointConfig(
     name="user",
     path="/services/authentication/users",
     help="Splunk users (local authentication).",
@@ -92,13 +92,13 @@ USER = Spec(
     ),
 )
 
-ROLE = Spec(
+ROLE = EndpointConfig(
     name="role",
     path="/services/authorization/roles",
     help="Splunk roles (authorization).",
 )
 
-CAPABILITY = Spec(
+CAPABILITY = EndpointConfig(
     name="capability",
     path="/services/authorization/capabilities",
     help="Authorization capabilities (read-only).",
@@ -109,7 +109,7 @@ CAPABILITY = Spec(
 # Global, under /services/data/inputs|outputs. The HEC token's value is returned
 # in the create response (the caller needs it); token rotation stays hand-written.
 
-MONITOR_INPUT = Spec(
+MONITOR_INPUT = EndpointConfig(
     name="monitor-input",
     path="/services/data/inputs/monitor",
     help="File and directory monitor inputs.",
@@ -117,21 +117,21 @@ MONITOR_INPUT = Spec(
     absolute_name=True,
 )
 
-TCP_INPUT = Spec(
+TCP_INPUT = EndpointConfig(
     name="tcp-input",
     path="/services/data/inputs/tcp/raw",
     help="Raw TCP inputs.",
     verbs=_CRUD_TOGGLE,
 )
 
-UDP_INPUT = Spec(
+UDP_INPUT = EndpointConfig(
     name="udp-input",
     path="/services/data/inputs/udp",
     help="UDP inputs.",
     verbs=_CRUD_TOGGLE,
 )
 
-SCRIPT_INPUT = Spec(
+SCRIPT_INPUT = EndpointConfig(
     name="script-input",
     path="/services/data/inputs/script",
     help="Scripted inputs.",
@@ -139,7 +139,7 @@ SCRIPT_INPUT = Spec(
     absolute_name=True,
 )
 
-HEC_TOKEN = Spec(
+HEC_TOKEN = EndpointConfig(
     name="hec-token",
     path="/services/data/inputs/http",
     help="HTTP Event Collector tokens.",
@@ -149,14 +149,14 @@ HEC_TOKEN = Spec(
     mints_secret=True,
 )
 
-OUTPUT_SERVER = Spec(
+OUTPUT_SERVER = EndpointConfig(
     name="output-server",
     path="/services/data/outputs/tcp/server",
     help="Forwarder output servers (forwarding destinations).",
     verbs=_CRUD_TOGGLE,
 )
 
-OUTPUT_GROUP = Spec(
+OUTPUT_GROUP = EndpointConfig(
     name="output-group",
     path="/services/data/outputs/tcp/group",
     help="Forwarder output groups.",
@@ -166,47 +166,47 @@ OUTPUT_GROUP = Spec(
 # --- Knowledge objects (#8) --------------------------------------------------
 # Namespaced. Tags, data models, and lookup-file upload stay hand-written.
 
-MACRO = Spec(
+MACRO = EndpointConfig(
     name="macro",
     path="configs/conf-macros",
     help="Search macros.",
-    namespaced=True,
+    scope="namespaced",
 )
 
-EVENTTYPE = Spec(
+EVENTTYPE = EndpointConfig(
     name="eventtype",
     path="saved/eventtypes",
     help="Event types.",
-    namespaced=True,
+    scope="namespaced",
 )
 
-EXTRACTION = Spec(
+EXTRACTION = EndpointConfig(
     name="extraction",
     path="data/transforms/extractions",
     help="Field extractions (transforms).",
-    namespaced=True,
+    scope="namespaced",
 )
 
-LOOKUP_DEFINITION = Spec(
+LOOKUP_DEFINITION = EndpointConfig(
     name="lookup-definition",
     path="data/transforms/lookups",
     help="Lookup definitions (transforms).",
-    namespaced=True,
+    scope="namespaced",
 )
 
-TAG = Spec(
+TAG = EndpointConfig(
     name="tag",
     path="saved/fvtags",
     help="Field-value tags (settings via --set).",
-    namespaced=True,
+    scope="namespaced",
     verbs=("list", "get", "create", "update", "delete"),
 )
 
-DATAMODEL = Spec(
+DATAMODEL = EndpointConfig(
     name="datamodel",
     path="datamodel/model",
     help="Data models (settings via --set). Acceleration is a separate command.",
-    namespaced=True,
+    scope="namespaced",
 )
 
 # --- KV Store (#9) -----------------------------------------------------------
@@ -214,18 +214,18 @@ DATAMODEL = Spec(
 # (field.<name>=<type>), so they go through --set. Data records are a document
 # store and stay hand-written.
 
-KVSTORE_COLLECTION = Spec(
+KVSTORE_COLLECTION = EndpointConfig(
     name="kvstore-collection",
     path="storage/collections/config",
     help="KV Store collection schemas (use --set field.<name>=<type> for fields).",
-    namespaced=True,
+    scope="namespaced",
 )
 
 # --- Platform (#10) ----------------------------------------------------------
 # Cluster control, restart, and peers are action/read endpoints and stay
 # hand-written.
 
-MESSAGE = Spec(
+MESSAGE = EndpointConfig(
     name="message",
     path="/services/messages",
     help="System bulletin messages.",
@@ -236,14 +236,14 @@ MESSAGE = Spec(
 # Lifecycle only. Install-from-file/URL is a multipart upload and stays
 # hand-written.
 
-APP = Spec(
+APP = EndpointConfig(
     name="app",
     path="/services/apps/local",
     help="Installed apps (install from file/URL is separate).",
     verbs=("list", "get", "delete", "enable", "disable"),
 )
 
-REGISTRY: list[Spec] = [
+REGISTRY: list[EndpointConfig] = [
     USER,
     ROLE,
     CAPABILITY,

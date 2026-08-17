@@ -7,7 +7,7 @@ import os
 import httpx
 import pytest
 
-from vct_splunk.core.acs.operations import LIST_ENVELOPES
+from vct_splunk.api.acs.operations import LIST_ENVELOPES
 
 pytestmark = [
     pytest.mark.integration,
