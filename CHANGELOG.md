@@ -6,6 +6,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Read configuration files through `splunk config list [FILE]` and `splunk
+  config get FILE STANZA`. The commands use the normal read namespace, accept a
+  file name with or without `.conf`, paginate collection results, and redact
+  secret-valued properties.
+
 ### Changed
 
 - Lower the supported Python floor to 3.9, so the CLI runs under the interpreter

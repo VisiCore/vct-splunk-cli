@@ -58,6 +58,13 @@ _SPECIAL: tuple[Case, ...] = (
     Case(("auth", "login"), "read", (("--username", "admin"),)),
     Case(("auth", "status"), "read", ((),)),
     Case(("cluster", "status"), "read", ((),)),
+    Case(
+        ("config", "get"),
+        "read",
+        (("server", "general"),),
+        live_argv=("server", "general"),
+    ),
+    Case(("config", "list"), "read", ((), ("server.conf",)), live_argv=()),
     Case(("datamodel", "accelerate"), "write", (("model", "--app", "my_app", "--dry-run"),)),
     Case(("deploy-client", "list"), "read", ((),)),
     Case(("deploy-server", "reload"), "write", (("--dry-run",),)),
