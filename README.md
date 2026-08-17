@@ -104,6 +104,8 @@ splunk search run --query 'index=_internal | stats count by sourcetype' --earlie
 splunk search list                       # search jobs, running and finished
 splunk health check                      # server health; exit code 5 if anything is warn or fail
 splunk saved-search list --app my_app    # saved searches in an app
+splunk config list props.conf            # stanzas in a configuration file
+splunk config get props host::web-01     # properties from one stanza
 splunk api get /services/data/indexes    # raw read-only escape hatch for any endpoint
 ```
 
