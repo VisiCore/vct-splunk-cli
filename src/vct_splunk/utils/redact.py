@@ -14,6 +14,8 @@ update. Commands whose purpose is to mint a credential (``auth login``,
 
 from __future__ import annotations
 
+import os
+import re
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
@@ -21,7 +23,13 @@ from urllib.parse import urlsplit, urlunsplit
 #: see that the field exists.
 REDACTED = "<redacted>"
 
+#: Set to hide a Splunk Cloud stack name at an untrusted output boundary (CI
+#: logs). See :func:`public_target` and :func:`redact_exception_text`.
+REDACT_TARGET_ENV = "VCT_SPLUNK_REDACT_TARGET"
+
 _SECRET_MARKERS = ("pass4symmkey", "password", "passwd", "secret", "token")
+_CLOUD_STACK_HOST_RE = re.compile(r"(?i)(?<![A-Za-z0-9-])[A-Za-z0-9-]+(?=\.splunkcloud)")
+_ACS_STACK_PATH_RE = re.compile(r"(?i)(admin\.splunk\.com/)(?!<redacted>(?:/|$))[^/?#\s]+")
 
 
 def is_secret_key(key: object) -> bool:
@@ -98,3 +106,24 @@ def safe_target(target: str) -> str:
         pass
     path = parsed.path if "@" not in parsed.path else f"/{REDACTED}"
     return urlunsplit((parsed.scheme, host, path, "", ""))
+
+
+def public_target(target: str) -> str:
+    """Return :func:`safe_target`, optionally with its Cloud stack name hidden.
+
+    ``safe_target`` remains suitable for the audit trail, where a Cloud stack
+    identifies the instance. Set :data:`REDACT_TARGET_ENV` to ``"1"`` for
+    untrusted output boundaries such as CI logs -- this applies the same
+    stack-label rewrite :func:`redact_exception_text` applies to free-form
+    error text, run once over the credential-safe target.
+    """
+    target = safe_target(target)
+    if os.environ.get(REDACT_TARGET_ENV) != "1":
+        return target
+    return redact_exception_text(target)
+
+
+def redact_exception_text(text: str) -> str:
+    """Hide Cloud stack labels from a free-form exception message or target."""
+    text = _CLOUD_STACK_HOST_RE.sub(REDACTED, text)
+    return _ACS_STACK_PATH_RE.sub(rf"\g<1>{REDACTED}", text)
