@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import click
 
-from ..core import api as core
-from ..core.errors import UsageError
-from . import output as out
+from ..api.endpoints import raw as core
+from ..output import formatter as out
+from ..utils.errors import UsageError
 from .context import command
 
 

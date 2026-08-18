@@ -8,9 +8,9 @@ import httpx
 import pytest
 from click.testing import CliRunner
 
+from vct_splunk.api.endpoints import config
 from vct_splunk.cli import cli
-from vct_splunk.core import config
-from vct_splunk.core.errors import UsageError
+from vct_splunk.utils.errors import UsageError
 
 
 def _entry(name: str, content: object | None = None) -> dict[str, object]:

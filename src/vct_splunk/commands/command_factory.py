@@ -1,0 +1,265 @@
+"""Build a Click command group from a declarative resource
+:class:`~vct_splunk.api.endpoint_factory.EndpointConfig`.
+
+One :func:`build_group` turns a spec into a ``list`` / ``get`` / ``create`` /
+``update`` / ``delete`` (and optional ``enable`` / ``disable``) group, wired to
+the same shared helpers the hand-written commands use: ``@command`` for the shared
+options and error mapping, :func:`do_write` for gated writes, namespace resolution
+for namespaced resources, and a generic ``--set KEY=VALUE`` escape hatch so a spec
+rarely needs more than a path.
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+from typing import Any
+
+import click
+
+from ..api.endpoint_factory import EndpointConfig, Endpoints, Field
+from ..output import formatter as out
+from ..utils.errors import UsageError
+from ..utils.namespace import resolve_ns
+from ..utils.validation import parse_key_value_pairs
+from .context import AliasedGroup, command
+from .dispatch import dispatch_list, has_cloud_list
+from .write import do_write, refuse_cloud_write
+
+_VERB_ALIASES = {"add": "create", "edit": "update", "remove": "delete"}
+
+
+def _help_for(spec: EndpointConfig, verb: str) -> str:
+    """One-line help for a generated command, in the hand-written commands' style."""
+    noun = spec.name.replace("-", " ")
+    a = f"an {noun}" if noun[0] in "aeiou" else f"a {noun}"
+    gated = " Gated write (--dry-run previews; --yes when non-interactive)."
+    ns = " Requires an app (--app or $SPLUNK_APP)." if spec.scope == "namespaced" else ""
+    texts = {
+        "list": f"List every {noun}.",
+        "get": f"Show one {noun}.",
+        "create": f"Create {a}.{gated}{ns}",
+        "update": f"Update {a} (only the fields you pass).{gated}{ns}",
+        "delete": f"Delete {a}.{gated}{ns}",
+        "enable": f"Enable {a}.{gated}",
+        "disable": f"Disable {a}.{gated}",
+    }
+    return texts[verb]
+
+
+def _gate_args(
+    spec: EndpointConfig, verb: str, name: str, owner, app
+) -> tuple[str, dict[str, Any]]:
+    """The confirmation phrase and audit event for one gated write.
+
+    Namespaced resources name the target app in the prompt and record the
+    resolved namespace in the audit log.
+    """
+    action = f"{verb} {spec.name} '{name}'"
+    event: dict[str, Any] = {"action": f"{spec.name}.{verb}", "name": name}
+    if spec.scope == "namespaced":
+        action += f" in app '{app}'"
+        event.update({"app": app, "owner": owner})
+    return action, event
+
+
+def build_group(spec: EndpointConfig) -> click.Group:
+    """Return the Click group for *spec*, exposing only the verbs it declares."""
+    res = Endpoints(spec)
+    aliases = {a: t for a, t in _VERB_ALIASES.items() if t in spec.verbs}
+
+    @click.group(name=spec.name, cls=AliasedGroup, aliases=aliases, help=spec.help)
+    def grp() -> None:
+        pass
+
+    if "list" in spec.verbs:
+
+        @grp.command("list", help=_help_for(spec, "list"))
+        @command
+        def _list(ctx) -> None:
+            # Resources both backends serve (index/role/hec-token) route by the
+            # deduced backend: ACS on Cloud, REST otherwise. These specs are not
+            # namespaced, so there is no owner/app to resolve for the Cloud path.
+            if has_cloud_list(spec.name):
+                out.emit(
+                    dispatch_list(ctx, spec.name, lambda c: res.list(c, owner=None, app=None)),
+                    ctx.output_mode,
+                    ctx.meta(),
+                )
+                return
+            owner, app = _ns(ctx, spec)
+            with ctx.client() as c:
+                out.emit(res.list(c, owner=owner, app=app), ctx.output_mode, ctx.meta())
+
+    if "get" in spec.verbs:
+
+        @grp.command("get", help=_help_for(spec, "get"))
+        @click.argument("name")
+        @command
+        def _get(ctx, name) -> None:
+            res.validate_name(name)
+            owner, app = _ns(ctx, spec)
+            with ctx.client() as c:
+                out.emit(res.get(c, name, owner=owner, app=app), ctx.output_mode, ctx.meta())
+
+    if "create" in spec.verbs:
+
+        @grp.command("create", help=_help_for(spec, "create"))
+        @click.argument("name")
+        @_field_options(spec, for_create=True)
+        @command
+        def _create(ctx, name, **opts) -> None:
+            res.validate_name(name)
+            owner, app = _ns(ctx, spec, write_verb="create")
+            fields, sets = _collect_fields(spec, opts)
+            action, event = _gate_args(spec, "create", name, owner, app)
+            result = do_write(
+                ctx,
+                action=action,
+                audit_event=event,
+                run=lambda c: res.create(c, name, fields=fields, sets=sets, owner=owner, app=app),
+            )
+            out.emit(result, ctx.output_mode, ctx.meta())
+
+    if "update" in spec.verbs:
+
+        @grp.command("update", help=_help_for(spec, "update"))
+        @click.argument("name")
+        @_field_options(spec)
+        @command
+        def _update(ctx, name, **opts) -> None:
+            res.validate_name(name)
+            owner, app = _ns(ctx, spec, write_verb="update")
+            fields, sets = _collect_fields(spec, opts)
+            if not sets and all(v in (None, ()) for v in fields.values()):
+                raise UsageError("Nothing to update. Pass a field option or --set KEY=VALUE.")
+            action, event = _gate_args(spec, "update", name, owner, app)
+            result = do_write(
+                ctx,
+                action=action,
+                audit_event=event,
+                run=lambda c: res.update(c, name, fields=fields, sets=sets, owner=owner, app=app),
+            )
+            out.emit(result, ctx.output_mode, ctx.meta())
+
+    if "delete" in spec.verbs:
+
+        @grp.command("delete", help=_help_for(spec, "delete"))
+        @click.argument("name")
+        @command
+        def _delete(ctx, name) -> None:
+            res.validate_name(name)
+            owner, app = _ns(ctx, spec, write_verb="delete")
+            action, event = _gate_args(spec, "delete", name, owner, app)
+            result = do_write(
+                ctx,
+                action=action,
+                audit_event=event,
+                run=lambda c: res.delete(c, name, owner=owner, app=app),
+            )
+            out.emit(result, ctx.output_mode, ctx.meta())
+
+    for _verb in ("enable", "disable"):
+        if _verb in spec.verbs:
+            _add_control(grp, spec, res, _verb)
+
+    return grp
+
+
+def _add_control(grp: click.Group, spec: EndpointConfig, res: Endpoints, verb: str) -> None:
+    """Register an enable/disable control command (kept in a helper to bind *verb*)."""
+
+    @grp.command(verb, help=_help_for(spec, verb))
+    @click.argument("name")
+    @command
+    def _control(ctx, name) -> None:
+        res.validate_name(name)
+        owner, app = _ns(ctx, spec, write_verb=verb)
+        action, event = _gate_args(spec, verb, name, owner, app)
+        result = do_write(
+            ctx,
+            action=action,
+            audit_event=event,
+            run=lambda c: res.control(c, name, verb, owner=owner, app=app),
+        )
+        out.emit(result, ctx.output_mode, ctx.meta())
+
+
+def _field_options(spec: EndpointConfig, *, for_create: bool = False):
+    """A decorator that adds one Click option per (non-secret) field, plus --set.
+
+    ``required`` fields are enforced only on create; update always sends just
+    the fields you pass.
+    """
+    options = []
+    for f in spec.fields:
+        if f.secret:
+            continue  # secrets are read from env / prompt, never a flag
+        options.append(_option_for(f, required=for_create and f.required))
+    options.append(
+        click.option(
+            "--set",
+            "_set",
+            multiple=True,
+            metavar="KEY=VALUE",
+            help="Raw Splunk field (repeatable).",
+        )
+    )
+
+    def decorate(fn):
+        for option in reversed(options):
+            fn = option(fn)
+        return fn
+
+    return decorate
+
+
+def _option_for(f: Field, *, required: bool = False):
+    dashed = f.opt.replace("_", "-")
+    if f.type == "bool":
+        return click.option(f"--{dashed}/--no-{dashed}", f.opt, default=None, help=f.help)
+    # An explicit default (even None) satisfies `required` in Click, so a
+    # required option must carry no default at all.
+    kwargs: dict[str, Any] = {"help": f.help}
+    if required:
+        kwargs["required"] = True
+    else:
+        kwargs["default"] = None
+    if f.type == "int":
+        kwargs["type"] = int
+    elif f.type == "float":
+        kwargs["type"] = float
+    return click.option(f"--{dashed}", f.opt, **kwargs)
+
+
+def _collect_fields(
+    spec: EndpointConfig, opts: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, str]]:
+    """Split Click options into (field values, --set pairs), resolving secrets."""
+    values = dict(opts)
+    sets = parse_key_value_pairs(values.pop("_set", ()))
+    for f in spec.fields:
+        if not f.secret:
+            continue
+        env = f"SPLUNK_{spec.name.upper().replace('-', '_')}_{f.opt.upper()}"
+        secret = os.environ.get(env)
+        if secret is None and sys.stdin.isatty() and sys.stderr.isatty():
+            secret = click.prompt(f.opt.replace("_", " "), hide_input=True, err=True)
+        if secret is not None:
+            values[f.opt] = secret
+    return values, sets
+
+
+def _ns(
+    ctx: Any, spec: EndpointConfig, *, write_verb: str | None = None
+) -> tuple[str | None, str | None]:
+    """Resolve (owner, app) for a namespaced spec; global specs ignore them.
+
+    A `write_verb` marks this as a mutation, which a Cloud target refuses here
+    rather than after being asked for an --app that would not have helped.
+    """
+    if write_verb is not None:
+        refuse_cloud_write(ctx, spec.name, write_verb)
+    if spec.scope != "namespaced":
+        return (None, None)
+    return resolve_ns(ctx.owner, ctx.app, for_write=write_verb is not None)

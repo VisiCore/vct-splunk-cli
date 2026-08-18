@@ -10,9 +10,9 @@ import pytest
 from click.testing import CliRunner
 
 from conftest import cli_runner
+from vct_splunk.auth import session as core
 from vct_splunk.cli import cli
-from vct_splunk.core import auth as core
-from vct_splunk.core.errors import APIError, AuthError
+from vct_splunk.utils.errors import APIError, AuthError
 
 
 def _clear_auth_env(monkeypatch):
@@ -206,7 +206,7 @@ def test_auth_status_reports_username_password_without_logging_in(monkeypatch):
     monkeypatch.setenv("SPLUNK_USERNAME", "admin")
     monkeypatch.setenv("SPLUNK_PASSWORD", "secret")
     monkeypatch.setattr(
-        "vct_splunk.core.auth.login",
+        "vct_splunk.auth.session.login",
         lambda *a, **k: pytest.fail("status must not log in"),
     )
     result = CliRunner().invoke(cli, ["auth", "status", "--output", "json"])

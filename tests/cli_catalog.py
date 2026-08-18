@@ -179,7 +179,7 @@ def _generated_cases() -> tuple[Case, ...]:
                     name = _LIVE_MISSING_NAMES.get(spec.name, _LIVE_MISSING_NAME)
                     live_exit_codes = (4,)
                 live_argv = (name,)
-                if spec.namespaced:
+                if spec.scope == "namespaced":
                     live_argv = (*live_argv, "--app", "search", "--owner", "nobody")
             cases.append(
                 Case(

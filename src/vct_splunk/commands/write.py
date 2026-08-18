@@ -15,11 +15,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from ..core import audit
-from ..core.client import SplunkClient, config_from_env
-from ..core.errors import UnsupportedBackendError
-from ..core.redact import safe_target
-from . import output as out
+from ..api.client import SplunkClient
+from ..config.loader import load_config
+from ..output import formatter as out
+from ..utils import audit
+from ..utils.errors import UnsupportedBackendError
+from ..utils.redact import safe_target
 
 
 def do_write(
@@ -51,7 +52,7 @@ def do_write(
     resource, _, verb = str(audit_event.get("action", "")).partition(".")
     refuse_cloud_write(ctx, resource, verb)
     target = safe_target(
-        target or config_from_env(ctx.base_url, profile=getattr(ctx, "profile", None)).base_url
+        target or load_config(ctx.base_url, profile=getattr(ctx, "profile", None)).base_url
     )
     out.confirm_write(ctx, action, target)
     with ctx.client() as c:

@@ -3,8 +3,10 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from vct_splunk.core.client import ClientConfig, SplunkClient, config_from_env
-from vct_splunk.core.errors import (
+from vct_splunk.api.client import SplunkClient
+from vct_splunk.config.loader import load_config
+from vct_splunk.config.types import SplunkConfig
+from vct_splunk.utils.errors import (
     APIError,
     AuthError,
     NotFoundError,
@@ -83,7 +85,7 @@ def test_non_json_200_returns_raw_text(client_for):
 
 def test_retries_429_then_succeeds(client_for, monkeypatch):
     sleeps: list[float] = []
-    monkeypatch.setattr("vct_splunk.core.client.time.sleep", sleeps.append)
+    monkeypatch.setattr("vct_splunk.api.client.time.sleep", sleeps.append)
     calls = {"n": 0}
 
     def handler(req: httpx.Request) -> httpx.Response:
@@ -100,7 +102,7 @@ def test_retries_429_then_succeeds(client_for, monkeypatch):
 
 def test_retries_503_with_backoff_then_gives_up(client_for, monkeypatch):
     sleeps: list[float] = []
-    monkeypatch.setattr("vct_splunk.core.client.time.sleep", sleeps.append)
+    monkeypatch.setattr("vct_splunk.api.client.time.sleep", sleeps.append)
     calls = {"n": 0}
 
     def handler(req: httpx.Request) -> httpx.Response:
@@ -117,7 +119,7 @@ def test_retries_503_with_backoff_then_gives_up(client_for, monkeypatch):
 
 def test_400_is_not_retried(client_for, monkeypatch):
     monkeypatch.setattr(
-        "vct_splunk.core.client.time.sleep",
+        "vct_splunk.api.client.time.sleep",
         lambda s: pytest.fail("must not sleep on a non-retryable status"),
     )
     calls = {"n": 0}
@@ -168,7 +170,7 @@ def test_session_key_scheme_sets_splunk_auth_header():
         seen["auth"] = req.headers.get("authorization", "")
         return httpx.Response(200, json={"entry": []})
 
-    cfg = ClientConfig(base_url="https://splunk.test:8089", token="SK", auth_scheme="Splunk")
+    cfg = SplunkConfig(base_url="https://splunk.test:8089", session_key="SK")
     SplunkClient(cfg, transport=httpx.MockTransport(handler)).get("/services/server/info")
     assert seen["auth"] == "Splunk SK"
 
@@ -190,23 +192,23 @@ def test_config_from_env_token_stays_bearer(monkeypatch):
     _clear_auth_env(monkeypatch)
     monkeypatch.setenv("SPLUNK_URL", "https://splunk.test:8089")
     monkeypatch.setenv("SPLUNK_TOKEN", "T")
-    cfg = config_from_env()
-    assert (cfg.auth_scheme, cfg.token) == ("Bearer", "T")
+    cfg = load_config()
+    assert (cfg.token, cfg.session_key) == ("T", None)
 
 
 def test_config_from_env_session_key_uses_splunk_scheme(monkeypatch):
     _clear_auth_env(monkeypatch)
     monkeypatch.setenv("SPLUNK_URL", "https://splunk.test:8089")
     monkeypatch.setenv("SPLUNK_SESSION_KEY", "SK")
-    cfg = config_from_env()
-    assert (cfg.auth_scheme, cfg.token) == ("Splunk", "SK")
+    cfg = load_config()
+    assert (cfg.token, cfg.session_key) == (None, "SK")
 
 
 def test_config_from_env_no_credential_raises_usage(monkeypatch):
     _clear_auth_env(monkeypatch)
     monkeypatch.setenv("SPLUNK_URL", "https://splunk.test:8089")
     with pytest.raises(UsageError):
-        config_from_env()
+        load_config()
 
 
 def test_config_from_env_profile_fills_url_when_env_unset(monkeypatch, tmp_path):
@@ -216,7 +218,7 @@ def test_config_from_env_profile_fills_url_when_env_unset(monkeypatch, tmp_path)
     cfgfile.write_text("[prod]\nurl = https://from-profile:8089\n")
     monkeypatch.setenv("VCT_SPLUNK_CONFIG", str(cfgfile))
     monkeypatch.setenv("SPLUNK_TOKEN", "T")
-    cfg = config_from_env(profile="prod")
+    cfg = load_config(profile="prod")
     assert cfg.base_url == "https://from-profile:8089"
 
 
@@ -227,7 +229,7 @@ def test_config_from_env_env_url_wins_over_profile(monkeypatch, tmp_path):
     monkeypatch.setenv("VCT_SPLUNK_CONFIG", str(cfgfile))
     monkeypatch.setenv("SPLUNK_URL", "https://from-env:8089")
     monkeypatch.setenv("SPLUNK_TOKEN", "T")
-    cfg = config_from_env(profile="prod")
+    cfg = load_config(profile="prod")
     assert cfg.base_url == "https://from-env:8089"
 
 
@@ -237,5 +239,5 @@ def test_config_from_env_profile_only_resolves_url_and_token(monkeypatch, tmp_pa
     cfgfile.write_text("[prod]\nurl = https://from-profile:8089\ntoken = T%PROFILE\n")
     cfgfile.chmod(0o600)
     monkeypatch.setenv("VCT_SPLUNK_CONFIG", str(cfgfile))
-    cfg = config_from_env(profile="prod")
+    cfg = load_config(profile="prod")
     assert (cfg.base_url, cfg.token) == ("https://from-profile:8089", "T%PROFILE")

@@ -11,9 +11,9 @@ from pathlib import PurePath
 
 import click
 
-from ..core import lookups as core
-from ..core.namespace import resolve_ns
-from . import output as out
+from ..api.endpoints import lookups as core
+from ..output import formatter as out
+from ..utils.namespace import resolve_ns
 from .context import command
 from .write import do_write, refuse_cloud_write
 

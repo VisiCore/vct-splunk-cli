@@ -16,7 +16,7 @@ import httpx
 from click.testing import CliRunner
 
 from vct_splunk.cli import cli
-from vct_splunk.core import errors
+from vct_splunk.utils import errors
 
 
 def test_exit_codes_match_documented_contract():

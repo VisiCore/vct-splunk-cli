@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from vct_splunk.core.errors import UsageError
-from vct_splunk.core.namespace import ns_path, resolve_ns
+from vct_splunk.utils.errors import UsageError
+from vct_splunk.utils.namespace import ns_path, resolve_ns
 
 
 def test_ns_path_builds_servicesns():

@@ -3,8 +3,8 @@ from __future__ import annotations
 import httpx
 from click.testing import CliRunner
 
+from vct_splunk.api.endpoints import search
 from vct_splunk.cli import cli
-from vct_splunk.core import search
 
 
 def test_normalize_spl_prefixes_bare_query():

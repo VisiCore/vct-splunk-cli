@@ -14,8 +14,8 @@ import httpx
 import pytest
 from click.testing import CliRunner
 
+from vct_splunk.api.endpoints import saved_searches as ss
 from vct_splunk.cli import cli
-from vct_splunk.core import saved_searches as ss
 
 ARGV = ["saved-search", "run", "nightly", "--app", "my_app"]
 

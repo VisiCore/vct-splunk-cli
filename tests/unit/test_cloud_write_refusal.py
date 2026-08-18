@@ -24,7 +24,7 @@ from click.testing import CliRunner
 
 from cli_catalog import CATALOG, Case
 from vct_splunk.cli import cli
-from vct_splunk.core.errors import UnsupportedBackendError
+from vct_splunk.utils.errors import UnsupportedBackendError
 
 WRITE_CASES = tuple(case for case in CATALOG if case.kind == "write")
 

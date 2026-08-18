@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import click
 
-from ..core import config as core
-from ..core.namespace import resolve_ns
-from . import output as out
+from ..api.endpoints import config as core
+from ..output import formatter as out
+from ..utils.namespace import resolve_ns
 from .context import command
 
 

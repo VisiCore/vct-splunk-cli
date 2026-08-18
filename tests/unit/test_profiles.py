@@ -6,9 +6,8 @@ import os
 
 import pytest
 
-from vct_splunk.core.client import config_from_env
-from vct_splunk.core.errors import UsageError
-from vct_splunk.core.profiles import config_path, load_profile
+from vct_splunk.config.loader import config_path, load_config, load_profile
+from vct_splunk.utils.errors import UsageError
 
 
 def test_load_profile_none_returns_empty(tmp_path, monkeypatch):
@@ -76,7 +75,7 @@ def test_secret_profile_rejects_group_or_world_access(tmp_path, monkeypatch):
     monkeypatch.setenv("VCT_SPLUNK_CONFIG", str(cfgfile))
     monkeypatch.setenv("SPLUNK_URL", "https://splunk.test:8089")
     with pytest.raises(UsageError, match="mode 0600"):
-        config_from_env(profile="prod")
+        load_config(profile="prod")
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX permission bits required")
@@ -87,7 +86,7 @@ def test_insecure_profile_credential_is_ignored_when_env_token_wins(tmp_path, mo
     monkeypatch.setenv("VCT_SPLUNK_CONFIG", str(cfgfile))
     monkeypatch.setenv("SPLUNK_URL", "https://env:8089")
     monkeypatch.setenv("SPLUNK_TOKEN", "env-token")
-    cfg = config_from_env(profile="prod")
+    cfg = load_config(profile="prod")
     assert (cfg.base_url, cfg.token) == ("https://env:8089", "env-token")
 
 

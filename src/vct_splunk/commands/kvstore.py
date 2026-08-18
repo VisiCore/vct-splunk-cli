@@ -15,11 +15,11 @@ from typing import Any
 
 import click
 
-from ..core import kvstore as core
-from ..core.errors import UsageError
-from ..core.namespace import resolve_ns
-from ..core.path import path_segment
-from . import output as out
+from ..api.endpoints import kvstore as core
+from ..output import formatter as out
+from ..utils.errors import UsageError
+from ..utils.namespace import resolve_ns
+from ..utils.path import path_segment
 from .context import command
 from .write import do_write, refuse_cloud_write
 

@@ -9,8 +9,8 @@ import pytest
 from click.testing import CliRunner
 
 from vct_splunk.cli import cli
-from vct_splunk.core.errors import UsageError
-from vct_splunk.core.parsing import parse_key_value_pairs
+from vct_splunk.utils.errors import UsageError
+from vct_splunk.utils.validation import parse_key_value_pairs
 
 
 def test_cluster_status_uses_manager_info(cli_env, patch_client):

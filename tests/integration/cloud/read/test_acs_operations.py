@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import pytest
 
-from vct_splunk.core.acs import operations
-from vct_splunk.core.acs.client import AcsClient, acs_config_from_env
-from vct_splunk.core.backends import cloud_stack_from_url
+from vct_splunk.api.acs import operations
+from vct_splunk.api.acs.client import AcsClient, acs_config_from_env
+from vct_splunk.utils.backends import cloud_stack_from_url
 
 pytestmark = [
     pytest.mark.integration,

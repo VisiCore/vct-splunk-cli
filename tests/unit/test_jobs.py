@@ -3,8 +3,8 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from vct_splunk.core import jobs
-from vct_splunk.core.errors import NotFoundError
+from vct_splunk.api.endpoints import jobs
+from vct_splunk.utils.errors import NotFoundError
 
 
 def test_list_jobs_normalizes(client_for):

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import click
 
-from ..core import jobs as jobs_core
-from ..core import search as core
-from . import output as out
+from ..api.endpoints import jobs as jobs_core
+from ..api.endpoints import search as core
+from ..output import formatter as out
 from .context import command
 from .write import do_write
 

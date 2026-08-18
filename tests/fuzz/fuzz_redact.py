@@ -31,7 +31,7 @@ import sys
 import atheris
 
 with atheris.instrument_imports():
-    from vct_splunk.core.redact import safe_target
+    from vct_splunk.utils.redact import safe_target
 
 #: Spliced in as the password of every generated target. A fixed marker is what
 #: makes the leak check decidable — the fuzzer shapes the URL around it, and any

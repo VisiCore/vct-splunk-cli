@@ -31,8 +31,8 @@ from urllib.parse import urlsplit
 import pytest
 from click.testing import CliRunner
 
+from vct_splunk.api.acs import operations
 from vct_splunk.cli import cli
-from vct_splunk.core.acs import operations
 
 STACK = "acme"
 TOKEN = "acs-test-token"

@@ -3,8 +3,8 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from vct_splunk.core.errors import UsageError
-from vct_splunk.core.server import get_server_info
+from vct_splunk.api.endpoints.server import get_server_info
+from vct_splunk.utils.errors import UsageError
 
 
 def test_get_server_info_normalizes(client_for):

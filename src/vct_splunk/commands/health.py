@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import click
 
-from ..core import health as core
-from . import output as out
+from ..api.endpoints import health as core
+from ..output import formatter as out
 from .context import command
 
 

@@ -11,10 +11,8 @@ import httpx
 import pytest
 from click.testing import CliRunner
 
-from vct_splunk.cli import cli
-from vct_splunk.core.client import ClientConfig, SplunkClient
-from vct_splunk.core.errors import UsageError
-from vct_splunk.core.kvstore import (
+from vct_splunk.api.client import SplunkClient
+from vct_splunk.api.endpoints.kvstore import (
     delete_all,
     delete_record,
     get_record,
@@ -22,6 +20,9 @@ from vct_splunk.core.kvstore import (
     list_records,
     update_record,
 )
+from vct_splunk.cli import cli
+from vct_splunk.config.types import SplunkConfig
+from vct_splunk.utils.errors import UsageError
 
 
 def _env(monkeypatch):
@@ -34,7 +35,7 @@ def _env(monkeypatch):
 
 def _patch_client(monkeypatch, handler):
     def make(self):
-        cfg = ClientConfig(base_url="https://splunk.test:8089", token="T", dry_run=self.dry_run)
+        cfg = SplunkConfig(base_url="https://splunk.test:8089", token="T", dry_run=self.dry_run)
         return SplunkClient(cfg, transport=httpx.MockTransport(handler))
 
     monkeypatch.setattr("vct_splunk.commands.context.Ctx.client", make)

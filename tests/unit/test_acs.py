@@ -14,12 +14,13 @@ import httpx
 import pytest
 from click.testing import CliRunner
 
+from vct_splunk.api.acs import operations
+from vct_splunk.api.acs.client import AcsClient, AcsConfig, acs_config_from_env
+from vct_splunk.api.client import SplunkClient
 from vct_splunk.cli import cli
-from vct_splunk.core import backends, redact
-from vct_splunk.core.acs import operations
-from vct_splunk.core.acs.client import AcsClient, AcsConfig, acs_config_from_env
-from vct_splunk.core.client import ClientConfig, SplunkClient
-from vct_splunk.core.errors import (
+from vct_splunk.config.types import SplunkConfig
+from vct_splunk.utils import backends, redact
+from vct_splunk.utils.errors import (
     APIError,
     AuthError,
     NotFoundError,
@@ -49,7 +50,7 @@ def _patch_rest(monkeypatch, handler) -> None:
     monkeypatch.setattr(
         "vct_splunk.commands.context.Ctx.client",
         lambda self: SplunkClient(
-            ClientConfig(base_url=ENTERPRISE_URL, token="T"), transport=httpx.MockTransport(handler)
+            SplunkConfig(base_url=ENTERPRISE_URL, token="T"), transport=httpx.MockTransport(handler)
         ),
     )
 
@@ -132,7 +133,7 @@ def test_acs_404_maps_not_found():
 
 
 def test_acs_5xx_maps_api_error(monkeypatch):
-    monkeypatch.setattr("vct_splunk.core.acs.client.time.sleep", lambda delay: None)
+    monkeypatch.setattr("vct_splunk.api.acs.client.time.sleep", lambda delay: None)
     with pytest.raises(APIError):
         operations.list_cloud_roles(_acs(lambda req: httpx.Response(500, json={})))
 
@@ -154,7 +155,7 @@ def test_acs_retries_bounded_statuses(monkeypatch, status):
             return httpx.Response(status, headers={"Retry-After": "7"}, json={})
         return httpx.Response(200, json={"roles": []})
 
-    monkeypatch.setattr("vct_splunk.core.acs.client.time.sleep", sleeps.append)
+    monkeypatch.setattr("vct_splunk.api.acs.client.time.sleep", sleeps.append)
     assert operations.list_cloud_roles(_acs(handler)) == []
     assert calls == 3
     assert sleeps == [7.0, 7.0]

@@ -9,11 +9,11 @@ from __future__ import annotations
 
 import click
 
-from ..core import deploy as core
-from ..core.errors import UsageError
-from ..core.parsing import parse_key_value_pairs
-from ..core.path import path_segment
-from . import output as out
+from ..api.endpoints import deploy as core
+from ..output import formatter as out
+from ..utils.errors import UsageError
+from ..utils.path import path_segment
+from ..utils.validation import parse_key_value_pairs
 from .context import command
 from .write import do_write
 

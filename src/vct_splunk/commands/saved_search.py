@@ -11,12 +11,12 @@ from __future__ import annotations
 
 import click
 
-from ..core import saved_searches as core
-from ..core.errors import UnsupportedBackendError
-from ..core.namespace import ns_path, resolve_ns
-from . import output as out
+from ..api.endpoints import saved_searches as core
+from ..output import formatter as out
+from ..utils.errors import UnsupportedBackendError
+from ..utils.namespace import ns_path, resolve_ns
+from .command_factory import build_group
 from .context import command
-from .factory import build_group
 from .registry import SAVED_SEARCH
 from .write import do_write
 
