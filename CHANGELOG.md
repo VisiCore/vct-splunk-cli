@@ -15,9 +15,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Opt-in redaction of the Splunk Cloud stack name at untrusted output
   boundaries: `VCT_SPLUNK_REDACT_TARGET=1` hides it in prompts, JSON metadata,
   and transport error text. The audit log is unaffected and always records the
-  real host. The `Splunk Cloud Read Canary` workflow sets this and runs a
-  scanner (`.github/scripts/scan-cloud-ci-leaks.py`) over its own output before
-  publishing anything.
+  real host. The `Splunk Cloud Read Canary` workflow sets this.
 
 ### Changed
 

@@ -31,7 +31,7 @@ jobs:
       # covers far less than it appears to. The guard below says so out loud.
       SPLUNK_TOKEN: ${{ secrets.SPLUNK_TOKEN }}
       # Untrusted output boundary: hide the Cloud stack name in prompts, JSON
-      # metadata, and error text. scan-cloud-ci-leaks.py checks this held.
+      # metadata, and error text.
       VCT_SPLUNK_REDACT_TARGET: "1"
       VCT_SPLUNK_AUDIT: ${{ runner.temp }}/vct-splunk-audit.log
     steps:
