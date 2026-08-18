@@ -6,7 +6,7 @@ embed both API layers the same way.
 
 ## Project structure
 
-```
+```text
 vct_splunk/
   __init__.py              # Package marker + __version__
   __main__.py              # Entry point for `python -m vct_splunk`
@@ -62,7 +62,7 @@ tests/
 
 ### HTTP client transport stack
 
-```
+```text
 Request
   -> AuthTransport       (injects Authorization header, per request)
     -> RetryTransport    (retries 429/503, honors Retry-After)
@@ -137,7 +137,7 @@ To add a hand-written command: create `api/endpoints/<thing>.py` +
 
 ### Config priority chain
 
-```
+```text
 CLI flags (--base-url, --profile, --app, ...)
   > Environment variables (SPLUNK_URL, SPLUNK_TOKEN, ...)
     > Active profile in $XDG_CONFIG_HOME/vct-splunk/config
