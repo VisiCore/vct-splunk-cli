@@ -6,6 +6,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-18
+
 ### Added
 
 - Read configuration files through `splunk config list [FILE]` and `splunk
@@ -37,7 +39,6 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Breaking:** every real (non-`--dry-run`) write, on every backend, now
   requires `SPLUNK_ENABLE_WRITES=true`. There is no CLI flag, so a saved
   command line cannot enable one. `--dry-run` is unaffected.
-
 - Lower the supported Python floor to 3.9, so the CLI runs under the interpreter
   bundled with Splunk Enterprise 9.x. Shipped code needed no change: the package
   already uses only 3.9-compatible syntax and APIs. Declarations move
@@ -272,6 +273,7 @@ This is the 0.2.0 development line (version bumped from 0.0.1).
 - TTY-adaptive output: a table on a terminal, JSON when piped or with
   `--output json`.
 
-[Unreleased]: https://github.com/VisiCore/vct-splunk-cli/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/VisiCore/vct-splunk-cli/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/VisiCore/vct-splunk-cli/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/VisiCore/vct-splunk-cli/compare/v0.0.1...v0.3.0
 [0.0.1]: https://github.com/VisiCore/vct-splunk-cli/releases/tag/v0.0.1
