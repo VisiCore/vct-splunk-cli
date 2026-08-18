@@ -33,7 +33,7 @@ from typing import Any
 
 import httpx
 
-from ..auth.session import get_auth_header
+from ..auth.session import clear_session_cache, get_auth_header, is_mintable
 from ..config.types import SplunkConfig
 from ..utils.errors import APIError, AuthError, NotFoundError, TransportError
 from ..utils.redact import safe_target
@@ -50,6 +50,13 @@ class AuthTransport(httpx.BaseTransport):
 
     Resolution happens here — per request, not at client construction — so a
     lazily minted session key can be refreshed transparently when it expires.
+
+    When the credential is a username/password (a session key we can re-mint), a
+    401 is treated as a possibly-stale session rather than a hard failure: Splunk
+    invalidates session keys server-side on events like a restart. In that case
+    the cache is dropped, a fresh login is performed, and the request is retried
+    once. A static token or session key is not refreshable, so its 401 passes
+    straight through as a genuine auth error.
     """
 
     def __init__(self, transport: httpx.BaseTransport, config: SplunkConfig) -> None:
@@ -58,7 +65,13 @@ class AuthTransport(httpx.BaseTransport):
 
     def handle_request(self, request: httpx.Request) -> httpx.Response:
         request.headers["Authorization"] = get_auth_header(self._config)
-        return self._transport.handle_request(request)
+        response = self._transport.handle_request(request)
+        if response.status_code == 401 and is_mintable(self._config):
+            response.close()
+            clear_session_cache()
+            request.headers["Authorization"] = get_auth_header(self._config)
+            response = self._transport.handle_request(request)
+        return response
 
 
 class RetryTransport(httpx.BaseTransport):

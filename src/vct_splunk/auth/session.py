@@ -44,6 +44,18 @@ def clear_session_cache() -> None:
     _cached_session = None
 
 
+def is_mintable(config: SplunkConfig) -> bool:
+    """True when the credential is a username/password we can re-mint on demand.
+
+    A static token or session key cannot be refreshed — a 401 from one is a real
+    authentication failure. A username/password, by contrast, mints a session key
+    that Splunk can invalidate server-side (notably on a restart), so a 401 there
+    is recoverable by logging in again. The client uses this to decide whether to
+    drop the cache and retry once after a 401.
+    """
+    return not config.token and not config.session_key and bool(config.username and config.password)
+
+
 def get_auth_header(config: SplunkConfig) -> str:
     """Return the ``Authorization`` header value for *config*.
 

@@ -107,6 +107,60 @@ def test_login_session_is_cached_across_requests(_clean_env, monkeypatch):
     assert calls["n"] == 1  # the minted session key is reused
 
 
+def test_stale_session_key_reauths_on_401(_clean_env, monkeypatch):
+    # A minted session key can be invalidated server-side (e.g. a Splunk restart).
+    # On the next request Splunk answers 401 with the stale key; the client must
+    # drop the cache, log in again, and retry once so the call still succeeds --
+    # this is what lets `server info` reconnect after `server restart`.
+    monkeypatch.setenv("SPLUNK_URL", "https://splunk.test:8089")
+    monkeypatch.setenv("SPLUNK_USERNAME", "admin")
+    monkeypatch.setenv("SPLUNK_PASSWORD", "secret")
+
+    keys = iter(["STALE", "FRESH"])
+    logins = {"n": 0}
+
+    def fake_login(url, username, password, *, verify, timeout):
+        logins["n"] += 1
+        return next(keys)
+
+    monkeypatch.setattr("vct_splunk.auth.session.login", fake_login)
+
+    seen: list[str] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        auth = req.headers.get("authorization", "")
+        seen.append(auth)
+        # The stale key is rejected once; the freshly minted one is accepted.
+        if auth == "Splunk STALE":
+            return httpx.Response(401, json={})
+        return httpx.Response(200, json={"entry": [{"content": {"version": "10.4"}}]})
+
+    client = SplunkClient(load_config(), transport=httpx.MockTransport(handler))
+    body = client.get("/services/server/info")
+
+    assert logins["n"] == 2  # stale login, then a re-login after the 401
+    assert seen == ["Splunk STALE", "Splunk FRESH"]  # retried with the fresh key
+    assert body["entry"][0]["content"]["version"] == "10.4"
+
+
+def test_static_token_401_is_not_retried(_clean_env, monkeypatch):
+    # A static token cannot be re-minted, so a 401 is a genuine failure and must
+    # surface immediately rather than looping on a re-auth that cannot help.
+    monkeypatch.setenv("SPLUNK_URL", "https://splunk.test:8089")
+    monkeypatch.setenv("SPLUNK_TOKEN", "BADJWT")
+
+    calls = {"n": 0}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(401, json={})
+
+    client = SplunkClient(load_config(), transport=httpx.MockTransport(handler))
+    with pytest.raises(AuthError):
+        client.get("/services/server/info")
+    assert calls["n"] == 1  # no re-auth retry for a non-mintable credential
+
+
 @pytest.mark.parametrize(
     "expected",
     [AuthError, APIError, TransportError],
