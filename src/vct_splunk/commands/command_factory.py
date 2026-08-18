@@ -28,6 +28,15 @@ from .write import do_write, refuse_cloud_write
 
 _VERB_ALIASES = {"add": "create", "edit": "update", "remove": "delete"}
 
+#: For a Cloud-writable spec, the one typed `Field` (if any) that maps onto an
+#: ACS JSON key. Every other typed field has no ACS equivalent -- `--set` with
+#: ACS's own field name (e.g. `searchableDays`, not a Splunk REST form field)
+#: is the escape hatch for those, same as it is for anything --field-options
+#: does not cover on Enterprise.
+_ACS_FIELD_KEYS: dict[str, dict[str, str]] = {
+    "index": {"max_gb": "maxDataSizeMB"},
+}
+
 
 def _help_for(spec: EndpointConfig, verb: str) -> str:
     """One-line help for a generated command, in the hand-written commands' style."""
@@ -45,6 +54,36 @@ def _help_for(spec: EndpointConfig, verb: str) -> str:
         "disable": f"Disable {a}.{gated}",
     }
     return texts[verb]
+
+
+def _acs_body(spec: EndpointConfig, fields: dict[str, Any], sets: dict[str, str]) -> dict[str, Any]:
+    """Build the ACS JSON body for a Cloud-routed create/update.
+
+    ``--set KEY=VALUE`` pairs pass straight through as given -- ``KEY`` must be
+    the ACS field's own JSON name, which is not always the same as the Splunk
+    REST form field the same option sends on Enterprise. A typed field option
+    (e.g. ``--max-gb``) is honored only when this spec declares an
+    ACS-equivalent key in :data:`_ACS_FIELD_KEYS`; anything else raises rather
+    than silently dropping or mis-mapping a value the caller explicitly asked
+    to send.
+    """
+    mapping = _ACS_FIELD_KEYS.get(spec.name, {})
+    by_opt = {f.opt: f for f in spec.fields}
+    body: dict[str, Any] = {}
+    for opt, value in fields.items():
+        if value is None or value == ():
+            continue
+        key = mapping.get(opt)
+        if key is None:
+            dashed = opt.replace("_", "-")
+            raise UsageError(
+                f"--{dashed} has no Splunk Cloud (ACS) equivalent. "
+                f"Use --set with the ACS field's own JSON name instead."
+            )
+        f = by_opt[opt]
+        body[key] = int(float(value) * f.scale) if f.scale else value
+    body.update(sets)
+    return body
 
 
 def _gate_args(
@@ -118,6 +157,8 @@ def build_group(spec: EndpointConfig) -> click.Group:
                 action=action,
                 audit_event=event,
                 run=lambda c: res.create(c, name, fields=fields, sets=sets, owner=owner, app=app),
+                name=name,
+                body=_acs_body(spec, fields, sets) if ctx.backend == "cloud" else None,
             )
             out.emit(result, ctx.output_mode, ctx.meta())
 
@@ -139,6 +180,8 @@ def build_group(spec: EndpointConfig) -> click.Group:
                 action=action,
                 audit_event=event,
                 run=lambda c: res.update(c, name, fields=fields, sets=sets, owner=owner, app=app),
+                name=name,
+                body=_acs_body(spec, fields, sets) if ctx.backend == "cloud" else None,
             )
             out.emit(result, ctx.output_mode, ctx.meta())
 
@@ -156,6 +199,7 @@ def build_group(spec: EndpointConfig) -> click.Group:
                 action=action,
                 audit_event=event,
                 run=lambda c: res.delete(c, name, owner=owner, app=app),
+                name=name,
             )
             out.emit(result, ctx.output_mode, ctx.meta())
 
