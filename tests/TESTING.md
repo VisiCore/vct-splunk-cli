@@ -1,6 +1,6 @@
 # Running the tests
 
-Six groups. Only the first needs nothing at all — start there.
+Seven groups. Only the first needs nothing at all — start there.
 
 | Group | What it checks | What you must provide | Directory |
 | --- | --- | --- | --- |
@@ -8,6 +8,7 @@ Six groups. Only the first needs nothing at all — start there.
 | Enterprise reads | Every read command against a real server | A reachable Splunk | `tests/integration/enterprise/read/` |
 | Enterprise writes | Every change, then undoes it | A **disposable** Splunk | `tests/integration/enterprise/write/` |
 | Cloud reads | Every read command against a real Cloud stack | A Cloud stack and an ACS token | `tests/integration/cloud/read/` |
+| Cloud writes | Index/role/HEC create-update-delete, then undo | A **non-production** Cloud stack + write ACS token | `tests/integration/cloud/write/` |
 | ACS contract | Whether Splunk changed its public Cloud API | Nothing | `tests/integration/` |
 | Fuzz | That a credentialed URL never survives redaction | Linux on x86_64 | `tests/fuzz/` |
 
@@ -33,8 +34,8 @@ Two files in this group cover the Cloud path in full, so you can check it
 without an account:
 
 ```bash
-.venv/bin/python -m pytest tests/unit/test_acs_loopback.py       # every Cloud read
-.venv/bin/python -m pytest tests/unit/test_cloud_write_refusal.py # every Cloud write
+.venv/bin/python -m pytest tests/unit/test_acs_loopback.py    # every Cloud read
+.venv/bin/python -m pytest tests/unit/test_write_gating.py    # every write gate, both backends
 ```
 
 `test_acs_loopback.py` starts a small HTTP server on a loopback port, points
@@ -42,9 +43,13 @@ the tool's Cloud address at it, and runs each read command the whole way
 through. Nothing is stubbed out, so it checks the address the tool builds, the
 token it sends, and that a returned secret never reaches your screen.
 
-`test_cloud_write_refusal.py` runs every command that changes something against
-a Cloud address, in the form that would really do it, and fails if any of them
-so much as opens a connection.
+`test_write_gating.py` proves both write-enable gates: every mutation on
+either backend refuses by default (`SPLUNK_ENABLE_WRITES` unset), a Cloud
+mutation additionally refuses without `SPLUNK_CLOUD_WRITE` -- even for the
+three ACS-writable resources, even as a `--dry-run` preview -- and, opted in,
+a mocked ACS create/update/delete actually reaches the client. Every refusal
+case installs a transport that fails the test if any request leaves the
+process.
 
 Group 4 below is what these cannot be: proof that a real stack answers the way
 Splunk's specification says it does.
@@ -107,6 +112,11 @@ export SPLUNK_TEST_SERVER_FIXTURE_DIR=/opt/splunk/var/run/splunk/lookup_tmp
 .venv/bin/python -m pytest tests/integration/enterprise/write -v
 ```
 
+`SPLUNK_ENABLE_WRITES` (the top-level write-enable gate every real mutation
+needs, on any backend) does not need to be set here -- the whole test session
+force-enables it (`tests/conftest.py`), the same as every other unit and
+integration suite.
+
 Clean up when you are finished: `docker rm -f splunk-test`.
 
 ## Group 4: human-operated Splunk Cloud validation
@@ -145,7 +155,7 @@ current public ACS OpenAPI contract:
 ```bash
 .venv/bin/python -m pytest \
   tests/unit/test_acs_loopback.py \
-  tests/unit/test_cloud_write_refusal.py \
+  tests/unit/test_write_gating.py \
   -q --tb=short
 
 SPLUNK_ACS_SPEC_TEST=true .venv/bin/python -m pytest \
@@ -280,6 +290,36 @@ when every required row passes and the cleanup is complete.
 | Cleanup | Variables unset and short-lived tokens revoked | |
 | **Overall approval** | **PASS** | |
 
+## Group 4b: Cloud writes
+
+> **Warning.** This group creates, changes, and deletes real objects on a
+> Splunk Cloud stack. Point it only at a **non-production** stack.
+
+The primary path is the `Splunk Cloud Write Canary` GitHub Actions workflow,
+not a human-operated runbook: `workflow_dispatch` only, gated by a typed
+`confirm=WRITE` input, a `tests: splunk cloud write` HEAD commit-subject
+requirement, and a protected `splunk-cloud-write` GitHub Environment with
+required reviewers around the destructive half. It runs the Cloud read canary
+first, then the write suite below, so one approved dispatch certifies both.
+
+To run the suite locally instead, on top of the read-only setup in the runbook
+above:
+
+```bash
+export SPLUNK_ENABLE_WRITES=true
+export SPLUNK_CLOUD_WRITE=true
+export SPLUNK_ACS_WRITE_TOKEN="$(
+  .venv/bin/python -c 'import getpass; print(getpass.getpass("Write-scoped ACS token: "))'
+)"
+
+.venv/bin/python -m pytest tests/integration/cloud/write -v
+```
+
+Each test creates one uniquely named object, updates it, deletes it, and polls
+until it is gone (ACS index and HEC-token deletes complete asynchronously). A
+cleanup failure fails the test loudly rather than leaking a `vct_ci_*` object
+silently.
+
 ## Group 5: ACS public contract
 
 No credentials. It downloads Splunk's public Cloud API description and reports
@@ -326,7 +366,9 @@ global state, fails on a cleanup leak, and restarts Splunk last.
 Every pull request runs group 1 — including the two Cloud contract files above
 — plus lint and type checks. Pull requests that touch code also run groups 2,
 3, and 6 against a throwaway container and a Linux runner. Groups 4 and 5 run
-weekly; group 4 reports
-that there is nothing to certify until a Cloud stack is configured, rather than
-passing without checking anything. A single check named **Merge Gate**
-summarizes the pull-request jobs.
+weekly, and group 4 reports that there is nothing to certify until a Cloud
+stack is configured, rather than passing without checking anything. Group 4b
+(Cloud writes) never runs on a schedule or a pull request — it runs only on an
+approved, human-gated `workflow_dispatch` of the `Splunk Cloud Write Canary`
+workflow. A single check named **Merge Gate** summarizes the pull-request
+jobs.
