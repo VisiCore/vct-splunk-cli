@@ -26,7 +26,7 @@ if [ -z "${SPLUNK_URL:-}" ] || [ -z "${SPLUNK_ACS_TOKEN:-}" ]; then
   echo "full=false" >>"$GITHUB_OUTPUT"
   note "No Splunk Cloud stack configured, so there is nothing to certify."
   note "The Cloud read and write contracts still run on every pull request, in"
-  note "tests/unit/test_acs_loopback.py and tests/unit/test_cloud_write_refusal.py."
+  note "tests/unit/test_acs_loopback.py and tests/unit/test_write_gating.py."
   exit 0
 fi
 

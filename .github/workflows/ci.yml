@@ -159,6 +159,10 @@ jobs:
     env:
       SPLUNK_INTEGRATION_TEST: "true"
       SPLUNK_WRITE_TEST: "true"
+      # The test suite itself also force-enables this for every pytest session
+      # (tests/conftest.py); set explicitly here too so the job documents its
+      # own intent without a reader having to know that.
+      SPLUNK_ENABLE_WRITES: "true"
       SPLUNK_URL: https://localhost:8089
       SPLUNK_USERNAME: admin
       SPLUNK_PASSWORD: Ch4ng3d-CI-Pass!

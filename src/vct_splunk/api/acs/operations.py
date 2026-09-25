@@ -1,10 +1,21 @@
-"""Read-only ACS operations."""
+"""ACS operations: unrestricted reads plus the three writable resources.
+
+Only index, role, and HTTP Event Collector token support create/update/delete
+on Splunk Cloud (see :data:`WRITABLE`, checked against Splunk's public OpenAPI
+by ``tests/integration/test_acs_public_spec.py`` via :data:`WRITE_PATHS`).
+Every write goes through :meth:`~vct_splunk.api.acs.client.AcsClient.write`,
+so ``--dry-run`` sends nothing here exactly as it does for the Enterprise REST
+path; the opt-in gate and the allowlist of which (resource, verb) pairs even
+reach :func:`cloud_write` live one layer up, in
+:mod:`vct_splunk.commands.write` and :mod:`vct_splunk.commands.dispatch`.
+"""
 
 from __future__ import annotations
 
 from typing import Any
 
 from ...utils.errors import APIError
+from ...utils.path import path_segment
 from ...utils.redact import redact_secrets
 from .client import AcsClient
 
@@ -22,6 +33,30 @@ LIST_ENVELOPES = {
 
 #: Every ACS path the CLI reads.
 READ_PATHS = tuple(LIST_ENVELOPES)
+
+#: CLI resource name -> (ACS collection path, Splunk's own OpenAPI
+#: path-parameter name for one item). The parameter name differs per resource
+#: (`{index}`, `{roleName}`, `{hec}`), so :data:`WRITE_PATHS` below carries it
+#: rather than a generic placeholder -- the spec drift check looks paths up
+#: verbatim in Splunk's published contract.
+WRITABLE: dict[str, tuple[str, str]] = {
+    "index": (INDEXES, "index"),
+    "role": (ROLES, "roleName"),
+    "hec-token": (HEC_TOKENS, "hec"),
+}
+
+#: (path template, HTTP method) pairs ACS exposes for create/update/delete on
+#: the three writable resources, derived from :data:`WRITABLE` so this and
+#: :func:`cloud_write` can never drift apart.
+WRITE_PATHS: tuple[tuple[str, str], ...] = tuple(
+    (path, method)
+    for base, param in WRITABLE.values()
+    for path, method in (
+        (base, "post"),
+        (f"{base}/{{{param}}}", "patch"),
+        (f"{base}/{{{param}}}", "delete"),
+    )
+)
 
 
 def list_cloud_indexes(client: AcsClient) -> list[dict[str, Any]]:
@@ -59,3 +94,31 @@ def _list(client: AcsClient, path: str, envelope: str) -> list[dict[str, Any]]:
         if len(page) < 100:
             return output
         offset += len(page)
+
+
+def cloud_write(
+    client: AcsClient, resource: str, verb: str, name: str, body: dict[str, Any] | None = None
+) -> Any:
+    """Create, update, or delete one object of a Cloud-writable resource via ACS.
+
+    ``resource`` must be a key of :data:`WRITABLE` and ``verb`` one of
+    create/update/delete -- the caller
+    (:func:`vct_splunk.commands.dispatch.dispatch_write`) has already checked
+    both against the same allowlist this reads, so a `KeyError` here would
+    mean that check was bypassed.
+
+    Unlike the Enterprise ``hec-token create`` (whose response is allowed to
+    reveal the minted token because it is the only way to learn it), every ACS
+    write response is redacted here -- Splunk Cloud CI output must never carry
+    a live credential, so there is no reveal-once escape hatch on this path.
+    """
+    collection, _ = WRITABLE[resource]
+    if verb == "create":
+        result = client.write("POST", collection, {**(body or {}), "name": name})
+    else:
+        path = f"{collection}/{path_segment(name, label='name')}"
+        method = "PATCH" if verb == "update" else "DELETE"
+        result = client.write(method, path, body or {})
+    if isinstance(result, dict) and result.get("dry_run"):
+        return result
+    return redact_secrets(result)
