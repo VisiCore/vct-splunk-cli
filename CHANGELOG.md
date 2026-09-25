@@ -12,8 +12,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   config get FILE STANZA`. The commands use the normal read namespace, accept a
   file name with or without `.conf`, paginate collection results, and redact
   secret-valued properties.
+- Opt-in redaction of the Splunk Cloud stack name at untrusted output
+  boundaries: `VCT_SPLUNK_REDACT_TARGET=1` hides it in prompts, JSON metadata,
+  and transport error text. The audit log is unaffected and always records the
+  real host. The `Splunk Cloud Read Canary` workflow sets this.
 
 ### Changed
+
+- `splunk inspect` no longer echoes the Cloud stack name in its report body. It
+  reports `stack_configured: bool` instead.
 
 - Lower the supported Python floor to 3.9, so the CLI runs under the interpreter
   bundled with Splunk Enterprise 9.x. Shipped code needed no change: the package

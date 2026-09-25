@@ -30,6 +30,10 @@ jobs:
       # the credential check instead of reaching the dispatch layer, so the run
       # covers far less than it appears to. The guard below says so out loud.
       SPLUNK_TOKEN: ${{ secrets.SPLUNK_TOKEN }}
+      # Untrusted output boundary: hide the Cloud stack name in prompts, JSON
+      # metadata, and error text.
+      VCT_SPLUNK_REDACT_TARGET: "1"
+      VCT_SPLUNK_AUDIT: ${{ runner.temp }}/vct-splunk-audit.log
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -57,16 +61,14 @@ jobs:
       - name: Cloud reads (every catalogued read command)
         if: steps.stack.outputs.ready == 'true'
         run: >-
-          .venv/bin/pytest tests/integration/cloud/read/test_catalog.py
-          -m "integration and cloud and read"
-          -vv --color=yes --tb=short --junitxml=cloud-read.xml
+          bash .github/scripts/run-cloud-suite.sh cloud-read
+          tests/integration/cloud/read/test_catalog.py "integration and cloud and read"
 
       - name: Cloud ACS operations (below the CLI)
         if: steps.stack.outputs.ready == 'true'
         run: >-
-          .venv/bin/pytest tests/integration/cloud/read/test_acs_operations.py
-          -m "integration and cloud and read"
-          -vv --color=yes --tb=short --junitxml=cloud-acs.xml
+          bash .github/scripts/run-cloud-suite.sh cloud-acs
+          tests/integration/cloud/read/test_acs_operations.py "integration and cloud and read"
 
       - name: Publish test summary
         if: always() && steps.stack.outputs.ready == 'true'
