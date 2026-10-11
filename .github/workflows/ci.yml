@@ -36,7 +36,7 @@ jobs:
   # update the reference below and its dated comment.
   workflow-security:
     if: github.event_name == 'pull_request'
-    uses: dryvist/.github/.github/workflows/_zizmor.yml@7b9b165be9556c0228830c25246df2bde10a188e # main @ 2026-08-02
+    uses: dryvist/.github/.github/workflows/_zizmor.yml@1f09b25303a04bf276087348059671728ffea50a # v1.13.2
     with:
       runner_label: ubuntu-latest
 
