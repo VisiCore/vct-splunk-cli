@@ -31,7 +31,7 @@ from ..config.loader import load_config, load_profile
 from ..output import formatter as out
 from ..utils.backends import deduce_backend
 from ..utils.errors import SplunkError
-from ..utils.redact import safe_target
+from ..utils.redact import public_target
 
 if TYPE_CHECKING:
     from ..api.acs.client import AcsClient
@@ -126,7 +126,7 @@ class Ctx:
         Right now this is just the target Splunk URL, so a piece of output can be
         traced back to the instance it came from.
         """
-        return {"target": safe_target(self.base_url or "")}
+        return {"target": public_target(self.base_url or "")}
 
 
 def command(fn: Callable) -> Callable:

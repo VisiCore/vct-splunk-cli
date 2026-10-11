@@ -296,7 +296,11 @@ def test_inspect_reports_deduced_cloud(monkeypatch):
     result = CliRunner().invoke(cli, ["inspect", "--output", "json"])
     assert result.exit_code == 0
     assert '"backend": "cloud"' in result.output
-    assert '"stack": "acme"' in result.output
+    # The report body says whether a stack is configured, never its name --
+    # unlike `meta.target`, whose opt-in redaction is covered separately in
+    # test_public_target.py.
+    assert '"stack_configured": true' in result.output
+    assert '"stack"' not in result.output
     assert "not yet certified" in result.output
 
 
