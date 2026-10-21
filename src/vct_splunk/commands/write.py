@@ -24,7 +24,7 @@ from ..output import formatter as out
 from ..utils import audit
 from ..utils.backends import cloud_stack_from_url
 from ..utils.errors import UnsupportedBackendError, UsageError
-from ..utils.redact import public_target, safe_target
+from ..utils.redact import safe_target
 from .dispatch import has_cloud_write
 
 #: Opt-in for ANY real mutation, on any backend. Never a CLI flag -- a saved
@@ -94,7 +94,7 @@ def do_write(
             target = _resolve_target(ctx.base_url, getattr(ctx, "profile", None))[0].base_url
         else:
             target = load_config(ctx.base_url, profile=getattr(ctx, "profile", None)).base_url
-    out.confirm_write(ctx, action, public_target(target))
+    out.confirm_write(ctx, action, safe_target(target))
     if backend == "cloud":
         stack = cloud_stack_from_url(ctx.base_url)
         config = acs_config_from_env(stack, write=True)

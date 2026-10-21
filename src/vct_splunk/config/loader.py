@@ -24,6 +24,7 @@ import os
 from pathlib import Path
 
 from ..utils.errors import UsageError
+from ..utils.validation import env_flag
 from .types import AuthStatus, SplunkConfig
 
 #: The profile keys a section may define. Anything else is ignored.
@@ -182,7 +183,5 @@ def _resolve_target(
     if not url:
         raise UsageError("No Splunk URL. Set SPLUNK_URL or pass --base-url.")
     ca = os.environ.get("SPLUNK_CA_BUNDLE")
-    verify = ca or (
-        os.environ.get("SPLUNK_VERIFY", "true").strip().lower() not in {"0", "false", "no"}
-    )
+    verify = ca or (env_flag("SPLUNK_VERIFY", default=True))
     return AuthStatus(url.rstrip("/"), "none"), prof, verify

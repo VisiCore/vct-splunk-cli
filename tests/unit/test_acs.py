@@ -298,7 +298,7 @@ def test_inspect_reports_deduced_cloud(monkeypatch):
     assert '"backend": "cloud"' in result.output
     # The report body says whether a stack is configured, never its name --
     # unlike `meta.target`, whose opt-in redaction is covered separately in
-    # test_public_target.py.
+    # test_redact_public_text.py.
     assert '"stack_configured": true' in result.output
     assert '"stack"' not in result.output
     assert "not yet certified" in result.output
