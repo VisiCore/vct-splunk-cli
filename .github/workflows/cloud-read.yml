@@ -4,13 +4,26 @@
 # tests/unit/test_acs_loopback.py and tests/unit/test_write_gating.py.
 # What only a live stack can show is that a real one answers the way the ACS
 # specification says it does. Until a stack is configured, this workflow ends as
-# an explicit no-op rather than a green run that checked nothing.
+# an explicit no-op rather than a green run that checked nothing. The write
+# canary calls it with `require_credentials: true`, where a no-op fails instead.
 name: Splunk Cloud Read Canary
 
 on:
   schedule:
     - cron: "41 6 * * 3"
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      require_credentials:
+        description: Fail instead of no-op when no Cloud read credentials are configured
+        type: boolean
+        default: false
+    secrets:
+      SPLUNK_URL:
+      SPLUNK_ACS_TOKEN:
+      SPLUNK_ACS_STACK:
+      SPLUNK_ACS_BASE_URL:
+      SPLUNK_TOKEN:
 
 permissions:
   contents: read
@@ -44,8 +57,10 @@ jobs:
 
       - name: Require complete Cloud read credentials when configured
         if: env.CLOUD_READY != 'true'
+        env:
+          CLOUD_REQUIRED: ${{ inputs.require_credentials == true }}
         run: |
-          if [ "$CLOUD_CONFIGURED" = "true" ]; then
+          if [ "$CLOUD_CONFIGURED" = "true" ] || [ "$CLOUD_REQUIRED" = "true" ]; then
             echo "A partial Cloud read credential set is configured; SPLUNK_URL, SPLUNK_ACS_TOKEN, and SPLUNK_TOKEN are all required."
             exit 1
           fi
