@@ -210,7 +210,7 @@ output:
 ```
 
 Every command must exit `0` and print a top-level `data` and `meta` object.
-`inspect` must report the `cloud` backend and the intended stack. A secret field
+`inspect` must report the `cloud` backend and `"stack_configured": true`. A secret field
 in HEC output must contain `<redacted>`; an actual token value must never
 appear.
 
@@ -281,7 +281,7 @@ when every required row passes and the cleanup is complete.
 | Revision and clean checkout | Intended revision; no unexpected changes | |
 | Credential-free Cloud routes and write refusals | Pytest passed | |
 | Public ACS OpenAPI contract | Pytest passed | |
-| Backend inspection | `cloud` and intended stack | |
+| Backend inspection | `cloud` and `stack_configured: true` | |
 | Index list | Exit 0; `data` + `meta` | |
 | Role list | Exit 0; `data` + `meta` | |
 | HEC token list | Exit 0; secrets absent or `<redacted>` | |
