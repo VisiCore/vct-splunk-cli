@@ -32,7 +32,7 @@ shell in `commands/` (the "functional core, imperative shell" pattern). See
   the Authorization header per request, `RetryTransport` retries 429/503) and
   the envelope-aware `SplunkClient`; `endpoint_factory.py` is the generic CRUD
   engine (`EndpointConfig`/`Field`/`Endpoints`); `endpoints/` holds one module
-  per hand-written operation (`server`, `search`, `jobs`, `saved_searches`,
+  per hand-written operation (`server`, `search`, `jobs`, `saved_searches`, `config`,
   `kvstore`, `hec`, `apps`, `cluster`, `license`, `deploy`, `lookups`,
   `datamodel`, `health`, `raw`); `acs/` is the Splunk Cloud ACS
   management-plane client.
@@ -46,8 +46,8 @@ shell in `commands/` (the "functional core, imperative shell" pattern). See
 - `src/vct_splunk/output/` — `formatter.py`: JSON/table rendering and the
   error envelope.
 - `src/vct_splunk/commands/` — Click adapters, one module per hand-written
-  command group (`server`, `api`, `auth`, `search`, `health`, `inspect`, plus
-  `saved_search`'s `run`), plus shared plumbing: `context` (the `command`
+  command group (`server`, `api`, `auth`, `search`, `health`, `inspect`, `config`,
+  plus `saved_search`'s `run`), plus shared plumbing: `context` (the `command`
   decorator and `Ctx`), `write` (the single gated write path), `dispatch`
   (routes a few reads to Cloud ACS), and `registry` + `command_factory`
   (resource configs declared as data, turned into generated CRUD groups —
@@ -69,9 +69,13 @@ Two cross-cutting ideas to know about:
   require an explicit app and never silently default to `search`.
 - **Transparent backend.** When `SPLUNK_URL` points at `*.splunkcloud.com`, a
   few reads (`index list`, `role list`, `hec-token list`) route through the
-  Cloud ACS API and writes are refused; everything else talks to splunkd REST.
-  The backend is deduced from the URL — there is no flag to pick it. `splunk
-  inspect` reports what the deduced backend supports, offline.
+  Cloud ACS API; everything else talks to splunkd REST. Cloud writes need both
+  `SPLUNK_ENABLE_WRITES=true` (every write, every backend) and
+  `SPLUNK_CLOUD_WRITE=true`, and only unlock `create`/`update`/`delete` for
+  `index`, `role`, and `hec-token` (never a CLI flag; enable/disable and every
+  other resource stay refused regardless). The backend is deduced from the
+  URL — there is no flag to pick it. `splunk inspect` reports what the deduced
+  backend supports, offline.
 
 ## Conventions
 
@@ -85,14 +89,18 @@ Two cross-cutting ideas to know about:
 
 ## Safety
 
-- Writes are gated. Every mutation — index lifecycle, saved-search CRUD and
-  `search cancel`, and all factory-generated create/update/delete/enable/
-  disable — funnels through one shared path (`commands/write.py`): `--dry-run`
-  previews the exact request and sends nothing; otherwise it confirms on a TTY
-  or requires `--yes` when non-interactive (it never hangs on a hidden prompt).
+- Writes are gated and disabled by default. Every mutation — index lifecycle,
+  saved-search CRUD and `search cancel`, and all factory-generated
+  create/update/delete/enable/disable — funnels through one shared path
+  (`commands/write.py`): `--dry-run` previews the exact request and sends
+  nothing, needing no opt-in; a real write needs `SPLUNK_ENABLE_WRITES=true`
+  first (there is no CLI flag), then confirms on a TTY or requires `--yes`
+  when non-interactive (it never hangs on a hidden prompt).
 - Each applied write is appended to a local audit log: `$VCT_SPLUNK_AUDIT` if
   set, else `$XDG_STATE_HOME/vct-splunk/audit.log`, else
   `~/.local/state/vct-splunk/audit.log`.
+- `--dry-run` needs no `SPLUNK_ENABLE_WRITES` opt-in. A Cloud preview still
+  needs `SPLUNK_CLOUD_WRITE=true` and an ACS token to build its request.
 - `search run` is bounded by default (time window, row cap, timeout) so an agent
   cannot trigger an unbounded export by accident.
 

@@ -6,6 +6,9 @@ audited with its target; a non-interactive write without --yes is refused.
 
 from __future__ import annotations
 
+import json
+from contextlib import nullcontext
+
 import httpx
 import pytest
 
@@ -22,6 +25,7 @@ class _Ctx:
         self.base_url = "https://splunk.test:8089"
         self.dry_run = dry_run
         self.yes = yes
+        self.backend = "enterprise"
 
     def client(self) -> SplunkClient:
         cfg = SplunkConfig(base_url=self.base_url, token="T", dry_run=self.dry_run)
@@ -58,6 +62,54 @@ def test_do_write_records_audit_on_real_write(monkeypatch, tmp_path):
     contents = audit_file.read_text()
     assert "index.create" in contents
     assert "https://splunk.test:8089" in contents  # target is recorded
+
+
+def test_cloud_write_audit_records_the_acs_target(monkeypatch, tmp_path):
+    monkeypatch.setenv("SPLUNK_URL", "https://acme.splunkcloud.com")
+    monkeypatch.setenv("SPLUNK_ACS_TOKEN", "T")
+    monkeypatch.setenv("SPLUNK_CLOUD_WRITE", "true")
+    for name in ("SPLUNK_ACS_STACK", "SPLUNK_ACS_BASE_URL", "SPLUNK_ACS_WRITE_TOKEN"):
+        monkeypatch.delenv(name, raising=False)
+    audit_file = tmp_path / "audit.log"
+    monkeypatch.setenv("VCT_SPLUNK_AUDIT", str(audit_file))
+    ctx = _Ctx(yes=True)
+    ctx.base_url = "https://acme.splunkcloud.com"
+    ctx.backend = "cloud"
+    monkeypatch.setattr("vct_splunk.commands.write.AcsClient", lambda config: nullcontext(object()))
+    monkeypatch.setattr("vct_splunk.commands.write.cloud_write", lambda *args: {"name": "web"})
+
+    result = do_write(
+        ctx,
+        action="create index 'web'",
+        audit_event={"action": "index.create", "name": "web"},
+        run=lambda client: {},
+        name="web",
+    )
+
+    assert result == {"name": "web"}
+    event = json.loads(audit_file.read_text())
+    assert event["target"] == "https://admin.splunk.com/acme"
+
+
+def test_audit_failure_warns_after_success(monkeypatch, capsys):
+    monkeypatch.setenv("SPLUNK_TOKEN", "T")
+    monkeypatch.setattr(
+        "vct_splunk.commands.write.audit.record",
+        lambda event: (_ for _ in ()).throw(OSError("permission denied")),
+    )
+
+    result = do_write(
+        _Ctx(yes=True),
+        action="do thing",
+        audit_event={"action": "index.create"},
+        run=lambda client: {"name": "web"},
+    )
+
+    assert result == {"name": "web"}
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "write succeeded" in captured.err
+    assert "audit record could not be saved" in captured.err
 
 
 def test_do_write_redacts_credentials_from_confirmation_and_audit(monkeypatch, tmp_path):

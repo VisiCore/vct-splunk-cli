@@ -7,7 +7,7 @@ import os
 import httpx
 import pytest
 
-from vct_splunk.api.acs.operations import LIST_ENVELOPES
+from vct_splunk.api.acs.operations import ACS_FIELD_KEYS, LIST_ENVELOPES, WRITE_PATHS
 
 pytestmark = [
     pytest.mark.integration,
@@ -31,3 +31,22 @@ def test_implemented_acs_contract_matches_public_spec():
         )
         schema = operation["responses"]["200"]["content"]["application/json"]["schema"]
         assert schema["properties"][envelope]["type"] == "array"
+
+
+def test_implemented_acs_write_contract_matches_public_spec():
+    if os.environ.get("SPLUNK_ACS_SPEC_TEST") != "true":
+        pytest.skip("set SPLUNK_ACS_SPEC_TEST=true to check the public ACS OpenAPI")
+
+    public = httpx.get(_SOURCE, timeout=30).raise_for_status().json()
+    for path, method in WRITE_PATHS:
+        operations = public["paths"][f"/{{stack}}/adminconfig/v2/{path}"]
+        assert method in operations, f"{method.upper()} {path} is missing from the public spec"
+
+    index_create = public["paths"]["/{stack}/adminconfig/v2/indexes"]["post"]
+    schema = index_create["requestBody"]["content"]["application/json"]["schema"]
+    if "$ref" in schema:
+        component = schema["$ref"].rsplit("/", 1)[-1]
+        schema = public["components"]["schemas"][component]
+    assert set(ACS_FIELD_KEYS["index"].values()) <= set(schema["properties"]), (
+        "ACS index field mappings are missing from the public create schema"
+    )

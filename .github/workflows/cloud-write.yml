@@ -1,0 +1,123 @@
+# Certify the Cloud write path end-to-end against a real, non-production
+# Splunk Cloud stack: a `read` job first (the Splunk Cloud Read Canary, called
+# as a reusable workflow), then a destructive `write` job gated
+# behind a protected `splunk-cloud-write` GitHub Environment with required
+# reviewers. The approval pause sits in front of the destructive half only --
+# a credential or connectivity problem surfaces in `read` before anyone is
+# asked to approve anything. One dispatch is the full read-then-write
+# certification.
+#
+# Never runs on pull_request or a schedule -- workflow_dispatch only, and even
+# then the confirm job fails closed unless `confirm` is typed exactly `WRITE`
+# and HEAD's commit subject starts with `tests: splunk cloud write`. The Cloud
+# write contract itself (opt-in gating, the ACS-writable allowlist) is proved
+# credential-free on every pull request in tests/unit/test_write_gating.py;
+# what only a live stack can show is that a real one answers the way that
+# contract expects.
+name: Splunk Cloud Write Canary
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type WRITE to run destructive ACS tests on the configured stack
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: splunk-cloud-write
+  cancel-in-progress: false
+
+jobs:
+  confirm:
+    name: Confirm WRITE
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Fail closed unless confirm is WRITE
+        env:
+          CONFIRM: ${{ github.event.inputs.confirm }}
+        run: |
+          if [ "$CONFIRM" != "WRITE" ]; then
+            echo "confirm must be exactly WRITE"
+            exit 1
+          fi
+
+      - name: Require the write-canary commit prefix
+        run: |
+          subject=$(git log -1 --format=%s)
+          case "$subject" in
+            "tests: splunk cloud write"*) ;;
+            *)
+              echo "HEAD subject must start with: tests: splunk cloud write"
+              exit 1
+              ;;
+          esac
+
+  read:
+    name: Cloud / ACS reads (pre-write readiness)
+    needs: confirm
+    uses: ./.github/workflows/cloud-read.yml
+    with:
+      require_credentials: true
+    secrets:
+      SPLUNK_URL: ${{ secrets.SPLUNK_URL }}
+      SPLUNK_ACS_TOKEN: ${{ secrets.SPLUNK_ACS_TOKEN }}
+      SPLUNK_ACS_STACK: ${{ secrets.SPLUNK_ACS_STACK }}
+      SPLUNK_ACS_BASE_URL: ${{ secrets.SPLUNK_ACS_BASE_URL }}
+      SPLUNK_TOKEN: ${{ secrets.SPLUNK_TOKEN }}
+
+  write:
+    name: Cloud / ACS writes
+    needs: read
+    environment: splunk-cloud-write
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUD_READY: ${{ secrets.SPLUNK_URL != '' && secrets.SPLUNK_ACS_WRITE_TOKEN != '' }}
+      PYTEST_ADDOPTS: >-
+        -q --tb=line -r N -o 'addopts=--strict-markers --import-mode=importlib'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Require write secrets when dispatched
+        if: env.CLOUD_READY != 'true'
+        run: |
+          echo "SPLUNK_URL and SPLUNK_ACS_WRITE_TOKEN are required for a WRITE run"
+          exit 1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install project
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --require-hashes -r requirements-ci.txt
+          .venv/bin/python -m pip install -e . --no-deps
+
+      - name: Cloud writes (index, role, hec-token) with undo
+        env:
+          SPLUNK_ACS_LIVE_TEST: "true"
+          SPLUNK_ENABLE_WRITES: "true"
+          SPLUNK_CLOUD_WRITE: "true"
+          SPLUNK_URL: ${{ secrets.SPLUNK_URL }}
+          SPLUNK_ACS_WRITE_TOKEN: ${{ secrets.SPLUNK_ACS_WRITE_TOKEN }}
+          SPLUNK_ACS_TOKEN: ${{ secrets.SPLUNK_ACS_WRITE_TOKEN }}
+          SPLUNK_ACS_STACK: ${{ secrets.SPLUNK_ACS_STACK }}
+          SPLUNK_ACS_BASE_URL: ${{ secrets.SPLUNK_ACS_BASE_URL }}
+          VCT_SPLUNK_REDACT_TARGET: "1"
+          VCT_SPLUNK_AUDIT: ${{ runner.temp }}/vct-splunk-audit.log
+        run: >-
+          .venv/bin/pytest tests/integration/cloud/write
+          -m "integration and cloud and write" --junitxml=cloud-write.xml

@@ -1,0 +1,376 @@
+"""Prove write gates refuse before a client or network request can be made."""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+
+import httpx
+import pytest
+from click.testing import CliRunner
+
+from cli_catalog import CATALOG, Case
+from conftest import cli_runner
+from vct_splunk.api.acs.client import AcsClient as RealAcsClient
+from vct_splunk.cli import cli
+from vct_splunk.commands.dispatch import has_cloud_write
+from vct_splunk.utils.errors import UnsupportedBackendError, UsageError
+
+WRITE_CASES = tuple(case for case in CATALOG if case.kind == "write")
+CLOUD_WRITABLE_CASES = tuple(
+    case for case in WRITE_CASES if has_cloud_write(case.path[0], case.path[-1])
+)
+CLOUD_UNWRITABLE_CASES = tuple(
+    case for case in WRITE_CASES if not has_cloud_write(case.path[0], case.path[-1])
+)
+#: `saved-search run` (no `--trigger-actions`) dispatches a job -- it changes no
+#: configuration, so it deliberately does not go through `do_write` at all (see
+#: its docstring). It is cataloged as "write" for other purposes, but does not
+#: belong in a suite proving `SPLUNK_ENABLE_WRITES` refuses every gated write.
+_GATED_WRITE_CASES = tuple(case for case in WRITE_CASES if case.path != ("saved-search", "run"))
+
+#: CLI resource name -> literal ACS collection path. Keep independent of the
+#: implementation so an accidental route change cannot update both sides.
+_ACS_PATH = {
+    "index": "indexes",
+    "role": "roles",
+    "hec-token": "inputs/http-event-collectors",
+}
+
+
+def _argv(case: Case, *extra: str) -> list[str]:
+    """Build one invocation of *case*, replacing any `--dry-run` with *extra*."""
+    args = [arg for arg in case.argvs[0] if arg != "--dry-run"]
+    return [*case.path, *args, *extra, "--output", "json"]
+
+
+def _refuse_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    def refuse(*args: object, **kwargs: object) -> object:
+        raise AssertionError("a refused write reached the network")
+
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", refuse)
+
+
+def test_cloud_write_catalog_has_all_nine_mutations() -> None:
+    """The Cloud success matrices must not silently disappear when routes regress."""
+    assert len(CLOUD_WRITABLE_CASES) == 9
+
+
+# --- Enterprise: SPLUNK_ENABLE_WRITES gates every real write ------------------
+
+
+@pytest.fixture
+def enterprise_env_no_opt_in(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Point the CLI at Enterprise with the top-level gate off; refuse the network.
+
+    A namespaced write needs an explicit app regardless of this gate (that
+    check runs before `do_write`), so `SPLUNK_APP` is set, not cleared, here --
+    this suite is testing the write-enable gate, not namespace resolution.
+    """
+    for name in ("SPLUNK_OWNER", "SPLUNK_PROFILE", "SPLUNK_ENABLE_WRITES"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("SPLUNK_URL", "https://sh.corp:8089")
+    monkeypatch.setenv("SPLUNK_TOKEN", "T")
+    monkeypatch.setenv("SPLUNK_APP", "my_app")
+    _refuse_network(monkeypatch)
+
+
+@pytest.mark.parametrize("case", _GATED_WRITE_CASES, ids=lambda case: " ".join(case.path))
+def test_every_write_is_refused_without_enable_writes(
+    case: Case, enterprise_env_no_opt_in: None
+) -> None:
+    """Every write leaf refuses before touching the network when the gate is off."""
+    result = cli_runner().invoke(cli, _argv(case, "--yes"))
+
+    assert result.exit_code == UsageError.exit_code, (
+        f"{' '.join(case.path)} exited {result.exit_code}: {result.output}"
+    )
+    assert result.stdout == ""
+    payload = json.loads(result.stderr)
+    assert set(payload) == {"error"}
+    assert payload["error"]["code"] == UsageError.code
+    assert "SPLUNK_ENABLE_WRITES" in payload["error"]["message"]
+
+
+@pytest.mark.parametrize("value", ("", "TRUE", "1", "yes", "false"))
+def test_enable_writes_requires_literal_true(
+    value: str, enterprise_env_no_opt_in: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Enterprise writes reject every opt-in spelling except exact `true`."""
+    monkeypatch.setenv("SPLUNK_ENABLE_WRITES", value)
+    result = cli_runner().invoke(cli, ["index", "create", "example", "--yes", "--output", "json"])
+
+    assert result.exit_code == UsageError.exit_code
+    assert result.stdout == ""
+    payload = json.loads(result.stderr)
+    assert payload["error"]["code"] == UsageError.code
+    assert "SPLUNK_ENABLE_WRITES" in payload["error"]["message"]
+
+
+def test_enterprise_dry_run_needs_no_opt_in(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A preview sends nothing, so it works with SPLUNK_ENABLE_WRITES unset."""
+    monkeypatch.delenv("SPLUNK_ENABLE_WRITES", raising=False)
+    monkeypatch.setenv("SPLUNK_URL", "https://sh.corp:8089")
+    monkeypatch.setenv("SPLUNK_TOKEN", "T")
+
+    result = CliRunner().invoke(
+        cli, ["index", "create", "example", "--dry-run", "--output", "json"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["data"]["dry_run"] is True
+
+
+# --- Cloud: SPLUNK_CLOUD_WRITE additionally gates the three ACS routes --------
+
+
+@pytest.fixture
+def cloud_env_no_opt_in(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Point the CLI at a Cloud stack with neither opt-in set; refuse the network."""
+    for name in (
+        "SPLUNK_APP",
+        "SPLUNK_OWNER",
+        "SPLUNK_PROFILE",
+        "SPLUNK_ACS_BASE_URL",
+        "SPLUNK_CLOUD_WRITE",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("SPLUNK_URL", "https://acme.splunkcloud.com")
+    monkeypatch.setenv("SPLUNK_ACS_TOKEN", "unused")
+    monkeypatch.setenv("SPLUNK_TOKEN", "unused")
+    _refuse_network(monkeypatch)
+
+
+@pytest.mark.parametrize("case", WRITE_CASES, ids=lambda case: " ".join(case.path))
+def test_every_write_is_refused_on_cloud_by_default(
+    case: Case, cloud_env_no_opt_in: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def unexpected_client(*args: object, **kwargs: object) -> object:
+        raise AssertionError("Cloud write must not construct an ACS or splunkd client")
+
+    monkeypatch.setattr("vct_splunk.commands.context.Ctx.client", unexpected_client)
+    monkeypatch.setattr("vct_splunk.commands.context.Ctx.acs_client", unexpected_client)
+    expected = (
+        UnsupportedBackendError if not has_cloud_write(case.path[0], case.path[-1]) else UsageError
+    )
+    real_write = tuple(arg for arg in case.argvs[0] if arg != "--dry-run") + ("--yes",)
+    for args in (*case.argvs, real_write):
+        result = cli_runner().invoke(cli, [*case.path, *args, "--output", "json"])
+
+        assert result.exit_code == expected.exit_code, (
+            f"{' '.join(case.path)} exited {result.exit_code}: {result.stderr}"
+        )
+        assert result.stdout == ""
+        payload = json.loads(result.stderr)
+        assert set(payload) == {"error"}
+        assert payload["error"]["code"] == expected.code
+        if expected is UsageError:
+            assert "SPLUNK_CLOUD_WRITE" in payload["error"]["message"]
+
+
+@pytest.mark.parametrize("value", ("", "TRUE", "1", "yes", "false"))
+def test_cloud_write_requires_literal_true(
+    value: str, cloud_env_no_opt_in: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cloud writes reject every opt-in spelling except exact `true`."""
+    monkeypatch.setenv("SPLUNK_CLOUD_WRITE", value)
+    result = cli_runner().invoke(cli, ["index", "create", "example", "--yes", "--output", "json"])
+
+    assert result.exit_code == UsageError.exit_code
+    assert result.stdout == ""
+    payload = json.loads(result.stderr)
+    assert payload["error"]["code"] == UsageError.code
+    assert "SPLUNK_CLOUD_WRITE" in payload["error"]["message"]
+
+
+def test_cloud_opt_in_does_not_replace_enable_writes_gate(
+    cloud_write_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The Cloud opt-in still requires the shared real-write gate."""
+    monkeypatch.delenv("SPLUNK_ENABLE_WRITES", raising=False)
+    _refuse_network(monkeypatch)
+    result = cli_runner().invoke(cli, ["index", "create", "example", "--yes", "--output", "json"])
+
+    assert result.exit_code == UsageError.exit_code
+    assert result.stdout == ""
+    payload = json.loads(result.stderr)
+    assert payload["error"]["code"] == UsageError.code
+    assert "SPLUNK_ENABLE_WRITES" in payload["error"]["message"]
+
+
+def test_cloud_gate_precedes_noninteractive_confirmation(
+    cloud_env_no_opt_in: None,
+) -> None:
+    """A missing Cloud opt-in is reported before the no-`--yes` confirmation gate."""
+    result = cli_runner().invoke(cli, ["index", "create", "example", "--output", "json"])
+
+    assert result.exit_code == UsageError.exit_code
+    payload = json.loads(result.stderr)
+    assert "SPLUNK_CLOUD_WRITE" in payload["error"]["message"]
+
+
+@pytest.fixture
+def cloud_write_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Point the CLI at a Cloud stack with the write opt-in set."""
+    for name in ("SPLUNK_APP", "SPLUNK_OWNER", "SPLUNK_PROFILE", "SPLUNK_ACS_BASE_URL"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("SPLUNK_URL", "https://acme.splunkcloud.com")
+    monkeypatch.setenv("SPLUNK_ACS_TOKEN", "T")
+    monkeypatch.setenv("SPLUNK_CLOUD_WRITE", "true")
+    monkeypatch.setenv("SPLUNK_ENABLE_WRITES", "true")
+
+
+def _patch_acs_write(monkeypatch: pytest.MonkeyPatch, handler) -> None:
+    """Back the ACS write client `do_write` opens with an `httpx.MockTransport`."""
+
+    def _make(config):
+        return RealAcsClient(config, transport=httpx.MockTransport(handler))
+
+    monkeypatch.setattr("vct_splunk.commands.write.AcsClient", _make)
+
+
+@pytest.mark.parametrize("case", CLOUD_UNWRITABLE_CASES, ids=lambda case: " ".join(case.path))
+def test_non_acs_writes_still_refused_when_opted_in(
+    case: Case, cloud_write_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The opt-in unlocks only the nine ACS routes -- everything else still refuses."""
+    _refuse_network(monkeypatch)
+    result = cli_runner().invoke(cli, _argv(case, "--yes"))
+
+    assert result.exit_code == UnsupportedBackendError.exit_code, (
+        f"{' '.join(case.path)} exited {result.exit_code}: {result.output}"
+    )
+    assert result.stdout == ""
+    payload = json.loads(result.stderr)
+    assert set(payload) == {"error"}
+    assert payload["error"]["code"] == UnsupportedBackendError.code
+
+
+def test_cloud_index_write_rejects_fields_without_an_acs_mapping(
+    cloud_write_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An unmapped typed option fails rather than disappearing from an ACS body."""
+    _refuse_network(monkeypatch)
+    result = cli_runner().invoke(
+        cli,
+        ["index", "create", "example", "--frozen-secs", "10", "--yes", "--output", "json"],
+    )
+
+    assert result.exit_code == UsageError.exit_code
+    assert result.stdout == ""
+    payload = json.loads(result.stderr)
+    assert "--frozen-secs" in payload["error"]["message"]
+
+
+def test_saved_search_trigger_actions_requires_enable_writes(
+    enterprise_env_no_opt_in: None,
+) -> None:
+    """Alert actions use the real-write gate even though plain dispatch does not."""
+    result = cli_runner().invoke(
+        cli,
+        [
+            "saved-search",
+            "run",
+            "nightly",
+            "--app",
+            "my_app",
+            "--trigger-actions",
+            "--output",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == UsageError.exit_code
+    assert result.stdout == ""
+    payload = json.loads(result.stderr)
+    assert "SPLUNK_ENABLE_WRITES" in payload["error"]["message"]
+
+
+@pytest.mark.parametrize("case", CLOUD_WRITABLE_CASES, ids=lambda case: " ".join(case.path))
+def test_acs_write_dry_run_sends_nothing(
+    case: Case, cloud_write_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--dry-run previews an ACS write and sends no request, even when opted in."""
+
+    def refuse(req: httpx.Request) -> httpx.Response:
+        raise AssertionError(f"dry-run sent {req.method} {req.url}")
+
+    _patch_acs_write(monkeypatch, refuse)
+    result = CliRunner().invoke(cli, _argv(case, "--dry-run"))
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["data"]["dry_run"] is True
+    assert payload["data"]["request"]["method"] in {"POST", "PATCH", "DELETE"}
+
+
+@pytest.mark.parametrize("case", CLOUD_WRITABLE_CASES, ids=lambda case: " ".join(case.path))
+def test_acs_write_succeeds_when_opted_in_and_confirmed(
+    case: Case, cloud_write_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With the opt-in and --yes, a mocked ACS create/update/delete succeeds."""
+    seen: dict[str, str] = {}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen["method"] = req.method
+        seen["path"] = req.url.path
+        return httpx.Response(202, json={"name": "example"})
+
+    _patch_acs_write(monkeypatch, handler)
+    result = CliRunner().invoke(cli, _argv(case, "--yes"))
+
+    assert result.exit_code == 0, result.output
+    resource, verb = case.path
+    expected_method = {"create": "POST", "update": "PATCH", "delete": "DELETE"}[verb]
+    assert seen["method"] == expected_method
+    assert seen["path"].startswith(f"/acme/adminconfig/v2/{_ACS_PATH[resource]}")
+
+
+def test_cloud_index_body_reuses_rest_serialization_and_maps_acs_keys(
+    cloud_write_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen.update(json.loads(req.content or b"{}"))
+        return httpx.Response(202, json={"name": "example"})
+
+    _patch_acs_write(monkeypatch, handler)
+    result = cli_runner().invoke(
+        cli,
+        [
+            "index",
+            "create",
+            "example",
+            "--max-gb",
+            "2",
+            "--set",
+            "searchableDays=30",
+            "--yes",
+            "--output",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert seen == {"maxDataSizeMB": 2048, "searchableDays": "30", "name": "example"}
+
+
+def test_hec_token_create_redacts_token_in_output(
+    cloud_write_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ACS mints the token on create; Cloud CI output must never show it."""
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            202, json={"http-event-collector": {"name": "example", "token": "SECRET-DO-NOT-LEAK"}}
+        )
+
+    _patch_acs_write(monkeypatch, handler)
+    result = CliRunner().invoke(
+        cli, ["hec-token", "create", "example", "--yes", "--output", "json"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "SECRET-DO-NOT-LEAK" not in result.output
+    assert "<redacted>" in result.output

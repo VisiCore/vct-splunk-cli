@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import os
 from collections.abc import Callable
 from typing import Any
 
@@ -12,6 +13,23 @@ from vct_splunk.api.client import SplunkClient
 from vct_splunk.config.types import SplunkConfig
 
 _TEST_URL = "https://splunk.test:8089"
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _writes_enabled_for_tests():
+    """Every test may attempt a real write. ``SPLUNK_ENABLE_WRITES`` gates
+    production usage, not the suite that proves the gate itself works -- a
+    test proving the *default* refusal deletes this var for itself (see
+    ``test_write_gating.py``'s ``enterprise_env_no_opt_in`` fixture for the pattern of
+    clearing an ambient opt-in before asserting on its absence).
+    """
+    previous = os.environ.get("SPLUNK_ENABLE_WRITES")
+    os.environ["SPLUNK_ENABLE_WRITES"] = "true"
+    yield
+    if previous is None:
+        os.environ.pop("SPLUNK_ENABLE_WRITES", None)
+    else:
+        os.environ["SPLUNK_ENABLE_WRITES"] = previous
 
 
 def cli_runner() -> CliRunner:

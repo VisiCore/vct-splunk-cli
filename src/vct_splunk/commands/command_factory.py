@@ -17,6 +17,7 @@ from typing import Any
 
 import click
 
+from ..api.acs.operations import ACS_FIELD_KEYS, map_acs_body
 from ..api.endpoint_factory import EndpointConfig, Endpoints, Field
 from ..output import formatter as out
 from ..utils.errors import UsageError
@@ -45,6 +46,24 @@ def _help_for(spec: EndpointConfig, verb: str) -> str:
         "disable": f"Disable {a}.{gated}",
     }
     return texts[verb]
+
+
+def _acs_body(
+    spec: EndpointConfig, res: Endpoints, fields: dict[str, Any], sets: dict[str, str]
+) -> dict[str, Any]:
+    """Build an ACS body, refusing explicitly requested fields without a mapping."""
+    mapping = ACS_FIELD_KEYS.get(spec.name, {})
+    by_opt = {f.opt: f for f in spec.fields}
+    for opt, value in fields.items():
+        if value is None or value == ():
+            continue
+        if by_opt[opt].key not in mapping:
+            dashed = opt.replace("_", "-")
+            raise UsageError(
+                f"--{dashed} has no Splunk Cloud (ACS) equivalent. "
+                f"Use --set with the ACS field's own JSON name instead."
+            )
+    return map_acs_body(spec.name, res._body(fields, sets), preserve_keys=sets)
 
 
 def _gate_args(
@@ -118,6 +137,8 @@ def build_group(spec: EndpointConfig) -> click.Group:
                 action=action,
                 audit_event=event,
                 run=lambda c: res.create(c, name, fields=fields, sets=sets, owner=owner, app=app),
+                name=name,
+                body=_acs_body(spec, res, fields, sets) if ctx.backend == "cloud" else None,
             )
             out.emit(result, ctx.output_mode, ctx.meta())
 
@@ -139,6 +160,8 @@ def build_group(spec: EndpointConfig) -> click.Group:
                 action=action,
                 audit_event=event,
                 run=lambda c: res.update(c, name, fields=fields, sets=sets, owner=owner, app=app),
+                name=name,
+                body=_acs_body(spec, res, fields, sets) if ctx.backend == "cloud" else None,
             )
             out.emit(result, ctx.output_mode, ctx.meta())
 
@@ -156,6 +179,7 @@ def build_group(spec: EndpointConfig) -> click.Group:
                 action=action,
                 audit_event=event,
                 run=lambda c: res.delete(c, name, owner=owner, app=app),
+                name=name,
             )
             out.emit(result, ctx.output_mode, ctx.meta())
 

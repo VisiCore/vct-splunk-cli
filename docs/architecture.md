@@ -16,11 +16,12 @@ vct_splunk/
     client.py              # httpx transport stack (AuthTransport, RetryTransport),
                            # SplunkClient, create_client, get/set_client singletons
     endpoint_factory.py    # Generic CRUD Endpoints engine, EndpointConfig/Field
-    endpoints/             # Hand-written endpoint modules (14 files)
+    endpoints/             # Hand-written endpoint modules (15 files)
       server.py, search.py, jobs.py, saved_searches.py, kvstore.py,
       hec.py, apps.py, cluster.py, license.py, deploy.py, lookups.py,
-      datamodel.py, health.py, raw.py
-    acs/                   # Splunk Cloud ACS management-plane client (read-only)
+      datamodel.py, health.py, raw.py, config.py
+    acs/                   # Splunk Cloud ACS management-plane client (reads +
+                           # gated index/role/hec-token writes)
       client.py, operations.py
 
   auth/
@@ -31,8 +32,9 @@ vct_splunk/
     registry.py            # Declarative list of factory-generated resources
     context.py             # Shared `command` decorator + Ctx (builds clients)
     write.py               # The single gated write path (confirm + audit)
-    dispatch.py            # Routes index/role/hec-token list to ACS on Cloud
-    server.py, api.py, auth.py, search.py, saved_search.py, health.py,
+    dispatch.py            # Routes index/role/hec-token reads to ACS on Cloud;
+                           # checks which writes have an ACS route
+    server.py, api.py, auth.py, search.py, saved_search.py, config.py, health.py,
     kvstore.py, hec.py, apps.py, cluster.py, shcluster.py, license.py,
     deploy.py, lookup.py, datamodel.py, inspect.py
 
@@ -146,12 +148,16 @@ CLI flags (--base-url, --profile, --app, ...)
 
 ### Write safety
 
-Every mutation funnels through `commands/write.py:do_write()`: `--dry-run`
-previews the exact request and sends nothing; otherwise it confirms on a TTY or
-requires `--yes` when non-interactive, then appends a record to the local audit
-log. Reads redact secret-named fields by default; only commands whose purpose
-is to mint a credential reveal one. Splunk Cloud targets refuse writes and
-route supported reads through ACS.
+Every mutation funnels through `commands/write.py:do_write()`. A real write --
+`--dry-run` sends nothing and needs neither gate below -- requires
+`SPLUNK_ENABLE_WRITES=true` first, on every backend; there is no CLI flag, so a
+saved command line cannot enable one. It then confirms on a TTY or requires
+`--yes` when non-interactive, and appends a record to the local audit log.
+Reads redact secret-named fields by default; only commands whose purpose is to
+mint a credential reveal one. Splunk Cloud targets route supported reads
+through ACS; writes there need `SPLUNK_CLOUD_WRITE=true` as well (checked even
+for a `--dry-run` preview, since it also proves the object is one of the three
+ACS-writable resources -- index, role, hec-token create/update/delete only).
 
 ### Error handling
 

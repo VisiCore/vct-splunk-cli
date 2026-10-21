@@ -284,7 +284,7 @@ def test_index_list_routes_to_rest_on_enterprise(monkeypatch):
 
 # --- Unsupported operations stop cleanly -------------------------------------
 #
-# Cloud write refusal is proved for every mutation in test_cloud_write_refusal.py;
+# Cloud write refusal is proved for every mutation in test_write_gating.py;
 # spot checks here would only restate a subset of it.
 
 

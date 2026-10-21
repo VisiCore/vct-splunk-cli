@@ -17,11 +17,28 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   JSON/table output, and error-envelope messages and details. The audit log is
   unaffected and always records the real host. The `Splunk Cloud Read Canary`
   workflow sets this.
+- Opt-in Splunk Cloud writes for `index`, `role`, and `hec-token`
+  create/update/delete via ACS. Two env-only gates, never a CLI flag:
+  `SPLUNK_ENABLE_WRITES=true` for any real write on any backend, and
+  additionally `SPLUNK_CLOUD_WRITE=true` on a Cloud target (checked even for a
+  `--dry-run` preview, since it also proves the object is one of the three
+  ACS-writable resources). Cloud previews also need an ACS token to build the
+  request; `SPLUNK_ENABLE_WRITES` is not needed for a preview. A separate
+  `SPLUNK_ACS_WRITE_TOKEN` can scope the write credential apart from the read
+  token.
+- A `Splunk Cloud Write Canary` GitHub Actions workflow: `workflow_dispatch`
+  only, gated by a typed `confirm=WRITE` input, a `tests: splunk cloud write`
+  HEAD commit-subject requirement, and a protected `splunk-cloud-write`
+  environment with required reviewers around the destructive half. It runs the
+  Cloud read canary first, so one approved dispatch certifies both.
 
 ### Changed
 
 - `splunk inspect` no longer echoes the Cloud stack name in its report body. It
   reports `stack_configured: bool` instead.
+- **Breaking:** every real (non-`--dry-run`) write, on every backend, now
+  requires `SPLUNK_ENABLE_WRITES=true`. There is no CLI flag, so a saved
+  command line cannot enable one. `--dry-run` is unaffected.
 
 - Lower the supported Python floor to 3.9, so the CLI runs under the interpreter
   bundled with Splunk Enterprise 9.x. Shipped code needed no change: the package
