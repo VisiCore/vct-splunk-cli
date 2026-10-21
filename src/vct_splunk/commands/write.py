@@ -29,15 +29,10 @@ from ..utils.errors import UnsupportedBackendError, UsageError
 from ..utils.redact import safe_target
 from .dispatch import has_cloud_write
 
-#: Opt-in for ANY real mutation, on any backend. Never a CLI flag -- a saved
-#: command line must not be able to enable a write. ``--dry-run`` needs neither
-#: this nor :data:`CLOUD_WRITE_ENV`: a preview sends nothing regardless, so
-#: :func:`do_write` skips both checks for it.
+#: Opt-in required for every real mutation.
 ENABLE_WRITES_ENV = "SPLUNK_ENABLE_WRITES"
 
-#: Additional opt-in required, on top of :data:`ENABLE_WRITES_ENV`, for a real
-#: write against a Splunk Cloud target. Never a CLI flag either. See
-#: :func:`refuse_cloud_write`.
+#: Additional opt-in for supported Cloud writes and previews.
 CLOUD_WRITE_ENV = "SPLUNK_CLOUD_WRITE"
 
 
@@ -51,38 +46,7 @@ def do_write(
     name: str | None = None,
     body: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Run one gated mutation: confirm it, execute it, and audit it.
-
-    Refuses outright unless :data:`ENABLE_WRITES_ENV` is set (every backend,
-    real writes only -- ``--dry-run`` sends nothing regardless, so it is exempt)
-    and, on a Cloud target, unless the object is one of the three ACS-writable
-    resources and :data:`CLOUD_WRITE_ENV` is also set. That second check is
-    enforced even for a preview -- see :func:`refuse_cloud_write`. Then resolves
-    the target up front (so a missing ``SPLUNK_URL`` / credential
-    fails before we prompt), gates the write via :func:`output.confirm_write`
-    (dry-run / ``--yes`` / non-interactive fail-fast), runs the operation on the
-    backend-appropriate client, and appends an audit record for any real
-    (non-dry-run) write.
-
-    Args:
-        ctx: The command :class:`~vct_splunk.commands.context.Ctx`.
-        action: A human phrase for the prompt, e.g. ``"create index 'web'"``.
-        audit_event: Fields to record on a real write; ``target`` is added
-            here. ``audit_event["action"]`` is ``"<resource>.<verb>"``, e.g.
-            ``"index.create"``.
-        run: Callable given an open Enterprise ``SplunkClient``, returning the
-            operation result. Not called for a Cloud write -- see ``name`` and
-            ``body``.
-        target: The Splunk URL; resolved from the environment when omitted.
-        name: The object name, needed only for a Cloud write. The REST path
-            already has its name closed over inside ``run``.
-        body: The ACS JSON body for a Cloud create/update. Built by the caller
-            -- it needs the resource's own field mapping, which this module
-            does not have. Ignored for delete and on Enterprise.
-
-    Returns:
-        The operation result, ready for :func:`output.emit`.
-    """
+    """Confirm, dispatch, and audit a mutation after its backend gates."""
     resource, _, verb = str(audit_event.get("action", "")).partition(".")
     refuse_cloud_write(ctx, resource, verb)
     if not ctx.dry_run:
@@ -121,25 +85,9 @@ def do_write(
 
 
 def refuse_cloud_write(ctx: Any, resource: str, verb: str) -> None:
-    """Stop a Cloud mutation with no ACS route; gate the rest behind opt-in.
+    """Reject unsupported Cloud mutations or a missing Cloud opt-in.
 
-    Two independent checks, in order, both enforced unconditionally --
-    dry-run or not:
-
-    1. **Capability**. Only create/update/delete for index, role, and
-       hec-token (see :func:`vct_splunk.commands.dispatch.has_cloud_write`)
-       exist on Cloud at all; every other Cloud mutation -- including
-       enable/disable on those same three resources -- has no route to opt
-       into, so this always raises.
-    2. **Opt-in** (:data:`CLOUD_WRITE_ENV`). Unlike the top-level
-       :data:`ENABLE_WRITES_ENV` gate in :func:`do_write` (which a preview
-       skips, since it sends nothing regardless), this one is also required for
-       a Cloud preview, so ``--dry-run`` does not exempt it.
-
-    :func:`do_write` calls this, which is enough for a command that reaches the
-    gate directly. A command that first resolves a namespace calls it earlier
-    as well, so a Cloud target is told writes are unsupported rather than
-    asked for an ``--app`` that would not have helped.
+    The opt-in also applies to previews because it proves the resource has an ACS route.
     """
     if getattr(ctx, "backend", "enterprise") != "cloud":
         return
@@ -153,12 +101,7 @@ def refuse_cloud_write(ctx: Any, resource: str, verb: str) -> None:
 
 
 def _require_writes_enabled(resource: str, verb: str) -> None:
-    """Refuse a real (non-dry-run) mutation unless :data:`ENABLE_WRITES_ENV` is set.
-
-    Every backend, always -- there is no CLI flag, so a saved command line can
-    never enable a write. Only :func:`do_write` calls this, and only when
-    ``ctx.dry_run`` is False; a preview sends nothing and needs no opt-in.
-    """
+    """Require the shared opt-in before a real write."""
     if os.environ.get(ENABLE_WRITES_ENV) == "true":
         return
     raise UsageError(

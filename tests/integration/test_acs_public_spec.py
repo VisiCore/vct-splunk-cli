@@ -7,8 +7,7 @@ import os
 import httpx
 import pytest
 
-from vct_splunk.api.acs.operations import LIST_ENVELOPES, WRITE_PATHS
-from vct_splunk.commands.command_factory import _ACS_FIELD_KEYS
+from vct_splunk.api.acs.operations import ACS_FIELD_KEYS, LIST_ENVELOPES, WRITE_PATHS
 
 pytestmark = [
     pytest.mark.integration,
@@ -48,6 +47,6 @@ def test_implemented_acs_write_contract_matches_public_spec():
     if "$ref" in schema:
         component = schema["$ref"].rsplit("/", 1)[-1]
         schema = public["components"]["schemas"][component]
-    assert set(_ACS_FIELD_KEYS["index"].values()) <= set(schema["properties"]), (
+    assert set(ACS_FIELD_KEYS["index"].values()) <= set(schema["properties"]), (
         "ACS index field mappings are missing from the public create schema"
     )

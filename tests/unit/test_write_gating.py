@@ -1,30 +1,9 @@
-"""Writes are refused by default, on every backend, until explicitly opted in.
-
-Two independent env-only gates (never a CLI flag, so a saved command line can
-never turn one on by itself):
-
-- `SPLUNK_ENABLE_WRITES=true` -- required for any real (non-dry-run) mutation,
-  on every backend. `--dry-run` sends nothing and needs no opt-in.
-- `SPLUNK_CLOUD_WRITE=true` -- required *additionally* on a Cloud target, and
-  only unlocks create/update/delete for `index`, `role`, and `hec-token` (the
-  three ACS mutation routes). This one is enforced even for a `--dry-run`
-  preview, since it also proves the object is one of those three -- see
-  `vct_splunk.commands.write.refuse_cloud_write`.
-
-The property that makes each refusal safe is not "writes usually fail" -- it is
-that the write stops at the gate, with a typed error, having sent nothing. A
-refusal that happened only because a credential was missing, or one that fired
-after a request went out, would both look like success in a weaker test. So
-every refusal case here installs a transport that fails the test if any real
-request leaves the process.
-
-`tests/unit/test_acs_loopback.py` covers the Cloud read contract; this and
-that both run credential-free on every change, needing no live target.
-"""
+"""Prove write gates refuse before a client or network request can be made."""
 
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import httpx
 import pytest
@@ -163,23 +142,30 @@ def cloud_env_no_opt_in(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.parametrize("case", WRITE_CASES, ids=lambda case: " ".join(case.path))
-def test_every_write_is_refused_on_cloud_by_default(case: Case, cloud_env_no_opt_in: None) -> None:
-    """The gate stops the write, names the backend, and sends nothing."""
-    result = cli_runner().invoke(cli, _argv(case, "--yes"))
+def test_every_write_is_refused_on_cloud_by_default(
+    case: Case, cloud_env_no_opt_in: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def unexpected_client(*args: object, **kwargs: object) -> object:
+        raise AssertionError("Cloud write must not construct an ACS or splunkd client")
 
+    monkeypatch.setattr("vct_splunk.commands.context.Ctx.client", unexpected_client)
+    monkeypatch.setattr("vct_splunk.commands.context.Ctx.acs_client", unexpected_client)
     expected = (
         UnsupportedBackendError if not has_cloud_write(case.path[0], case.path[-1]) else UsageError
     )
+    real_write = tuple(arg for arg in case.argvs[0] if arg != "--dry-run") + ("--yes",)
+    for args in (*case.argvs, real_write):
+        result = cli_runner().invoke(cli, [*case.path, *args, "--output", "json"])
 
-    assert result.exit_code == expected.exit_code, (
-        f"{' '.join(case.path)} exited {result.exit_code}: {result.output}"
-    )
-    assert result.stdout == ""
-    payload = json.loads(result.stderr)
-    assert set(payload) == {"error"}
-    assert payload["error"]["code"] == expected.code
-    if expected is UsageError:
-        assert "SPLUNK_CLOUD_WRITE" in payload["error"]["message"]
+        assert result.exit_code == expected.exit_code, (
+            f"{' '.join(case.path)} exited {result.exit_code}: {result.stderr}"
+        )
+        assert result.stdout == ""
+        payload = json.loads(result.stderr)
+        assert set(payload) == {"error"}
+        assert payload["error"]["code"] == expected.code
+        if expected is UsageError:
+            assert "SPLUNK_CLOUD_WRITE" in payload["error"]["message"]
 
 
 @pytest.mark.parametrize("value", ("", "TRUE", "1", "yes", "false"))
@@ -338,6 +324,36 @@ def test_acs_write_succeeds_when_opted_in_and_confirmed(
     expected_method = {"create": "POST", "update": "PATCH", "delete": "DELETE"}[verb]
     assert seen["method"] == expected_method
     assert seen["path"].startswith(f"/acme/adminconfig/v2/{_ACS_PATH[resource]}")
+
+
+def test_cloud_index_body_reuses_rest_serialization_and_maps_acs_keys(
+    cloud_write_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen.update(json.loads(req.content or b"{}"))
+        return httpx.Response(202, json={"name": "example"})
+
+    _patch_acs_write(monkeypatch, handler)
+    result = cli_runner().invoke(
+        cli,
+        [
+            "index",
+            "create",
+            "example",
+            "--max-gb",
+            "2",
+            "--set",
+            "searchableDays=30",
+            "--yes",
+            "--output",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert seen == {"maxDataSizeMB": 2048, "searchableDays": "30", "name": "example"}
 
 
 def test_hec_token_create_redacts_token_in_output(
