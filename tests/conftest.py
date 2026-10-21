@@ -20,12 +20,16 @@ def _writes_enabled_for_tests():
     """Every test may attempt a real write. ``SPLUNK_ENABLE_WRITES`` gates
     production usage, not the suite that proves the gate itself works -- a
     test proving the *default* refusal deletes this var for itself (see
-    ``test_cloud_write_refusal.py``'s fixture for the existing pattern of
+    ``test_write_gating.py``'s ``enterprise_env_no_opt_in`` fixture for the pattern of
     clearing an ambient opt-in before asserting on its absence).
     """
+    previous = os.environ.get("SPLUNK_ENABLE_WRITES")
     os.environ["SPLUNK_ENABLE_WRITES"] = "true"
     yield
-    os.environ.pop("SPLUNK_ENABLE_WRITES", None)
+    if previous is None:
+        os.environ.pop("SPLUNK_ENABLE_WRITES", None)
+    else:
+        os.environ["SPLUNK_ENABLE_WRITES"] = previous
 
 
 def cli_runner() -> CliRunner:

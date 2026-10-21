@@ -11,6 +11,7 @@ from click.testing import CliRunner
 
 from cli_catalog import CATALOG, help_invocations, iter_leaves
 from vct_splunk.cli import cli
+from vct_splunk.commands.dispatch import has_cloud_write
 
 
 def _handler(req: httpx.Request) -> httpx.Response:
@@ -118,5 +119,11 @@ def test_every_write_refuses_cloud_before_client_creation(case, cli_env, monkeyp
     monkeypatch.setattr("vct_splunk.commands.context.Ctx.acs_client", unexpected_client)
     for args in case.argvs:
         result = CliRunner().invoke(cli, [*case.path, *args, "--output", "json"])
-        assert result.exit_code == 4, f"{' '.join(case.path)}: {result.output}"
-        assert "unsupported_backend" in result.output
+        payload = json.loads(result.output)
+        if has_cloud_write(case.path[0], case.path[-1]):
+            assert result.exit_code == 2, f"{' '.join(case.path)}: {result.output}"
+            assert payload["error"]["code"] == "usage_error"
+            assert "SPLUNK_CLOUD_WRITE" in payload["error"]["message"]
+        else:
+            assert result.exit_code == 4, f"{' '.join(case.path)}: {result.output}"
+            assert payload["error"]["code"] == "unsupported_backend"

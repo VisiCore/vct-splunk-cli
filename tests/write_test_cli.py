@@ -33,7 +33,7 @@ class WriteTestCli:
     runner: CliRunner = field(default_factory=CliRunner)
     cleanups: list[tuple[str, Callable[[], Result]]] = field(default_factory=list)
 
-    def run(self, *argv: str, exit_codes: tuple[int, ...] = (0,)) -> Any:
+    def run(self, *argv: str, exit_codes: tuple[int, ...] = (0,)) -> dict[str, Any] | list[Any]:
         result = self.runner.invoke(cli, [*argv, "--output", "json"])
         assert result.exit_code in exit_codes, (
             f"{' '.join(argv)} exited {result.exit_code}\n{result.output}"
@@ -45,7 +45,9 @@ class WriteTestCli:
         return payload["error"]
 
     def write(self, *argv: str) -> dict[str, Any]:
-        return self.run(*argv, "--yes")
+        result = self.run(*argv, "--yes")
+        assert isinstance(result, dict)
+        return result
 
     def cleanup(self, label: str, *argv: str) -> None:
         self.cleanups.append(
