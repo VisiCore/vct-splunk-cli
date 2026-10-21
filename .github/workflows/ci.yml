@@ -159,10 +159,6 @@ jobs:
     env:
       SPLUNK_INTEGRATION_TEST: "true"
       SPLUNK_WRITE_TEST: "true"
-      # The test suite itself also force-enables this for every pytest session
-      # (tests/conftest.py); set explicitly here too so the job documents its
-      # own intent without a reader having to know that.
-      SPLUNK_ENABLE_WRITES: "true"
       SPLUNK_URL: https://localhost:8089
       SPLUNK_USERNAME: admin
       SPLUNK_PASSWORD: Ch4ng3d-CI-Pass!
@@ -357,7 +353,7 @@ jobs:
       contents: read
     steps:
       - name: Aggregate results
-        uses: re-actors/alls-green@05ac9388f0aebcb5727afa17fcccfecd6f8ec5fe # release/v1
+        uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # release/v1
         with:
           # These jobs are conditional (pull-request-only, or paths-filtered), so
           # a skip is a legitimate outcome and must not fail the gate. `gate` and

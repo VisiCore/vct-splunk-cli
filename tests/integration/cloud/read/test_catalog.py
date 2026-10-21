@@ -55,9 +55,7 @@ def test_cloud_backed_read_succeeds(case: Case) -> None:
     """A read Cloud serves must succeed and return the typed data envelope."""
     result = _invoke(case)
 
-    assert result.exit_code == 0, (
-        f"{' '.join(case.path)} exited {result.exit_code}: {result.output}"
-    )
+    assert result.exit_code == 0, f"{' '.join(case.path)} exited {result.exit_code}"
     payload = json.loads(result.output)
     assert set(payload) == {"data", "meta"}
     assert payload["meta"]["target"]
@@ -69,8 +67,7 @@ def test_every_cloud_read_leaf_honors_the_contract(case: Case) -> None:
     result = _invoke(case)
 
     assert result.exit_code in CONTRACT_EXITS, (
-        f"{' '.join(case.path)} exited {result.exit_code}, "
-        f"outside the documented contract: {result.output}"
+        f"{' '.join(case.path)} exited {result.exit_code}, outside the documented contract"
     )
     payload = json.loads(result.output)
 

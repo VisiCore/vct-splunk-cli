@@ -12,6 +12,7 @@ reach :func:`cloud_write` live one layer up, in
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from typing import Any
 
 from ...utils.errors import APIError
@@ -45,6 +46,11 @@ WRITABLE: dict[str, tuple[str, str]] = {
     "hec-token": (HEC_TOKENS, "hec"),
 }
 
+#: Splunk REST form keys mapped to the equivalent ACS JSON keys.
+ACS_FIELD_KEYS: dict[str, dict[str, str]] = {
+    "index": {"maxTotalDataSizeMB": "maxDataSizeMB"},
+}
+
 #: (path template, HTTP method) pairs ACS exposes for create/update/delete on
 #: the three writable resources, derived from :data:`WRITABLE` so this and
 #: :func:`cloud_write` can never drift apart.
@@ -57,6 +63,16 @@ WRITE_PATHS: tuple[tuple[str, str], ...] = tuple(
         (f"{base}/{{{param}}}", "delete"),
     )
 )
+
+
+def map_acs_body(
+    resource: str, body: dict[str, Any], *, preserve_keys: Collection[str] = ()
+) -> dict[str, Any]:
+    """Translate mapped REST body keys to ACS keys, preserving explicit keys."""
+    mapping = ACS_FIELD_KEYS.get(resource, {})
+    return {
+        key if key in preserve_keys else mapping.get(key, key): value for key, value in body.items()
+    }
 
 
 def list_cloud_indexes(client: AcsClient) -> list[dict[str, Any]]:
@@ -103,7 +119,7 @@ def cloud_write(
 
     ``resource`` must be a key of :data:`WRITABLE` and ``verb`` one of
     create/update/delete -- the caller
-    (:func:`vct_splunk.commands.dispatch.dispatch_write`) has already checked
+    (:func:`vct_splunk.commands.write.refuse_cloud_write`) has already checked
     both against the same allowlist this reads, so a `KeyError` here would
     mean that check was bypassed.
 

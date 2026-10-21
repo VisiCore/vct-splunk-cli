@@ -134,19 +134,19 @@ to allow any real (non-preview) mutation -- there is no CLI flag, so a saved
 command line can never turn this on by itself:
 
 ```bash
-splunk index create payments --dry-run                          # show the exact request, send nothing -- always works
+splunk index create payments --dry-run                          # show the exact request, send nothing
 export SPLUNK_ENABLE_WRITES=true
 splunk index create payments                                    # ask for confirmation, then do it
 splunk index create payments --yes                               # skip the question (required in scripts)
 ```
 
-`--dry-run` sends nothing, so it needs no opt-in and always works. Once writes
-are enabled, every command that changes the server behaves the same way: ask
-for confirmation on a TTY, or require `--yes` in a script with no person
-watching -- a change without `--yes` there stops immediately rather than
-waiting forever for an answer. Every applied change is appended to an audit
-log — the first of `$VCT_SPLUNK_AUDIT`, `$XDG_STATE_HOME/vct-splunk/audit.log`,
-or `~/.local/state/vct-splunk/audit.log`.
+An Enterprise `--dry-run` sends nothing, so it needs no write opt-in. Once
+writes are enabled, every command that changes the server behaves the same
+way: ask for confirmation on a TTY, or require `--yes` in a script with no
+person watching -- a change without `--yes` there stops immediately rather
+than waiting forever for an answer. Every applied change is appended to an
+audit log — the first of `$VCT_SPLUNK_AUDIT`,
+`$XDG_STATE_HOME/vct-splunk/audit.log`, or `~/.local/state/vct-splunk/audit.log`.
 
 ## Output and exit codes
 
@@ -193,11 +193,12 @@ Cloud **writes** need both `SPLUNK_ENABLE_WRITES=true` (every write, every
 backend) and `SPLUNK_CLOUD_WRITE=true`, and only unlock `create`/`update`/
 `delete` for `index`, `role`, and `hec-token` -- enable/disable and every other
 resource stay refused regardless. Neither is a CLI flag, so a saved command
-line can never enable a write. `--dry-run` and `--yes` work the same as they do
-against Enterprise, except a Cloud preview still needs `SPLUNK_CLOUD_WRITE=true`
-(it also proves the object is one of the three ACS-writable resources). An ACS
-write token can be scoped separately from the read token via
-`SPLUNK_ACS_WRITE_TOKEN` (falls back to `SPLUNK_ACS_TOKEN` when unset).
+line can never enable a write. `--yes` works the same as it does against
+Enterprise. A Cloud `--dry-run` preview still needs `SPLUNK_CLOUD_WRITE=true`
+(it also proves the object is one of the three ACS-writable resources) and an
+ACS token to build the request. An ACS write token can be scoped separately
+from the read token via `SPLUNK_ACS_WRITE_TOKEN` (falls back to
+`SPLUNK_ACS_TOKEN` when unset).
 
 ## Security
 

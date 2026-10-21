@@ -5,7 +5,7 @@ import json
 import pytest
 
 from vct_splunk.output import formatter as out
-from vct_splunk.utils.errors import UsageError
+from vct_splunk.utils.errors import TransportError, UsageError
 
 
 def test_resolve_mode_explicit():
@@ -31,6 +31,21 @@ def test_emit_json_envelope(capsys):
     parsed = json.loads(capsys.readouterr().out)
     assert parsed["data"] == [{"a": 1}]
     assert parsed["meta"]["target"] == "splunk.test"
+
+
+def test_fail_redacts_cloud_target_in_message_and_details(monkeypatch, capsys):
+    target = "https://acme-test.splunkcloud.com:8089"
+    monkeypatch.setenv("VCT_SPLUNK_REDACT_TARGET", "yes")
+
+    with pytest.raises(SystemExit) as exc_info:
+        out.fail(TransportError(f"Could not reach {target}", details={"request_url": target}))
+
+    assert exc_info.value.code == 1
+    rendered = capsys.readouterr().err
+    payload = json.loads(rendered)
+    assert "acme-test" not in rendered
+    assert payload["error"]["message"] == "Could not reach https://<redacted>.splunkcloud.com:8089"
+    assert payload["error"]["details"]["request_url"] == "https://<redacted>.splunkcloud.com:8089"
 
 
 def test_emit_table(capsys):

@@ -14,18 +14,20 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   config get FILE STANZA`. The commands use the normal read namespace, accept a
   file name with or without `.conf`, paginate collection results, and redact
   secret-valued properties.
-- Opt-in redaction of the Splunk Cloud stack name at untrusted output
-  boundaries: `VCT_SPLUNK_REDACT_TARGET=1` hides it in prompts, JSON metadata,
-  and transport error text. The audit log is unaffected and always records the
-  real host. The `Splunk Cloud Read Canary` workflow sets this.
+- Opt-in redaction of Splunk Cloud stack names at untrusted CLI output
+  boundaries: `VCT_SPLUNK_REDACT_TARGET=1` hides them in prompts, rendered
+  JSON/table output, and error-envelope messages and details. The audit log is
+  unaffected and always records the real host. The `Splunk Cloud Read Canary`
+  workflow sets this.
 - Opt-in Splunk Cloud writes for `index`, `role`, and `hec-token`
   create/update/delete via ACS. Two env-only gates, never a CLI flag:
   `SPLUNK_ENABLE_WRITES=true` for any real write on any backend, and
   additionally `SPLUNK_CLOUD_WRITE=true` on a Cloud target (checked even for a
   `--dry-run` preview, since it also proves the object is one of the three
-  ACS-writable resources). `--dry-run` and `--yes` behave the same as on
-  Enterprise. A separate `SPLUNK_ACS_WRITE_TOKEN` can scope the write
-  credential apart from the read token.
+  ACS-writable resources). Cloud previews also need an ACS token to build the
+  request; `SPLUNK_ENABLE_WRITES` is not needed for a preview. A separate
+  `SPLUNK_ACS_WRITE_TOKEN` can scope the write credential apart from the read
+  token.
 - A `Splunk Cloud Write Canary` GitHub Actions workflow: `workflow_dispatch`
   only, gated by a typed `confirm=WRITE` input, a `tests: splunk cloud write`
   HEAD commit-subject requirement, and a protected `splunk-cloud-write`

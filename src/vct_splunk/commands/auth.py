@@ -18,13 +18,14 @@ from ..config.loader import auth_status
 from ..output import formatter as out
 from ..utils.errors import UsageError
 from ..utils.redact import safe_target
+from ..utils.validation import env_flag
 from .context import command
 
 
 def _verify() -> bool | str:
     """TLS verification from the environment, matching the main client."""
     ca = os.environ.get("SPLUNK_CA_BUNDLE")
-    on = os.environ.get("SPLUNK_VERIFY", "true").strip().lower() not in {"0", "false", "no"}
+    on = env_flag("SPLUNK_VERIFY", default=True)
     return ca or on
 
 

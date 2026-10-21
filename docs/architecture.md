@@ -16,10 +16,10 @@ vct_splunk/
     client.py              # httpx transport stack (AuthTransport, RetryTransport),
                            # SplunkClient, create_client, get/set_client singletons
     endpoint_factory.py    # Generic CRUD Endpoints engine, EndpointConfig/Field
-    endpoints/             # Hand-written endpoint modules (14 files)
+    endpoints/             # Hand-written endpoint modules (15 files)
       server.py, search.py, jobs.py, saved_searches.py, kvstore.py,
       hec.py, apps.py, cluster.py, license.py, deploy.py, lookups.py,
-      datamodel.py, health.py, raw.py
+      datamodel.py, health.py, raw.py, config.py
     acs/                   # Splunk Cloud ACS management-plane client (reads +
                            # gated index/role/hec-token writes)
       client.py, operations.py
@@ -32,9 +32,9 @@ vct_splunk/
     registry.py            # Declarative list of factory-generated resources
     context.py             # Shared `command` decorator + Ctx (builds clients)
     write.py               # The single gated write path (confirm + audit)
-    dispatch.py            # Routes index/role/hec-token reads (and gated
-                           # writes) to ACS on Cloud
-    server.py, api.py, auth.py, search.py, saved_search.py, health.py,
+    dispatch.py            # Routes index/role/hec-token reads to ACS on Cloud;
+                           # checks which writes have an ACS route
+    server.py, api.py, auth.py, search.py, saved_search.py, config.py, health.py,
     kvstore.py, hec.py, apps.py, cluster.py, shcluster.py, license.py,
     deploy.py, lookup.py, datamodel.py, inspect.py
 
@@ -47,9 +47,7 @@ vct_splunk/
 
   utils/
     errors.py              # Typed SplunkError hierarchy with exit codes
-    redact.py              # Secret redaction by field name; safe_target for URLs;
-                           # public_target additionally hides a Cloud stack name
-                           # when VCT_SPLUNK_REDACT_TARGET=1
+    redact.py              # Secret redaction by field name; safe_target; Cloud stack-name redaction
     namespace.py           # /servicesNS/<owner>/<app>/ path building + policy
     path.py                # Path-segment validation/encoding (traversal-safe)
     validation.py          # KEY=VALUE parsing

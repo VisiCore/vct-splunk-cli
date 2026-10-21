@@ -32,7 +32,7 @@ shell in `commands/` (the "functional core, imperative shell" pattern). See
   the Authorization header per request, `RetryTransport` retries 429/503) and
   the envelope-aware `SplunkClient`; `endpoint_factory.py` is the generic CRUD
   engine (`EndpointConfig`/`Field`/`Endpoints`); `endpoints/` holds one module
-  per hand-written operation (`server`, `search`, `jobs`, `saved_searches`,
+  per hand-written operation (`server`, `search`, `jobs`, `saved_searches`, `config`,
   `kvstore`, `hec`, `apps`, `cluster`, `license`, `deploy`, `lookups`,
   `datamodel`, `health`, `raw`); `acs/` is the Splunk Cloud ACS
   management-plane client.
@@ -46,8 +46,8 @@ shell in `commands/` (the "functional core, imperative shell" pattern). See
 - `src/vct_splunk/output/` — `formatter.py`: JSON/table rendering and the
   error envelope.
 - `src/vct_splunk/commands/` — Click adapters, one module per hand-written
-  command group (`server`, `api`, `auth`, `search`, `health`, `inspect`, plus
-  `saved_search`'s `run`), plus shared plumbing: `context` (the `command`
+  command group (`server`, `api`, `auth`, `search`, `health`, `inspect`, `config`,
+  plus `saved_search`'s `run`), plus shared plumbing: `context` (the `command`
   decorator and `Ctx`), `write` (the single gated write path), `dispatch`
   (routes a few reads to Cloud ACS), and `registry` + `command_factory`
   (resource configs declared as data, turned into generated CRUD groups —
@@ -99,6 +99,8 @@ Two cross-cutting ideas to know about:
 - Each applied write is appended to a local audit log: `$VCT_SPLUNK_AUDIT` if
   set, else `$XDG_STATE_HOME/vct-splunk/audit.log`, else
   `~/.local/state/vct-splunk/audit.log`.
+- `--dry-run` needs no `SPLUNK_ENABLE_WRITES` opt-in. A Cloud preview still
+  needs `SPLUNK_CLOUD_WRITE=true` and an ACS token to build its request.
 - `search run` is bounded by default (time window, row cap, timeout) so an agent
   cannot trigger an unbounded export by accident.
 

@@ -28,7 +28,6 @@ from .conftest import unique_name
 pytestmark = [pytest.mark.integration, pytest.mark.cloud, pytest.mark.write]
 
 _POLL_TIMEOUT = 120.0
-_POLL_INTERVAL = 3.0
 
 #: resource -> (create args beyond the name, update args). Each case creates
 #: with the given extra args, updates with the given args, deletes, and polls
@@ -43,11 +42,16 @@ _CASES: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
 def _poll_until_gone(cloud_cli: WriteTestCli, resource: str, name: str) -> None:
     """Poll `resource list` until *name* no longer appears, or fail after the timeout."""
     deadline = time.monotonic() + _POLL_TIMEOUT
+    interval = 1.0
     while time.monotonic() < deadline:
         items = cloud_cli.run(resource, "list")
         if not any(isinstance(item, dict) and item.get("name") == name for item in items):
             return
-        time.sleep(_POLL_INTERVAL)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        time.sleep(min(interval, remaining))
+        interval = min(interval * 2, 10.0)
     pytest.fail(f"{resource} {name!r} is still listed {_POLL_TIMEOUT:.0f}s after delete")
 
 
