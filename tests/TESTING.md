@@ -299,8 +299,17 @@ The primary path is the `Splunk Cloud Write Canary` GitHub Actions workflow,
 not a human-operated runbook: `workflow_dispatch` only, gated by a typed
 `confirm=WRITE` input, a `tests: splunk cloud write` HEAD commit-subject
 requirement, and a protected `splunk-cloud-write` GitHub Environment with
-required reviewers around the destructive half. It runs the Cloud read canary
-first, then the write suite below, so one approved dispatch certifies both.
+required reviewers around the destructive half. Dispatch from a ref whose HEAD
+commit subject starts with `tests: splunk cloud write`; the confirmation job
+checks this before the environment approval. If needed, a no-change marker
+commit on a validation branch can satisfy that requirement:
+
+```bash
+git commit --allow-empty -m "tests: splunk cloud write"
+```
+
+The workflow runs the Cloud read canary first, then the write suite below, so
+one approved dispatch certifies both.
 
 To run the suite locally instead, on top of the read-only setup in the runbook
 above:
