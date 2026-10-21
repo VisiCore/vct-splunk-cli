@@ -1,7 +1,7 @@
 # Certify the Cloud read path against a real Splunk Cloud stack.
 #
 # The Cloud contract itself is proved on every pull request, credential-free, by
-# tests/unit/test_acs_loopback.py and tests/unit/test_cloud_write_refusal.py.
+# tests/unit/test_acs_loopback.py and tests/unit/test_write_gating.py.
 # What only a live stack can show is that a real one answers the way the ACS
 # specification says it does. Until a stack is configured, this workflow ends as
 # an explicit no-op rather than a green run that checked nothing.
@@ -33,6 +33,8 @@ jobs:
       # Untrusted output boundary: hide the Cloud stack name in prompts, JSON
       # and table output, and error messages and details.
       VCT_SPLUNK_REDACT_TARGET: "1"
+      CLOUD_CONFIGURED: ${{ secrets.SPLUNK_URL != '' || secrets.SPLUNK_ACS_TOKEN != '' || secrets.SPLUNK_TOKEN != '' }}
+      CLOUD_READY: ${{ secrets.SPLUNK_URL != '' && secrets.SPLUNK_ACS_TOKEN != '' && secrets.SPLUNK_TOKEN != '' }}
       PYTEST_ADDOPTS: >-
         -q --tb=line -r N -o 'addopts=--strict-markers --import-mode=importlib'
     steps:
@@ -40,45 +42,48 @@ jobs:
         with:
           persist-credentials: false
 
-      # The secrets context is not available to a job-level `if`, so this is a
-      # step that reports what can be certified rather than a skipped job.
-      - name: Check for a configured Cloud stack
-        id: stack
-        run: bash .github/scripts/detect-cloud-stack.sh
+      - name: Require complete Cloud read credentials when configured
+        if: env.CLOUD_READY != 'true'
+        run: |
+          if [ "$CLOUD_CONFIGURED" = "true" ]; then
+            echo "A partial Cloud read credential set is configured; SPLUNK_URL, SPLUNK_ACS_TOKEN, and SPLUNK_TOKEN are all required."
+            exit 1
+          fi
+          echo "::notice::No Cloud read credentials are configured; no stack was certified."
 
-      - if: steps.stack.outputs.ready == 'true'
+      - if: env.CLOUD_READY == 'true'
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.14"
           cache: pip
 
       - name: Install project
-        if: steps.stack.outputs.ready == 'true'
+        if: env.CLOUD_READY == 'true'
         run: |
           python -m venv .venv
           .venv/bin/python -m pip install --require-hashes -r requirements-ci.txt
           .venv/bin/python -m pip install -e . --no-deps
 
       - name: Cloud reads (every catalogued read command)
-        if: steps.stack.outputs.ready == 'true'
+        if: env.CLOUD_READY == 'true'
         run: >-
           .venv/bin/pytest tests/integration/cloud/read/test_catalog.py
           -m "integration and cloud and read" --junitxml=cloud-read.xml
 
       - name: Cloud ACS operations (below the CLI)
-        if: steps.stack.outputs.ready == 'true'
+        if: env.CLOUD_READY == 'true'
         run: >-
           .venv/bin/pytest tests/integration/cloud/read/test_acs_operations.py
           -m "integration and cloud and read" --junitxml=cloud-acs.xml
 
       - name: Publish test summary
-        if: always() && steps.stack.outputs.ready == 'true'
+        if: always() && env.CLOUD_READY == 'true'
         uses: test-summary/action@37b508cfee6d4d080eedd00b5bb240a6a784a6a5 # v2
         with:
           paths: cloud-*.xml
 
       - name: Upload test report
-        if: always() && steps.stack.outputs.ready == 'true'
+        if: always() && env.CLOUD_READY == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: cloud-read-${{ github.run_id }}

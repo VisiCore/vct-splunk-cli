@@ -37,6 +37,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
       - name: Fail closed unless confirm is WRITE
         env:
           CONFIRM: ${{ github.event.inputs.confirm }}
@@ -45,6 +49,17 @@ jobs:
             echo "confirm must be exactly WRITE"
             exit 1
           fi
+
+      - name: Require the write-canary commit prefix
+        run: |
+          subject=$(git log -1 --format=%s)
+          case "$subject" in
+            "tests: splunk cloud write"*) ;;
+            *)
+              echo "HEAD subject must start with: tests: splunk cloud write"
+              exit 1
+              ;;
+          esac
 
   read:
     name: Cloud / ACS reads (pre-write readiness)
@@ -59,20 +74,18 @@ jobs:
       SPLUNK_ACS_BASE_URL: ${{ secrets.SPLUNK_ACS_BASE_URL }}
       SPLUNK_TOKEN: ${{ secrets.SPLUNK_TOKEN }}
       VCT_SPLUNK_REDACT_TARGET: "1"
-      VCT_SPLUNK_AUDIT: ${{ runner.temp }}/vct-splunk-audit.log
+      CLOUD_READY: ${{ secrets.SPLUNK_URL != '' && secrets.SPLUNK_ACS_TOKEN != '' && secrets.SPLUNK_TOKEN != '' }}
+      PYTEST_ADDOPTS: >-
+        -q --tb=line -r N -o 'addopts=--strict-markers --import-mode=importlib'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
-      - name: Check for a configured Cloud stack
-        id: stack
-        run: bash .github/scripts/detect-cloud-stack.sh
-
       - name: Require read secrets when dispatched
-        if: steps.stack.outputs.ready != 'true'
+        if: env.CLOUD_READY != 'true'
         run: |
-          echo "SPLUNK_URL and SPLUNK_ACS_TOKEN are required to certify Cloud reads"
+          echo "SPLUNK_URL, SPLUNK_ACS_TOKEN, and SPLUNK_TOKEN are required to certify Cloud reads"
           exit 1
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
@@ -88,13 +101,13 @@ jobs:
 
       - name: Cloud reads (every catalogued read command)
         run: >-
-          bash .github/scripts/run-cloud-suite.sh cloud-read
-          tests/integration/cloud/read/test_catalog.py "integration and cloud and read"
+          .venv/bin/pytest tests/integration/cloud/read/test_catalog.py
+          -m "integration and cloud and read" --junitxml=cloud-read.xml
 
       - name: Cloud ACS operations (below the CLI)
         run: >-
-          bash .github/scripts/run-cloud-suite.sh cloud-acs
-          tests/integration/cloud/read/test_acs_operations.py "integration and cloud and read"
+          .venv/bin/pytest tests/integration/cloud/read/test_acs_operations.py
+          -m "integration and cloud and read" --junitxml=cloud-acs.xml
 
   write:
     name: Cloud / ACS writes
@@ -102,31 +115,17 @@ jobs:
     environment: splunk-cloud-write
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      CLOUD_READY: ${{ secrets.SPLUNK_URL != '' && secrets.SPLUNK_ACS_WRITE_TOKEN != '' }}
+      PYTEST_ADDOPTS: >-
+        -q --tb=line -r N -o 'addopts=--strict-markers --import-mode=importlib'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
-      - name: Require the write-canary commit prefix
-        run: |
-          subject=$(git log -1 --format=%s)
-          case "$subject" in
-            "tests: splunk cloud write"*) ;;
-            *)
-              echo "HEAD subject must start with: tests: splunk cloud write"
-              exit 1
-              ;;
-          esac
-
-      - name: Check for a configured write-capable Cloud stack
-        id: stack
-        env:
-          SPLUNK_URL: ${{ secrets.SPLUNK_URL }}
-          SPLUNK_ACS_TOKEN: ${{ secrets.SPLUNK_ACS_WRITE_TOKEN }}
-        run: bash .github/scripts/detect-cloud-stack.sh
-
       - name: Require write secrets when dispatched
-        if: steps.stack.outputs.ready != 'true'
+        if: env.CLOUD_READY != 'true'
         run: |
           echo "SPLUNK_URL and SPLUNK_ACS_WRITE_TOKEN are required for a WRITE run"
           exit 1
@@ -155,5 +154,5 @@ jobs:
           VCT_SPLUNK_REDACT_TARGET: "1"
           VCT_SPLUNK_AUDIT: ${{ runner.temp }}/vct-splunk-audit.log
         run: >-
-          bash .github/scripts/run-cloud-suite.sh cloud-write
-          tests/integration/cloud/write "integration and cloud and write"
+          .venv/bin/pytest tests/integration/cloud/write
+          -m "integration and cloud and write" --junitxml=cloud-write.xml
