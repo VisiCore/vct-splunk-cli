@@ -17,14 +17,15 @@ from ..auth import session as core
 from ..config.loader import auth_status
 from ..output import formatter as out
 from ..utils.errors import UsageError
-from ..utils.redact import public_target
+from ..utils.redact import safe_target
+from ..utils.validation import env_flag
 from .context import command
 
 
 def _verify() -> bool | str:
     """TLS verification from the environment, matching the main client."""
     ca = os.environ.get("SPLUNK_CA_BUNDLE")
-    on = os.environ.get("SPLUNK_VERIFY", "true").strip().lower() not in {"0", "false", "no"}
+    on = env_flag("SPLUNK_VERIFY", default=True)
     return ca or on
 
 
@@ -82,7 +83,7 @@ def login(ctx, username: str | None) -> None:
                     "output_mode": "json",
                 },
             },
-            "target": public_target(url),
+            "target": safe_target(url),
         }
         out.emit(preview, ctx.output_mode, ctx.meta())
         return
@@ -96,7 +97,7 @@ def status(ctx) -> None:
     """Report the resolved target URL and active auth scheme (no secret shown)."""
     resolved = auth_status(ctx.base_url, profile=ctx.profile)
     out.emit(
-        {"target": public_target(resolved.base_url), "auth_scheme": resolved.auth_scheme},
+        {"target": safe_target(resolved.base_url), "auth_scheme": resolved.auth_scheme},
         ctx.output_mode,
         ctx.meta(),
     )

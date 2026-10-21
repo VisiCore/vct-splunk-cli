@@ -14,10 +14,11 @@ update. Commands whose purpose is to mint a credential (``auth login``,
 
 from __future__ import annotations
 
-import os
 import re
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
+
+from .validation import env_flag
 
 #: What a hidden value is replaced with. The key stays, so a caller can still
 #: see that the field exists.
@@ -111,24 +112,13 @@ def safe_target(target: str) -> str:
     return urlunsplit((parsed.scheme, host, path, "", ""))
 
 
-def public_target(target: str) -> str:
-    """Return :func:`safe_target`, optionally with its Cloud stack name hidden.
-
-    ``safe_target`` remains suitable for the audit trail, where a Cloud stack
-    identifies the instance. Set :data:`REDACT_TARGET_ENV` to a truthy value
-    for untrusted output boundaries such as CI logs.
-    """
-    return redact_public_text(safe_target(target))
-
-
 def redact_public_text(text: str) -> str:
-    """Hide Cloud stack labels from rendered output when target redaction is on."""
-    if os.environ.get(REDACT_TARGET_ENV, "false").strip().lower() in {"0", "false", "no"}:
+    """Hide Cloud stack labels in rendered output when :data:`REDACT_TARGET_ENV` is on.
+
+    The audit trail keeps the real host; only untrusted output boundaries such as
+    CI logs opt in.
+    """
+    if not env_flag(REDACT_TARGET_ENV, default=False):
         return text
-    return redact_exception_text(text)
-
-
-def redact_exception_text(text: str) -> str:
-    """Hide Cloud stack labels from a free-form exception message or target."""
     text = _CLOUD_STACK_HOST_RE.sub(REDACTED, text)
     return _ACS_STACK_PATH_RE.sub(rf"\g<1>{REDACTED}", text)
