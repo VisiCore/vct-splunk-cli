@@ -13,6 +13,7 @@ from typing import Any
 import click
 
 from ..utils.errors import SplunkError, UsageError
+from ..utils.redact import public_target, redact_public_text
 
 
 def resolve_mode(output: str | None, table: bool) -> str:
@@ -27,15 +28,16 @@ def fail(exc: SplunkError) -> None:
     payload: dict[str, Any] = {"error": {"code": exc.code, "message": exc.message}}
     if exc.details is not None:
         payload["error"]["details"] = exc.details
-    click.echo(json.dumps(payload, default=str), err=True)
+    click.echo(redact_public_text(json.dumps(payload, default=str)), err=True)
     raise SystemExit(exc.exit_code)
 
 
 def emit(data: Any, mode: str, meta: dict[str, Any] | None = None) -> None:
     if mode == "json":
-        click.echo(json.dumps({"data": data, "meta": meta or {}}, indent=2, default=str))
+        rendered = json.dumps({"data": data, "meta": meta or {}}, indent=2, default=str)
     else:
-        click.echo(_table(data))
+        rendered = _table(data)
+    click.echo(redact_public_text(rendered))
 
 
 def _table(data: Any) -> str:
@@ -56,6 +58,7 @@ def confirm_write(ctx: Any, action: str, target: str | None) -> None:
     --yes fails fast (never hangs an agent on a hidden prompt)."""
     if ctx.dry_run or ctx.yes:
         return
+    target = public_target(target) if target is not None else None
     if not (sys.stdin.isatty() and sys.stderr.isatty()):
         raise UsageError(f"Refusing to {action} on {target} without --yes (non-interactive).")
     click.confirm(f"About to {action} on {target}. Continue?", abort=True, err=True)

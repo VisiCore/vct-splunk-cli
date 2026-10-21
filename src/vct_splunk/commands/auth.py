@@ -17,7 +17,7 @@ from ..auth import session as core
 from ..config.loader import auth_status
 from ..output import formatter as out
 from ..utils.errors import UsageError
-from ..utils.redact import safe_target
+from ..utils.redact import public_target
 from .context import command
 
 
@@ -82,7 +82,7 @@ def login(ctx, username: str | None) -> None:
                     "output_mode": "json",
                 },
             },
-            "target": safe_target(url),
+            "target": public_target(url),
         }
         out.emit(preview, ctx.output_mode, ctx.meta())
         return
@@ -96,7 +96,7 @@ def status(ctx) -> None:
     """Report the resolved target URL and active auth scheme (no secret shown)."""
     resolved = auth_status(ctx.base_url, profile=ctx.profile)
     out.emit(
-        {"target": safe_target(resolved.base_url), "auth_scheme": resolved.auth_scheme},
+        {"target": public_target(resolved.base_url), "auth_scheme": resolved.auth_scheme},
         ctx.output_mode,
         ctx.meta(),
     )

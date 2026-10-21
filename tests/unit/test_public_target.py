@@ -32,6 +32,12 @@ def test_with_the_env_var_a_cloud_host_label_is_hidden(redact_enabled) -> None:
     assert public_target("https://acme.splunkcloud.com") == f"https://{REDACTED}.splunkcloud.com"
 
 
+@pytest.mark.parametrize("value", ["TRUE", " yes ", "1 "])
+def test_truthy_env_values_enable_redaction(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
+    monkeypatch.setenv("VCT_SPLUNK_REDACT_TARGET", value)
+    assert public_target("https://acme.splunkcloud.com") == f"https://{REDACTED}.splunkcloud.com"
+
+
 def test_with_the_env_var_a_port_survives_the_rewrite(redact_enabled) -> None:
     assert (
         public_target("https://acme.splunkcloud.com:8089")
@@ -62,12 +68,27 @@ def test_redact_exception_text_hides_a_cloud_host_in_free_form_text() -> None:
     assert f"{REDACTED}.splunkcloud.com" in text
 
 
-def test_redact_exception_text_hides_an_acs_stack_path_segment() -> None:
-    text = redact_exception_text("ACS returned 404 for GET /acme/adminconfig/v2/indexes")
-    # No admin.splunk.com host present here, so the path regex (which anchors
-    # on that host) does not fire -- the stack label in a bare path is not this
-    # function's job; it only rewrites what it can identify unambiguously.
-    assert text == "ACS returned 404 for GET /acme/adminconfig/v2/indexes"
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        (
+            "ACS request failed: https://admin.splunk.com/acme/adminconfig/v2/indexes",
+            "https://admin.splunk.com/<redacted>/adminconfig/v2/indexes",
+        ),
+        (
+            "ACS request failed: https://admin.splunkcloudgc.com/acme/adminconfig/v2/indexes",
+            "https://admin.splunkcloudgc.com/<redacted>/adminconfig/v2/indexes",
+        ),
+        (
+            "ACS returned 404 for GET /acme/adminconfig/v2/indexes",
+            "GET /<redacted>/adminconfig/v2/indexes",
+        ),
+    ],
+)
+def test_redact_exception_text_hides_an_acs_stack_path_segment(message: str, expected: str) -> None:
+    text = redact_exception_text(message)
+    assert expected in text
+    assert "acme" not in text
 
 
 def test_redact_exception_text_is_idempotent() -> None:

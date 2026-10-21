@@ -36,7 +36,7 @@ import httpx
 from ..auth.session import clear_session_cache, get_auth_header, is_mintable
 from ..config.types import SplunkConfig
 from ..utils.errors import APIError, AuthError, NotFoundError, TransportError
-from ..utils.redact import safe_target
+from ..utils.redact import public_target, safe_target
 
 _RETRY_STATUS = {429, 503}
 _MAX_RETRIES = 3
@@ -144,7 +144,7 @@ class SplunkClient:
             return {
                 "dry_run": True,
                 "request": {"method": method, "path": "/" + path.lstrip("/"), "body": data},
-                "target": safe_target(self.config.base_url),
+                "target": public_target(self.config.base_url),
             }
         return self._request(method, path, data=data)
 
@@ -160,7 +160,7 @@ class SplunkClient:
             return {
                 "dry_run": True,
                 "request": {"method": method, "path": "/" + path.lstrip("/"), "body": body},
-                "target": safe_target(self.config.base_url),
+                "target": public_target(self.config.base_url),
             }
         return self._request(method, path, json_body=body)
 

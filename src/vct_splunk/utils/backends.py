@@ -85,9 +85,7 @@ def inspect_report(url: str | None = None) -> dict[str, Any]:
     backend = deduce_backend(url)
     report: dict[str, Any] = {"backend": backend, "capabilities": CAPABILITIES[backend]}
     if backend == "cloud":
-        # Whether a stack is configured, not its name -- the name is never echoed
-        # in this offline report; see `commands.inspect` for the one place a
-        # live Cloud target's identity is shown, and only with consent to leak it.
+        # Identify whether a stack is configured without printing its name.
         report["stack_configured"] = cloud_stack_from_url(url) is not None
         report["note"] = (
             "Cloud/ACS coverage is read-only and not yet certified against a live stack."

@@ -23,13 +23,16 @@ from urllib.parse import urlsplit, urlunsplit
 #: see that the field exists.
 REDACTED = "<redacted>"
 
-#: Set to hide a Splunk Cloud stack name at an untrusted output boundary (CI
-#: logs). See :func:`public_target` and :func:`redact_exception_text`.
+#: Set to hide a Splunk Cloud stack name at untrusted output boundaries.
 REDACT_TARGET_ENV = "VCT_SPLUNK_REDACT_TARGET"
 
 _SECRET_MARKERS = ("pass4symmkey", "password", "passwd", "secret", "token")
-_CLOUD_STACK_HOST_RE = re.compile(r"(?i)(?<![A-Za-z0-9-])[A-Za-z0-9-]+(?=\.splunkcloud)")
-_ACS_STACK_PATH_RE = re.compile(r"(?i)(admin\.splunk\.com/)(?!<redacted>(?:/|$))[^/?#\s]+")
+_CLOUD_STACK_HOST_RE = re.compile(
+    r"(?i)(?<![A-Za-z0-9-])[A-Za-z0-9-]+(?=\.splunkcloud\.com(?:[^A-Za-z0-9.-]|$))"
+)
+_ACS_STACK_PATH_RE = re.compile(
+    rf"(?i)(//[^/\s?#]+/|/)(?!{re.escape(REDACTED)}(?:/|$))([^/?#\s]+)(?=/adminconfig(?:/|$))"
+)
 
 
 def is_secret_key(key: object) -> bool:
@@ -112,15 +115,17 @@ def public_target(target: str) -> str:
     """Return :func:`safe_target`, optionally with its Cloud stack name hidden.
 
     ``safe_target`` remains suitable for the audit trail, where a Cloud stack
-    identifies the instance. Set :data:`REDACT_TARGET_ENV` to ``"1"`` for
-    untrusted output boundaries such as CI logs -- this applies the same
-    stack-label rewrite :func:`redact_exception_text` applies to free-form
-    error text, run once over the credential-safe target.
+    identifies the instance. Set :data:`REDACT_TARGET_ENV` to a truthy value
+    for untrusted output boundaries such as CI logs.
     """
-    target = safe_target(target)
-    if os.environ.get(REDACT_TARGET_ENV) != "1":
-        return target
-    return redact_exception_text(target)
+    return redact_public_text(safe_target(target))
+
+
+def redact_public_text(text: str) -> str:
+    """Hide Cloud stack labels from rendered output when target redaction is on."""
+    if os.environ.get(REDACT_TARGET_ENV, "false").strip().lower() in {"0", "false", "no"}:
+        return text
+    return redact_exception_text(text)
 
 
 def redact_exception_text(text: str) -> str:
