@@ -124,7 +124,7 @@ def load_config(base_url: str | None = None, *, profile: str | None = None) -> S
     Raises:
         UsageError: If no URL or no credential source can be resolved.
     """
-    status, prof, verify = _resolve_target(base_url, profile)
+    status, prof, verify = resolve_target(base_url, profile)
     env_token = os.environ.get("SPLUNK_TOKEN")
     env_session_key = os.environ.get("SPLUNK_SESSION_KEY")
     token = env_token or prof.get("token")
@@ -156,7 +156,7 @@ def load_config(base_url: str | None = None, *, profile: str | None = None) -> S
 
 def auth_status(base_url: str | None = None, *, profile: str | None = None) -> AuthStatus:
     """Resolve the active auth scheme without exchanging username/password."""
-    status, prof, _verify = _resolve_target(base_url, profile)
+    status, prof, _verify = resolve_target(base_url, profile)
     env_token = os.environ.get("SPLUNK_TOKEN")
     env_session_key = os.environ.get("SPLUNK_SESSION_KEY")
     if env_token or prof.get("token"):
@@ -174,10 +174,10 @@ def auth_status(base_url: str | None = None, *, profile: str | None = None) -> A
     return AuthStatus(status.base_url, scheme)
 
 
-def _resolve_target(
+def resolve_target(
     base_url: str | None, profile: str | None
 ) -> tuple[AuthStatus, dict[str, str], bool | str]:
-    """Resolve shared URL, profile, and TLS inputs without authenticating."""
+    """Resolve the shared URL, profile, and TLS inputs without authenticating."""
     prof = load_profile(profile)
     url = base_url or os.environ.get("SPLUNK_URL") or prof.get("url")
     if not url:

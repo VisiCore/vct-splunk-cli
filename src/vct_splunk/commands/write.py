@@ -17,9 +17,11 @@ import os
 from collections.abc import Callable
 from typing import Any
 
+import click
+
 from ..api.acs.client import AcsClient, acs_config_from_env
 from ..api.acs.operations import cloud_write
-from ..config.loader import _resolve_target, load_config
+from ..config.loader import load_config, resolve_target
 from ..output import formatter as out
 from ..utils import audit
 from ..utils.backends import cloud_stack_from_url
@@ -91,13 +93,15 @@ def do_write(
             # A Cloud write authenticates to ACS, not splunkd, so resolving the
             # target must not go through `load_config` -- that function demands
             # a splunkd credential (SPLUNK_TOKEN et al.) this path never needs.
-            target = _resolve_target(ctx.base_url, getattr(ctx, "profile", None))[0].base_url
+            target = resolve_target(ctx.base_url, getattr(ctx, "profile", None))[0].base_url
         else:
             target = load_config(ctx.base_url, profile=getattr(ctx, "profile", None)).base_url
     out.confirm_write(ctx, action, safe_target(target))
+    audit_target = safe_target(target)
     if backend == "cloud":
         stack = cloud_stack_from_url(ctx.base_url)
         config = acs_config_from_env(stack, write=True)
+        audit_target = safe_target(f"{config.base_url}/{config.stack}")
         config.dry_run = ctx.dry_run
         with AcsClient(config) as c:
             result = cloud_write(c, resource, verb, name or "", body)
@@ -105,7 +109,14 @@ def do_write(
         with ctx.client() as c:
             result = run(c)
     if not (isinstance(result, dict) and result.get("dry_run")):
-        audit.record({**audit_event, "target": safe_target(target)})
+        try:
+            audit.record({**audit_event, "target": audit_target})
+        except OSError:
+            click.echo(
+                "Warning: the write succeeded, but its audit record could not be saved; "
+                "check VCT_SPLUNK_AUDIT and the default audit path.",
+                err=True,
+            )
     return result
 
 
@@ -122,10 +133,8 @@ def refuse_cloud_write(ctx: Any, resource: str, verb: str) -> None:
        into, so this always raises.
     2. **Opt-in** (:data:`CLOUD_WRITE_ENV`). Unlike the top-level
        :data:`ENABLE_WRITES_ENV` gate in :func:`do_write` (which a preview
-       skips, since it sends nothing regardless), this one is a capability
-       fact as much as a safety switch: even a Cloud *preview* needs to prove
-       the object is one of the three ACS-writable resources, so ``--dry-run``
-       does not exempt it.
+       skips, since it sends nothing regardless), this one is also required for
+       a Cloud preview, so ``--dry-run`` does not exempt it.
 
     :func:`do_write` calls this, which is enough for a command that reaches the
     gate directly. A command that first resolves a namespace calls it earlier
@@ -137,7 +146,10 @@ def refuse_cloud_write(ctx: Any, resource: str, verb: str) -> None:
     if not has_cloud_write(resource, verb):
         raise UnsupportedBackendError(resource or "this resource", verb or "write", "cloud")
     if os.environ.get(CLOUD_WRITE_ENV) != "true":
-        raise UnsupportedBackendError(resource or "this resource", verb or "write", "cloud")
+        raise UsageError(
+            f"Splunk Cloud writes are disabled by default. Set {CLOUD_WRITE_ENV}=true "
+            f"to allow `{resource} {verb}` (there is no CLI flag for this)."
+        )
 
 
 def _require_writes_enabled(resource: str, verb: str) -> None:

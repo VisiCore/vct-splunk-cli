@@ -57,14 +57,11 @@ def dispatch_list(ctx: Any, resource: str, rest_call: Callable[[Any], Any]) -> A
         return rest_call(c)
 
 
-def has_cloud_write(resource: str, verb: str | None = None) -> bool:
+def has_cloud_write(resource: str, verb: str) -> bool:
     """True if ``(resource, verb)`` is a Cloud-writable mutation via ACS.
 
-    With ``verb`` omitted, true if ``resource`` has any Cloud write route at
-    all -- create/update/delete for index, role, and hec-token only. Every
-    other Cloud mutation, including enable/disable on those same three
-    resources, has none.
+    Only create/update/delete for index, role, and hec-token are supported.
+    Every other Cloud mutation, including enable/disable on those same three
+    resources, has no ACS route.
     """
-    if resource not in acs.WRITABLE:
-        return False
-    return verb is None or verb in _WRITE_VERBS
+    return resource in acs.WRITABLE and verb in _WRITE_VERBS

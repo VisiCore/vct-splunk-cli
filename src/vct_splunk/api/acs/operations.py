@@ -103,7 +103,7 @@ def cloud_write(
 
     ``resource`` must be a key of :data:`WRITABLE` and ``verb`` one of
     create/update/delete -- the caller
-    (:func:`vct_splunk.commands.dispatch.dispatch_write`) has already checked
+    (:func:`vct_splunk.commands.write.refuse_cloud_write`) has already checked
     both against the same allowlist this reads, so a `KeyError` here would
     mean that check was bypassed.
 
