@@ -32,11 +32,11 @@ jobs:
   # this repository. A branch or tag can be repointed at new code after review,
   # which would hand anything able to push to that repository code execution
   # here. Bump deliberately: resolve the new SHA with
-  # `gh api repos/dryvist/.github/commits/main --jq .sha`, read the diff, then
+  # `gh api repos/JacobPEvans/.github/commits/main --jq .sha`, read the diff, then
   # update the reference below and its dated comment.
   workflow-security:
     if: github.event_name == 'pull_request'
-    uses: dryvist/.github/.github/workflows/_zizmor.yml@7b9b165be9556c0228830c25246df2bde10a188e # main @ 2026-08-02
+    uses: JacobPEvans/.github/.github/workflows/_zizmor.yml@493cc15bfe16d5385669397d9fd830b9dccf754d # main @ 2026-10-23
     with:
       runner_label: ubuntu-latest
 
