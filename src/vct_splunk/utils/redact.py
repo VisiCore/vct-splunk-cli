@@ -14,14 +14,26 @@ update. Commands whose purpose is to mint a credential (``auth login``,
 
 from __future__ import annotations
 
+import re
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
+
+from .validation import env_flag
 
 #: What a hidden value is replaced with. The key stays, so a caller can still
 #: see that the field exists.
 REDACTED = "<redacted>"
 
+#: Set to hide a Splunk Cloud stack name at untrusted output boundaries.
+REDACT_TARGET_ENV = "VCT_SPLUNK_REDACT_TARGET"
+
 _SECRET_MARKERS = ("pass4symmkey", "password", "passwd", "secret", "token")
+_CLOUD_STACK_HOST_RE = re.compile(
+    r"(?i)(?<![A-Za-z0-9-])[A-Za-z0-9-]+(?=\.splunkcloud\.com(?:[^A-Za-z0-9.-]|$))"
+)
+_ACS_STACK_PATH_RE = re.compile(
+    rf"(?i)(//[^/\s?#]+/|/)(?!{re.escape(REDACTED)}(?:/|$))([^/?#\s]+)(?=/adminconfig(?:/|$))"
+)
 
 
 def is_secret_key(key: object) -> bool:
@@ -98,3 +110,15 @@ def safe_target(target: str) -> str:
         pass
     path = parsed.path if "@" not in parsed.path else f"/{REDACTED}"
     return urlunsplit((parsed.scheme, host, path, "", ""))
+
+
+def redact_public_text(text: str) -> str:
+    """Hide Cloud stack labels in rendered output when :data:`REDACT_TARGET_ENV` is on.
+
+    The audit trail keeps the real host; only untrusted output boundaries such as
+    CI logs opt in.
+    """
+    if not env_flag(REDACT_TARGET_ENV, default=False):
+        return text
+    text = _CLOUD_STACK_HOST_RE.sub(REDACTED, text)
+    return _ACS_STACK_PATH_RE.sub(rf"\g<1>{REDACTED}", text)

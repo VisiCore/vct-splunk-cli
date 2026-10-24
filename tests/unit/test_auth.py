@@ -200,6 +200,19 @@ def test_auth_status_reports_none_when_unset(monkeypatch):
     assert '"auth_scheme": "none"' in result.output
 
 
+def test_auth_status_redacts_cloud_target_in_data_and_meta(monkeypatch):
+    _clear_auth_env(monkeypatch)
+    monkeypatch.setenv("SPLUNK_URL", "https://acme-test.splunkcloud.com:8089")
+    monkeypatch.setenv("VCT_SPLUNK_REDACT_TARGET", "1")
+    result = CliRunner().invoke(cli, ["auth", "status", "--output", "json"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    expected = "https://<redacted>.splunkcloud.com:8089"
+    assert payload["data"]["target"] == payload["meta"]["target"] == expected
+    assert "acme-test" not in result.output
+
+
 def test_auth_status_reports_username_password_without_logging_in(monkeypatch):
     _clear_auth_env(monkeypatch)
     monkeypatch.setenv("SPLUNK_URL", "https://splunk.test:8089")

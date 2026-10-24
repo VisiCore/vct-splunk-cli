@@ -45,7 +45,7 @@ vct_splunk/
 
   utils/
     errors.py              # Typed SplunkError hierarchy with exit codes
-    redact.py              # Secret redaction by field name; safe_target for URLs
+    redact.py              # Secret redaction by field name; safe_target; Cloud stack-name redaction
     namespace.py           # /servicesNS/<owner>/<app>/ path building + policy
     path.py                # Path-segment validation/encoding (traversal-safe)
     validation.py          # KEY=VALUE parsing

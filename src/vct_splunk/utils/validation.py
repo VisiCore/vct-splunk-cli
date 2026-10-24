@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterable
 
 from .errors import UsageError
@@ -20,3 +21,11 @@ def parse_key_value_pairs(pairs: Iterable[str]) -> dict[str, str]:
             raise UsageError(f"Duplicate key {key!r}.")
         parsed[key] = value
     return parsed
+
+
+def env_flag(name: str, *, default: bool) -> bool:
+    """Read a boolean env var: unset gives ``default``; ``0``/``false``/``no`` are false."""
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() not in {"0", "false", "no"}
