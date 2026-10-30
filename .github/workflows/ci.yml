@@ -36,7 +36,7 @@ jobs:
   # update the reference below and its dated comment.
   workflow-security:
     if: github.event_name == 'pull_request'
-    uses: JacobPEvans/.github/.github/workflows/_zizmor.yml@493cc15bfe16d5385669397d9fd830b9dccf754d # main @ 2026-10-23
+    uses: JacobPEvans/.github/.github/workflows/_zizmor.yml@7e5bac9ccbabe621c562b75930e401efaf65a8bd # main @ 2026-10-23
     with:
       runner_label: ubuntu-latest
 
@@ -65,7 +65,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: "3.14"
           cache: pip
@@ -107,7 +107,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -188,7 +188,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: "3.14"
           cache: pip
@@ -313,7 +313,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: "3.14"
           cache: pip
